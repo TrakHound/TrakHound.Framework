@@ -1,0 +1,227 @@
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+
+@*
+    The Scheduled Tasks Worker Status on the Schedule Board. Polls on its own timer and re-renders alone (so the board's cards
+    aren't re-rendered every few seconds), and passes each Task's live state to the page with LiveTasksUpdated
+*@
+
+@if (received)
+{
+    <div class="worker-panel">
+        <div class="worker-strip">
+            @if (workerStatus == null)
+            {
+                <span class="worker-state unknown"><span class="icon fa-solid fa-sharp fa-circle-question"></span>Worker Status unavailable</span>
+                <span class="worker-detail">The Scheduled Tasks Worker hasn't reported (is it running, and are the TrakHound.ScheduledTasks packages up to date?)</span>
+            }
+            else if (workerStatus.Stale)
+            {
+                <span class="worker-state stale"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Worker not reporting</span>
+                <span class="worker-detail">Last report @FormatAgo(workerStatus.Received) : it may be stopped</span>
+            }
+            else
+            {
+                <span class="worker-state ok"><span class="icon fa-solid fa-sharp fa-circle"></span>Worker running</span>
+                <span class="worker-detail" title="Runs in progress / Run Slots (maxConcurrentRuns)"><b>@workerStatus.RunningCount</b> / @workerStatus.MaxConcurrentRuns Run Slots busy</span>
+                <span class="worker-detail @(workerStatus.WaitingCount > 0 ? "warning" : null)" title="Runs waiting for a Run Slot or their previous Run"><b>@workerStatus.WaitingCount</b> waiting</span>
+                <span class="worker-detail" title="When a Task is due while its previous Run is in progress">Overlap : @workerStatus.OverlapPolicy</span>
+                <span class="worker-detail muted">Started @FormatTimestamp(workerStatus.Started) · reported @FormatAgo(workerStatus.Received)</span>
+            }
+            @if (workerStatus != null)
+            {
+                <button class="btn btn-sm btn-link btn-details" @onclick="() => workerDetailsVisible = !workerDetailsVisible">@(workerDetailsVisible ? "Hide Details" : "Details")<span class="icon fa-solid fa-sharp @(workerDetailsVisible ? "fa-chevron-up" : "fa-chevron-down")"></span></button>
+            }
+        </div>
+        @if (workerDetailsVisible && workerStatus != null)
+        {
+            <div class="worker-details">
+                <div class="worker-section">
+                    <span class="worker-section-title">Running Now</span>
+                    @{ var active = workerStatus.Tasks.Where(o => o.Running > 0 || o.Waiting > 0).ToList(); }
+                    @if (active.Count == 0)
+                    {
+                        <span class="worker-empty">Nothing running</span>
+                    }
+                    @foreach (var activeTask in active)
+                    {
+                        <div class="worker-row">
+                            <span class="worker-row-name" title="@activeTask.Id">@GetTaskLabel(activeTask.FunctionId, activeTask.Description)</span>
+                            @if (activeTask.Running > 0)
+                            {
+                                <span class="live running"><span class="icon fa-regular fa-loader spin"></span>Running @FormatElapsed(activeTask.RunStarted)</span>
+                            }
+                            @if (activeTask.Waiting > 0)
+                            {
+                                <span class="live waiting"><span class="icon fa-regular fa-hourglass-half"></span>@activeTask.Waiting waiting @FormatElapsed(activeTask.WaitingSince)</span>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="worker-section">
+                    <span class="worker-section-title">Upcoming</span>
+                    @if (workerStatus.Upcoming.IsNullOrEmpty())
+                    {
+                        <span class="worker-empty">Nothing scheduled</span>
+                    }
+                    @foreach (var upcoming in (workerStatus.Upcoming ?? new List<UpcomingRun>()).Take(10))
+                    {
+                        <div class="worker-row">
+                            <span class="worker-row-time" title="@FormatTimestamp(upcoming.Time)">@FormatRelative(upcoming.Time)</span>
+                            <span class="worker-row-name" title="@upcoming.TaskId">@GetTaskLabel(upcoming.FunctionId, upcoming.Description)</span>
+                        </div>
+                    }
+                </div>
+                <div class="worker-section worker-events">
+                    <span class="worker-section-title">Recent Events</span>
+                    @if (workerStatus.Events.IsNullOrEmpty())
+                    {
+                        <span class="worker-empty">No events yet</span>
+                    }
+                    @foreach (var statusEvent in (workerStatus.Events ?? new List<StatusEvent>()).Take(15))
+                    {
+                        <div class="worker-row">
+                            <span class="worker-row-time">@statusEvent.Time.ToLocalTime().ToString("HH:mm:ss")</span>
+                            <span class="event-type @statusEvent.Type">@statusEvent.Type</span>
+                            <span class="worker-row-name" title="@statusEvent.Message">@GetTaskLabel(statusEvent.FunctionId, GetTaskDescription(statusEvent.TaskId))</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+
+    // Polled more often than the board's Run metrics (from the TrakHound.ScheduledTasks.Api package)
+    private const int _statusInterval = 3000;
+    private const string _statusRoute = "scheduled-tasks/api/status";
+
+    private System.Threading.Timer statusTimer;
+    private int updatingStatus;
+    private volatile bool disposed;
+    private bool received;
+    private WorkerStatus workerStatus;
+    private Dictionary<string, ScheduledTaskStatus> liveTasks = new Dictionary<string, ScheduledTaskStatus>(); // Task ID => Status
+    private bool workerDetailsVisible;
+
+
+    /// <summary>
+    /// Skips polling (ex. while a change is being made or a Modal is open, so the board doesn't re-render under it)
+    /// </summary>
+    [Parameter]
+    public bool Paused { get; set; }
+
+    /// <summary>
+    /// Called on the Renderer's context with the live state of each Task (by Task ID) after every poll
+    /// </summary>
+    [Parameter]
+    public Action<Dictionary<string, ScheduledTaskStatus>> LiveTasksUpdated { get; set; }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UpdateStatus();
+
+        if (!disposed) statusTimer = new System.Threading.Timer(StatusTimerElapsed, null, _statusInterval, _statusInterval);
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        statusTimer?.Dispose();
+    }
+
+    private async Task UpdateStatus()
+    {
+        List<WorkerStatus> statuses = null;
+        try
+        {
+            // Null when the TrakHound.ScheduledTasks.Api package isn't installed (or is an older version)
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null) statuses = (await client.Api.GetJson<IEnumerable<WorkerStatus>>(_statusRoute))?.ToList();
+        }
+        catch { }
+
+        var tasks = new Dictionary<string, ScheduledTaskStatus>();
+        foreach (var status in statuses?.Where(o => !o.Stale) ?? Enumerable.Empty<WorkerStatus>())
+        {
+            foreach (var task in status.Tasks ?? new List<ScheduledTaskStatus>())
+            {
+                if (task?.Id != null) tasks.TryAdd(task.Id, task);
+            }
+        }
+
+        await InvokeAsync(() =>
+        {
+            if (disposed) return;
+
+            // The reporting Worker (or the latest one that stopped reporting)
+            workerStatus = statuses?.OrderBy(o => o.Stale).ThenByDescending(o => o.Received).FirstOrDefault();
+            liveTasks = tasks;
+            received = true;
+
+            StateHasChanged();
+            LiveTasksUpdated?.Invoke(tasks);
+        });
+    }
+
+    private async void StatusTimerElapsed(object state)
+    {
+        if (disposed || Paused) return;
+        if (Interlocked.Exchange(ref updatingStatus, 1) == 1) return;
+
+        try
+        {
+            await UpdateStatus();
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updatingStatus, 0);
+        }
+    }
+
+    private string GetTaskDescription(string taskId) => taskId != null ? liveTasks.GetValueOrDefault(taskId)?.Description : null;
+
+    private static string GetTaskLabel(string functionId, string description) => !string.IsNullOrEmpty(description) ? $"{functionId} : {description}" : functionId;
+
+    /// <summary>
+    /// Time since a Timestamp (ex. "12s", "3m 05s")
+    /// </summary>
+    private static string FormatElapsed(DateTime? since)
+    {
+        if (since == null) return null;
+
+        var elapsed = DateTime.UtcNow - since.Value.ToUniversalTime();
+        if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+        if (elapsed.TotalHours >= 1) return $"{(int)elapsed.TotalHours}h {elapsed.Minutes:00}m";
+        if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds:00}s";
+        return $"{(int)elapsed.TotalSeconds}s";
+    }
+
+    private static string FormatAgo(DateTime timestamp) => $"{FormatElapsed(timestamp)} ago";
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null) return null;
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private static string FormatRelative(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var remaining = timestamp.Value.ToUniversalTime() - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero) return "now";
+        if (remaining.TotalDays >= 1) return $"in {(int)remaining.TotalDays}d {remaining.Hours}h";
+        if (remaining.TotalHours >= 1) return $"in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+        if (remaining.TotalMinutes >= 1) return $"in {(int)remaining.TotalMinutes}m";
+        return $"in {Math.Max(1, (int)remaining.TotalSeconds)}s";
+    }
+
+}

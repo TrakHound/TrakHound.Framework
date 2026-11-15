@@ -1,0 +1,421 @@
+@page "/"
+@inherits TrakHoundComponentBase
+@layout Layout
+@inject IJSRuntime JSRuntime
+
+<div class="api-explorer">
+
+    @* Header *@
+    <div class="header-panel">
+        <div class="header-panel-content">
+            <div class="header-panel-icon">
+                <div class="header-icon-outline">
+                    <span class="icon fa-solid fa-sharp fa-code"></span>
+                </div>
+            </div>
+            <div class="header-panel-text">
+                <span class="header-panel-title">API Explorer</span>
+                <span class="header-panel-subtitle">Browse the APIs you can use, try them out, and download their OpenAPI documents</span>
+            </div>
+        </div>
+
+        @* Credentials *@
+        <div class="credentials-panel">
+            @if (catalog?.Identity != null)
+            {
+                <span class="identity-chip" title="@($"{catalog.Identity.ProviderId} : {catalog.Identity.UserId}")">
+                    <span class="icon fa-solid fa-sharp fa-user-check"></span>@catalog.Identity.DisplayName
+                </span>
+            }
+            else if (catalog != null)
+            {
+                <span class="identity-chip anonymous"><span class="icon fa-solid fa-sharp fa-user-secret"></span>Anonymous</span>
+            }
+
+            @if (!string.IsNullOrEmpty(apiKey))
+            {
+                <span class="api-key-status">API Key set</span>
+                <button class="btn btn-light btn-sm" @onclick="ClearApiKey"><span class="icon fa-solid fa-sharp fa-xmark"></span>Clear Key</button>
+            }
+            else if (showApiKeyInput)
+            {
+                <input class="api-key-input" type="password" placeholder="Paste your API Key" autocomplete="off" @bind="apiKeyInput" @bind:event="oninput" @onkeydown="ApiKeyKeyDown" />
+                <button class="btn btn-primary btn-sm" disabled="@string.IsNullOrWhiteSpace(apiKeyInput)" @onclick="ApplyApiKey">Use Key</button>
+                <button class="btn btn-light btn-sm" @onclick="() => showApiKeyInput = false">Cancel</button>
+            }
+            else
+            {
+                <button class="btn btn-light btn-sm" @onclick="() => showApiKeyInput = true"><span class="icon fa-solid fa-sharp fa-key"></span>Use an API Key</button>
+            }
+
+            @if (catalog?.Identity == null && string.IsNullOrEmpty(apiKey))
+            {
+                @foreach (var provider in catalog?.SignInProviders ?? Enumerable.Empty<ApiCatalogSignInProvider>())
+                {
+                    <a class="btn btn-light btn-sm" href="@GetSignInUrl(provider)"><span class="icon fa-solid fa-sharp fa-right-to-bracket"></span>Sign in (@provider.Name)</a>
+                }
+            }
+        </div>
+    </div>
+
+    @if (keyRejected)
+    {
+        <div class="notice warning">
+            <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+            <span>The API Key was not accepted (it may be invalid or expired). Only the Endpoints that don't require Authentication are shown.</span>
+        </div>
+    }
+
+    @* Content *@
+    <div class="explorer-body">
+        @if (loading && catalog == null)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-loader spin"></span>
+                <span class="empty-title">Loading APIs..</span>
+            </div>
+        }
+        else if (loadError != null)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                <span class="empty-title">The APIs could not be loaded</span>
+                <span class="empty-description">@loadError</span>
+                <div class="empty-actions">
+                    <button class="btn btn-primary" @onclick="Load"><span class="icon fa-solid fa-sharp fa-rotate"></span>Retry</button>
+                </div>
+            </div>
+        }
+        else if (catalog != null && catalog.Apis.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-plug-circle-xmark"></span>
+                <span class="empty-title">No APIs Available</span>
+                <span class="empty-description">
+                    @if (catalog.Identity == null)
+                    {
+                        <text>There are no APIs that can be used without signing in. Sign in, or use an API Key, to see the APIs available to you.</text>
+                    }
+                    else
+                    {
+                        <text>There are no APIs available to @catalog.Identity.DisplayName.</text>
+                    }
+                </span>
+            </div>
+        }
+        else if (catalog != null)
+        {
+            <div class="explorer-layout">
+
+                @* API List *@
+                <div class="api-list">
+                    <div class="api-list-search">
+                        <span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                        <input type="search" placeholder="Search Endpoints" @bind="search" @bind:event="oninput" />
+                    </div>
+                    <div class="api-list-items">
+                        <button class="api-list-item @(selectedApiId == null ? "active" : "")" @onclick="() => SelectApi(null)">
+                            <span class="api-list-name">All APIs</span>
+                            <span class="api-list-count">@CountEndpoints(null).ToString("N0")</span>
+                        </button>
+                        @foreach (var api in catalog.Apis)
+                        {
+                            var count = CountEndpoints(api);
+                            if (count == 0 && !string.IsNullOrWhiteSpace(search) && api.Id != selectedApiId) continue;
+
+                            <button class="api-list-item @(api.Id == selectedApiId ? "active" : "")" @onclick="() => SelectApi(api.Id)" title="@api.Route">
+                                <span class="api-list-name">@api.Name</span>
+                                <span class="api-list-count">@count.ToString("N0")</span>
+                                <span class="api-list-route">@api.Route</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @* Endpoints / Endpoint *@
+                <div class="explorer-content">
+                    @if (selectedEndpoint != null)
+                    {
+                        <EndpointView @key="selectedEndpoint" Endpoint="selectedEndpoint" BaseUri="@Navigation.BaseUri" ApiKey="@apiKey" ApiKeyHeader="@(catalog.ApiKeyHeader ?? "X-API-Key")" Authenticated="@(catalog.Identity != null)" Interop="interop" OnBack="() => selectedEndpoint = null" />
+                    }
+                    else
+                    {
+                        var selectedApi = catalog.Apis.FirstOrDefault(o => o.Id == selectedApiId);
+                        if (selectedApi != null)
+                        {
+                            <div class="api-summary">
+                                <div class="api-summary-text">
+                                    <div class="api-summary-title">
+                                        <span>@selectedApi.Name</span>
+                                        @if (!string.IsNullOrEmpty(selectedApi.Version))
+                                        {
+                                            <span class="version-chip">v@(selectedApi.Version)</span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(selectedApi.Description))
+                                    {
+                                        <div class="api-summary-description">@selectedApi.Description</div>
+                                    }
+                                    <div class="api-summary-url"><code>@GetInstanceUrl(selectedApi.Route)</code></div>
+                                </div>
+                                <div class="api-summary-actions">
+                                    <button class="btn btn-light btn-sm" disabled="@openApiDownloading" @onclick="() => DownloadOpenApi(selectedApi)">
+                                        <span class="icon fa-solid fa-sharp @(openApiDownloading ? "fa-loader spin" : "fa-file-arrow-down")"></span>OpenAPI Document
+                                    </button>
+                                    <button class="btn btn-light btn-sm" title="Copy the OpenAPI Document URL (send your Credentials when requesting it)" @onclick="() => Copy(GetInstanceUrl(ApiCatalog.OpenApiPath + '/' + selectedApi.Id))">
+                                        <span class="icon fa-solid fa-sharp fa-link"></span>Copy OpenAPI URL
+                                    </button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (openApiError != null)
+                        {
+                            <div class="notice warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span><span>@openApiError</span></div>
+                        }
+
+                        var apis = selectedApi != null ? new[] { selectedApi } : catalog.Apis.ToArray();
+                        var anyShown = false;
+
+                        <div class="endpoint-groups">
+                            @foreach (var api in apis)
+                            {
+                                var endpoints = api.Endpoints.Where(o => o.Matches(search)).ToList();
+                                if (endpoints.Count == 0) continue;
+                                anyShown = true;
+
+                                @foreach (var group in endpoints.GroupBy(o => o.GroupName ?? ""))
+                                {
+                                    <div class="endpoint-group">
+                                        <div class="endpoint-group-header">
+                                            @if (selectedApi == null)
+                                            {
+                                                <span class="endpoint-group-api">@api.Name</span>
+                                                <span class="endpoint-group-separator">/</span>
+                                            }
+                                            <span class="endpoint-group-name">@group.Key</span>
+                                            @{ var groupDescription = group.Select(o => o.ControllerDescription).FirstOrDefault(o => !string.IsNullOrEmpty(o)); }
+                                            @if (groupDescription != null && group.Key == group.First().Controller)
+                                            {
+                                                <span class="endpoint-group-description">@groupDescription</span>
+                                            }
+                                        </div>
+                                        @foreach (var endpoint in group.OrderBy(o => o.Route).ThenBy(o => MethodOrder(o.MethodLabel)))
+                                        {
+                                            <button class="endpoint-row" @onclick="() => selectedEndpoint = endpoint">
+                                                <span class="method-badge @endpoint.MethodLabel.ToLowerInvariant()">@endpoint.MethodLabel</span>
+                                                <span class="endpoint-route">@endpoint.Route</span>
+                                                <span class="endpoint-description">@endpoint.Description</span>
+                                                @if (endpoint.AuthenticationRequired)
+                                                {
+                                                    <span class="endpoint-lock" title="Requires Authentication"><span class="fa-solid fa-sharp fa-lock"></span></span>
+                                                }
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+
+                        @if (!anyShown)
+                        {
+                            <div class="empty-state">
+                                <span class="empty-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                                <span class="empty-title">No Matching Endpoints</span>
+                                <span class="empty-description">No Endpoints match "@search".</span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (toast != null)
+    {
+        <div class="toast-message">@toast</div>
+    }
+</div>
+
+@code {
+
+    private ApiExplorerInterop interop;
+    private ApiCatalog catalog;
+    private bool loading;
+    private string loadError;
+    private bool keyRejected;
+
+    private string apiKey;
+    private string apiKeyInput;
+    private bool showApiKeyInput;
+
+    private string search;
+    private string selectedApiId;
+    private ApiCatalogEndpoint selectedEndpoint;
+
+    private bool openApiDownloading;
+    private string openApiError;
+    private string toast;
+
+
+    protected override void OnInitialized()
+    {
+        interop = new ApiExplorerInterop(JSRuntime);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            apiKey = await interop.GetApiKey();
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        loadError = null;
+        await InvokeAsync(StateHasChanged);
+
+        var response = await interop.Send(GetInstanceUrl(ApiCatalog.CatalogPath), "GET", GetCredentialHeaders());
+        if (!response.Success)
+        {
+            loadError = response.Error;
+        }
+        else if (!response.IsSuccessStatus)
+        {
+            loadError = response.Status switch
+            {
+                401 => "Sign in, or use an API Key, to see the APIs.",
+                403 => "You don't have access to the API Catalog.",
+                404 => "The Instance doesn't provide an API Catalog (it may be an older version, or its APIs may not be served over HTTP).",
+                _ => $"{response.Status} {response.StatusText}"
+            };
+        }
+        else
+        {
+            var loaded = ApiCatalog.Parse(response.Body);
+            if (loaded != null)
+            {
+                catalog = loaded;
+                keyRejected = !string.IsNullOrEmpty(apiKey) && catalog.Identity == null;
+
+                // Keep the selection when it is still available
+                if (selectedApiId != null && !catalog.Apis.Any(o => o.Id == selectedApiId)) selectedApiId = null;
+                if (selectedEndpoint != null)
+                {
+                    selectedEndpoint = catalog.Apis.FirstOrDefault(o => o.Id == selectedEndpoint.Api?.Id)?.Endpoints.FirstOrDefault(o => o.Id == selectedEndpoint.Id && o.ControllerId == selectedEndpoint.ControllerId);
+                }
+            }
+            else
+            {
+                loadError = "The API Catalog could not be read.";
+            }
+        }
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private Dictionary<string, string> GetCredentialHeaders()
+    {
+        var headers = new Dictionary<string, string>();
+        if (!string.IsNullOrEmpty(apiKey)) headers[catalog?.ApiKeyHeader ?? "X-API-Key"] = apiKey;
+        return headers;
+    }
+
+    private string GetInstanceUrl(string path) => Navigation.BaseUri.TrimEnd('/') + "/" + (path ?? "").TrimStart('/');
+
+    private string GetSignInUrl(ApiCatalogSignInProvider provider)
+    {
+        var returnUrl = new Uri(Navigation.Uri).PathAndQuery;
+        return GetInstanceUrl(provider.SignInPath) + "?returnUrl=" + Uri.EscapeDataString(returnUrl);
+    }
+
+
+    private async Task ApplyApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(apiKeyInput)) return;
+
+        apiKey = apiKeyInput.Trim();
+        apiKeyInput = null;
+        showApiKeyInput = false;
+        await interop.SetApiKey(apiKey);
+        await Load();
+    }
+
+    private async Task ApiKeyKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ApplyApiKey();
+        else if (e.Key == "Escape") showApiKeyInput = false;
+    }
+
+    private async Task ClearApiKey()
+    {
+        apiKey = null;
+        await interop.SetApiKey(null);
+        await Load();
+    }
+
+
+    private void SelectApi(string apiId)
+    {
+        selectedApiId = apiId;
+        selectedEndpoint = null;
+        openApiError = null;
+    }
+
+    private int CountEndpoints(ApiCatalogApi api)
+    {
+        if (catalog == null) return 0;
+        if (api == null) return catalog.Apis.Sum(o => o.Endpoints.Count(e => e.Matches(search)));
+        return api.Endpoints.Count(o => o.Matches(search));
+    }
+
+    private static int MethodOrder(string method) => method switch
+    {
+        "GET" => 0,
+        "POST" => 1,
+        "PUT" => 2,
+        "PATCH" => 3,
+        "DELETE" => 4,
+        _ => 5
+    };
+
+
+    private async Task DownloadOpenApi(ApiCatalogApi api)
+    {
+        openApiDownloading = true;
+        openApiError = null;
+        StateHasChanged();
+
+        var response = await interop.Send(GetInstanceUrl(ApiCatalog.OpenApiPath + "/" + api.Id), "GET", GetCredentialHeaders());
+        if (response.Success && response.IsSuccessStatus && response.Body != null)
+        {
+            await interop.SaveText(response.Body, $"{api.Name}.openapi.json", "application/json");
+        }
+        else
+        {
+            openApiError = response.Success ? $"The OpenAPI Document could not be downloaded ({response.Status} {response.StatusText})" : response.Error;
+        }
+
+        openApiDownloading = false;
+        StateHasChanged();
+    }
+
+    private async Task Copy(string text)
+    {
+        var copied = await interop.Copy(text);
+        await ShowToast(copied ? "Copied" : "Copy failed");
+    }
+
+    private async Task ShowToast(string message)
+    {
+        toast = message;
+        StateHasChanged();
+        await Task.Delay(1500);
+        toast = null;
+        StateHasChanged();
+    }
+}

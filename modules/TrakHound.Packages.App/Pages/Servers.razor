@@ -1,0 +1,384 @@
+<div class="servers-panel">
+
+    <div class="toolbar-panel">
+        <span class="toolbar-description">Package Servers are Instances running the Packages API (or a TrakHound Package Manager) that Packages are uploaded to, downloaded from, and copied between. They are saved to this App's Volume.</span>
+        <div class="toolbar-buttons">
+            <button class="btn btn-light" @onclick="TestAll" disabled="@(Context.Servers.Count == 0)"><span class="icon fa-solid fa-sharp fa-plug-circle-check"></span>Test All</button>
+            <button class="btn btn-primary" @onclick="OpenAdd"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Server</button>
+        </div>
+    </div>
+
+    <div class="table-panel">
+        @if (Context.Servers.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-server"></span>
+                <span class="empty-title">No Package Servers</span>
+                <span class="empty-description">Add a Package Server to upload, download and copy Packages.</span>
+                <div class="empty-actions">
+                    <button class="btn btn-primary" @onclick="OpenAdd"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Server</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <table class="servers-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Base URL</th>
+                        <th>Organization</th>
+                        <th class="col-token">Access Token</th>
+                        <th class="col-status">Status</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var server in Context.Servers)
+                    {
+                        var test = testResults.GetValueOrDefault(server.Id);
+
+                        <tr>
+                            <td><span class="server-name">@server.DisplayName</span></td>
+                            <td class="col-url">@server.BaseUrl</td>
+                            <td>@server.Organization</td>
+                            <td class="col-token">
+                                @if (!string.IsNullOrEmpty(server.AccessToken))
+                                {
+                                    <span><span class="icon fa-solid fa-sharp fa-key"></span>Set</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">None</span>
+                                }
+                            </td>
+                            <td class="col-status">
+                                @if (test == null)
+                                {
+                                    <span class="muted">Not tested</span>
+                                }
+                                else if (test.Testing)
+                                {
+                                    <span class="test-status"><span class="icon fa-solid fa-sharp fa-loader spin"></span>Testing..</span>
+                                }
+                                else if (test.Success)
+                                {
+                                    <span class="test-status online" title="Tested @test.Time.ToString("T")"><span class="status-dot"></span>@test.PackageCount.ToString("N0") packages</span>
+                                }
+                                else
+                                {
+                                    <span class="test-status offline" title="@test.Error"><span class="status-dot"></span>Unreachable</span>
+                                }
+                            </td>
+                            <td class="col-actions">
+                                <button class="btn btn-sm btn-command" title="Test the connection" @onclick="() => Test(server)" disabled="@(test?.Testing == true)"><span class="icon fa-solid fa-sharp fa-plug-circle-check"></span>Test</button>
+                                <button class="btn btn-sm btn-command" title="Edit" @onclick="() => OpenEdit(server)"><span class="icon fa-solid fa-sharp fa-pen-to-square"></span>Edit</button>
+                                <button class="btn btn-sm btn-command" title="Remove" @onclick="() => removeServer = server"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @* Add / Edit Dialog *@
+    <Modal Class="packages-modal" Visible="@editVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-server"></span>
+            <span class="modal-header-title">@(editOriginalId == null ? "Add Package Server" : $"Edit {editName}")</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="form-field">
+                <label>Name</label>
+                <RadzenTextBox @bind-Value="@editName" Placeholder="ex. TrakHound Public" />
+                @if (submitted && string.IsNullOrWhiteSpace(editName))
+                {
+                    <span class="field-error">Name is required</span>
+                }
+            </div>
+            <div class="form-field">
+                <label>Base URL</label>
+                <RadzenTextBox @bind-Value="@editBaseUrl" Placeholder="ex. https://packages.trakhound.com" />
+                @if (submitted && GetUrlError() != null)
+                {
+                    <span class="field-error">@GetUrlError()</span>
+                }
+                else
+                {
+                    <span class="field-hint">The URL of an Instance running the Packages API, or of a TrakHound Package Manager (ex. http://localhost:8472)</span>
+                }
+            </div>
+            <div class="form-row">
+                <div class="form-field">
+                    <label>Organization</label>
+                    <RadzenTextBox @bind-Value="@editOrganization" Placeholder="ex. Public" />
+                    @if (submitted && string.IsNullOrWhiteSpace(editOrganization))
+                    {
+                        <span class="field-error">Organization is required</span>
+                    }
+                    else
+                    {
+                        <span class="field-hint">The Organization that Packages are read from and uploaded to</span>
+                    }
+                </div>
+                <div class="form-field">
+                    <label>Access Token <span class="optional">(optional)</span></label>
+                    <div class="secret-input">
+                        <input class="form-control" type="@(showToken ? "text" : "password")" @bind="editToken" autocomplete="off" spellcheck="false" placeholder="Required for private Organizations" />
+                        <button class="btn btn-link" type="button" title="@(showToken ? "Hide" : "Show")" @onclick="() => showToken = !showToken"><span class="fa-solid fa-sharp @(showToken ? "fa-eye-slash" : "fa-eye")"></span></button>
+                    </div>
+                    <span class="field-hint">Saved in plain text in the App's Volume</span>
+                </div>
+            </div>
+
+            <div class="test-panel">
+                @if (!editTesting)
+                {
+                    <button class="btn btn-light" @onclick="TestForm" disabled="@(GetUrlError() != null || string.IsNullOrWhiteSpace(editOrganization))"><span class="icon fa-solid fa-sharp fa-plug-circle-check"></span>Test Connection</button>
+                }
+                else
+                {
+                    <button class="btn btn-light disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Testing..</button>
+                }
+
+                @if (editTest != null && !editTesting)
+                {
+                    @if (editTest.Success)
+                    {
+                        <span class="test-status online"><span class="status-dot"></span>Connected · @editTest.PackageCount.ToString("N0") packages</span>
+                    }
+                    else
+                    {
+                        <span class="test-status offline"><span class="status-dot"></span>@editTest.Error</span>
+                    }
+                }
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseEdit" disabled="@saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            @if (!saving)
+            {
+                <button class="btn btn-primary" @onclick="SaveEdit"><span class="icon fa-solid fa-sharp @(editOriginalId == null ? "fa-plus" : "fa-floppy-disk")"></span>@(editOriginalId == null ? "Add Server" : "Save")</button>
+            }
+            else
+            {
+                <button class="btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Saving..</button>
+            }
+        </FooterContent>
+    </Modal>
+
+    @* Remove Dialog *@
+    <Modal Class="packages-modal" Visible="@(removeServer != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Remove @removeServer?.DisplayName</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="modal-description">Remove the Package Server <strong>@removeServer?.DisplayName</strong> (@removeServer?.BaseUrl)? Packages on the Server are not affected.</p>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => removeServer = null" disabled="@saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            @if (!saving)
+            {
+                <button class="btn btn-danger" @onclick="ConfirmRemove"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove Server</button>
+            }
+            else
+            {
+                <button class="btn btn-danger disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Removing..</button>
+            }
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private class TestResult
+    {
+        public bool Testing { get; set; }
+        public bool Success { get; set; }
+        public int PackageCount { get; set; }
+        public string Error { get; set; }
+        public DateTime Time { get; set; }
+    }
+
+
+    private readonly Dictionary<string, TestResult> testResults = new Dictionary<string, TestResult>();
+
+    private bool editVisible;
+    private string editOriginalId;
+    private string editName;
+    private string editBaseUrl;
+    private string editOrganization;
+    private string editToken;
+    private bool showToken;
+    private bool submitted;
+    private bool editTesting;
+    private TestResult editTest;
+    private bool saving;
+
+    private PackageServer removeServer;
+
+
+    [CascadingParameter]
+    public PackagesAppContext Context { get; set; }
+
+
+    #region "Test"
+
+    private static async Task<TestResult> RunTest(PackageServer server)
+    {
+        var (packages, error) = await PackagesAppContext.QueryLatest(PackagesAppContext.CreateClient(server));
+
+        return new TestResult
+        {
+            Success = packages != null,
+            PackageCount = packages?.Count ?? 0,
+            Error = error,
+            Time = DateTime.Now
+        };
+    }
+
+    private async Task Test(PackageServer server)
+    {
+        testResults[server.Id] = new TestResult { Testing = true };
+        await InvokeAsync(StateHasChanged);
+
+        testResults[server.Id] = await RunTest(server);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task TestAll()
+    {
+        await Task.WhenAll(Context.Servers.Select(Test));
+    }
+
+    private async Task TestForm()
+    {
+        editTesting = true;
+        editTest = null;
+        await InvokeAsync(StateHasChanged);
+
+        editTest = await RunTest(CreateFromForm());
+        editTesting = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    #endregion
+
+    #region "Add / Edit"
+
+    private void OpenAdd()
+    {
+        editOriginalId = null;
+        editName = null;
+        editBaseUrl = null;
+        editOrganization = null;
+        editToken = null;
+        OpenForm();
+    }
+
+    private void OpenEdit(PackageServer server)
+    {
+        editOriginalId = server.Id;
+        editName = server.Name;
+        editBaseUrl = server.BaseUrl;
+        editOrganization = server.Organization;
+        editToken = server.AccessToken;
+        OpenForm();
+    }
+
+    private void OpenForm()
+    {
+        showToken = false;
+        submitted = false;
+        editTest = null;
+        editVisible = true;
+    }
+
+    private void CloseEdit()
+    {
+        editVisible = false;
+        editToken = null;
+    }
+
+    private string GetUrlError()
+    {
+        if (string.IsNullOrWhiteSpace(editBaseUrl)) return "Base URL is required";
+        if (!Uri.TryCreate(editBaseUrl.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return "Enter a full http:// or https:// URL";
+
+        return null;
+    }
+
+    private PackageServer CreateFromForm()
+    {
+        return new PackageServer
+        {
+            Id = editOriginalId ?? Guid.NewGuid().ToString(),
+            Name = editName?.Trim(),
+            BaseUrl = editBaseUrl?.Trim().TrimEnd('/'),
+            Organization = editOrganization?.Trim(),
+            AccessToken = string.IsNullOrWhiteSpace(editToken) ? null : editToken.Trim()
+        };
+    }
+
+    private async Task SaveEdit()
+    {
+        submitted = true;
+        if (string.IsNullOrWhiteSpace(editName) || GetUrlError() != null || string.IsNullOrWhiteSpace(editOrganization)) return;
+
+        var server = CreateFromForm();
+        var servers = Context.Servers.ToList();
+
+        var index = servers.FindIndex(o => o.Id == server.Id);
+        if (index >= 0) servers[index] = server;
+        else servers.Add(server);
+
+        if (await Save(servers, editOriginalId == null ? $"Added {server.DisplayName}" : $"Saved {server.DisplayName}"))
+        {
+            if (editTest != null && !editTest.Testing) testResults[server.Id] = editTest;
+            else testResults.Remove(server.Id);
+
+            editVisible = false;
+            editToken = null;
+        }
+    }
+
+    #endregion
+
+    #region "Remove"
+
+    private async Task ConfirmRemove()
+    {
+        if (removeServer == null) return;
+
+        var server = removeServer;
+        if (await Save(Context.Servers.Where(o => o.Id != server.Id).ToList(), $"Removed {server.DisplayName}"))
+        {
+            testResults.Remove(server.Id);
+            removeServer = null;
+        }
+    }
+
+    #endregion
+
+    private async Task<bool> Save(List<PackageServer> servers, string successMessage)
+    {
+        saving = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var success = await Context.SaveServers(servers);
+            if (success) Context.Notify(PackageNotificationType.Success, successMessage);
+            return success;
+        }
+        finally
+        {
+            saving = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

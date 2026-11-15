@@ -1,0 +1,693 @@
+﻿@page "/"
+@inherits TrakHoundComponentBase
+@layout Layout
+@inject IJSRuntime JSRuntime
+@using TrakHound.Api
+@using TrakHound.Apps
+@using TrakHound.Functions
+@using TrakHound.Instances
+@using TrakHound.Modules
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="@GetPageTitle()" />
+
+<div class="welcome">
+    <div class="welcome-content">
+
+        @* Header *@
+        <div class="hero">
+            <div class="hero-main">
+                <span class="hero-logo" style="@GetLogoStyle()" aria-hidden="true"></span>
+                <div class="hero-text">
+                    @if (!string.IsNullOrEmpty(instance.Data?.Name))
+                    {
+                        <span class="hero-eyebrow">@instance.Data.Name</span>
+                    }
+                    <h1 class="hero-title">Welcome to TrakHound</h1>
+                    <span class="hero-subtitle">@(!string.IsNullOrEmpty(instance.Data?.Description) ? instance.Data.Description : "What's installed on this Instance, where it is served, and how to get started")</span>
+                </div>
+            </div>
+
+            @* Identity *@
+            <div class="hero-identity">
+                @if (catalog.Data?.Identity != null)
+                {
+                    <span class="identity-chip" title="@($"{catalog.Data.Identity.ProviderId} : {catalog.Data.Identity.UserId}")">
+                        <span class="icon fa-solid fa-sharp fa-user-check"></span>@(catalog.Data.Identity.Name ?? catalog.Data.Identity.UserId)
+                    </span>
+                }
+                else if (catalog.IsLoaded)
+                {
+                    <span class="identity-chip anonymous"><span class="icon fa-solid fa-sharp fa-user-secret"></span>Not signed in</span>
+                    @foreach (var provider in catalog.Data.SignInProviders ?? Enumerable.Empty<WelcomeSignInProvider>())
+                    {
+                        <a class="btn btn-light btn-sm" href="@GetSignInUrl(provider)"><span class="icon fa-solid fa-sharp fa-right-to-bracket"></span>Sign in (@provider.Name)</a>
+                    }
+                }
+            </div>
+
+            @* Instance facts (when the visitor can read them) *@
+            @if (instance.IsLoaded)
+            {
+                <div class="hero-facts">
+                    <span class="hero-fact"><span class="hero-fact-label">Version</span>@instance.Data.Version</span>
+                    <span class="hero-fact"><span class="hero-fact-label">Instance</span>@instance.Data.Id</span>
+                    @if (health.IsLoaded)
+                    {
+                        <span class="hero-fact"><span class="health-dot @GetHealthClass(health.Data.Status)"></span>@health.Data.Status</span>
+                    }
+                    <span class="hero-fact"><span class="hero-fact-label">URL</span>@Navigation.BaseUri.TrimEnd('/')</span>
+                </div>
+            }
+        </div>
+
+        @* Development notice : this page is meant for development Instances only *@
+        <div class="notice warning">
+            <span class="icon fa-solid fa-sharp fa-flask"></span>
+            <span>
+                This page is for development Instances. It shows what is installed and how it is set up to visitors who can read the System API.
+                Remove the <code>TrakHound.Welcome.App</code> package (or its App) before using this Instance in production.
+            </span>
+        </div>
+
+        @if (loading)
+        {
+            <div class="loading"><span class="icon fa-solid fa-sharp fa-loader spin"></span>Loading..</div>
+        }
+        else
+        {
+            @AccessNotice()
+        }
+
+        @* Links *@
+        <div class="section">
+            <div class="section-title">Where things are</div>
+            <div class="link-grid">
+                <a class="link-card" href="@systemApi.GetUrl("_admin")">
+                    <span class="link-icon fa-solid fa-sharp fa-gear"></span>
+                    <span class="link-text">
+                        <span class="link-title">Admin Interface</span>
+                        <span class="link-description">Install packages, configure Apps, Apis and Services, and monitor the Instance</span>
+                    </span>
+                </a>
+                @{ var apiExplorer = apps.Data?.FirstOrDefault(o => o.PackageId == ApiExplorerPackageId); }
+                @if (apiExplorer != null)
+                {
+                    <a class="link-card" href="@GetRouteUrl(apiExplorer.Route)">
+                        <span class="link-icon fa-solid fa-sharp fa-code"></span>
+                        <span class="link-text">
+                            <span class="link-title">API Explorer</span>
+                            <span class="link-description">Browse the APIs you can use, try them out, and download their OpenAPI documents</span>
+                        </span>
+                    </a>
+                }
+                <a class="link-card" href="@systemApi.GetUrl("llms.txt")" target="_blank">
+                    <span class="link-icon fa-solid fa-sharp fa-robot"></span>
+                    <span class="link-text">
+                        <span class="link-title">llms.txt</span>
+                        <span class="link-description">An index of this Instance and its APIs for AI agents</span>
+                    </span>
+                </a>
+                <button class="link-card" @onclick="() => Copy(systemApi.GetUrl(McpPath))">
+                    <span class="link-icon fa-solid fa-sharp fa-plug"></span>
+                    <span class="link-text">
+                        <span class="link-title">MCP Server</span>
+                        <span class="link-description"><code>@systemApi.GetUrl(McpPath)</code> (click to copy)</span>
+                    </span>
+                </button>
+            </div>
+        </div>
+
+        @* Learn more *@
+        <div class="section">
+            <div class="section-title">Learn more</div>
+            <div class="link-grid">
+                <a class="link-card" href="@DocsUrl" target="_blank">
+                    <span class="link-icon fa-solid fa-sharp fa-book"></span>
+                    <span class="link-text">
+                        <span class="link-title">Documentation</span>
+                        <span class="link-description">Guides for Instances, Packages, APIs, Apps, Functions, Services and Security</span>
+                    </span>
+                </a>
+                <a class="link-card" href="@(DocsUrl + "/getting-started")" target="_blank">
+                    <span class="link-icon fa-solid fa-sharp fa-rocket"></span>
+                    <span class="link-text">
+                        <span class="link-title">Quick Start</span>
+                        <span class="link-description">Create an API, install it on an Instance, and update it</span>
+                    </span>
+                </a>
+                <a class="link-card" href="@FrameworkUrl" target="_blank">
+                    <span class="link-icon fa-solid fa-sharp fa-globe"></span>
+                    <span class="link-text">
+                        <span class="link-title">TrakHound Website</span>
+                        <span class="link-description">What the TrakHound Framework is for, downloads and other TrakHound products</span>
+                    </span>
+                </a>
+            </div>
+        </div>
+
+        @if (!DetailsBlocked)
+        {
+            @* Instance *@
+            <div class="section">
+                <div class="section-title">Instance @AdminSectionLink(GetExplorerUrl("diagnostics/health"))</div>
+                @if (instance.IsLoaded)
+                {
+                    var information = instance.Data;
+                    <div class="property-grid">
+                        <span class="property-name">ID</span><span class="property-value"><code>@information.Id</code></span>
+                        <span class="property-name">Version</span><span class="property-value">@information.Version</span>
+                        <span class="property-name">URL</span><span class="property-value"><code>@Navigation.BaseUri</code></span>
+                        @if (information.Environment?.OperatingSystem != null)
+                        {
+                            <span class="property-name">Operating System</span><span class="property-value">@information.Environment.OperatingSystem.Name @information.Environment.OperatingSystem.Version</span>
+                        }
+                        @if (!string.IsNullOrEmpty(information.Environment?.User))
+                        {
+                            <span class="property-name">Runs as</span><span class="property-value">@information.Environment.User</span>
+                        }
+                        @if (!string.IsNullOrEmpty(information.Deployment?.ProfileId))
+                        {
+                            <span class="property-name">Deployment</span><span class="property-value">@information.Deployment.ProfileId @information.Deployment.Version</span>
+                        }
+                        @if (health.IsLoaded)
+                        {
+                            <span class="property-name">Health</span>
+                            <span class="property-value"><span class="status-chip @GetHealthClass(health.Data.Status)">@health.Data.Status</span></span>
+                        }
+                    </div>
+
+                    var problems = health.Data?.Checks?.Where(o => !o.Ignored && o.Status != TrakHoundHealthStatus.Healthy && o.Status != TrakHoundHealthStatus.Unknown).ToList();
+                    @if (!problems.IsNullOrEmpty())
+                    {
+                        @foreach (var problem in problems)
+                        {
+                            <div class="notice @(problem.Status == TrakHoundHealthStatus.Unhealthy ? "error" : "warning")">
+                                <span class="icon fa-solid fa-sharp fa-heart-pulse"></span>
+                                <span><b>@problem.Title</b> @problem.Description</span>
+                            </div>
+                        }
+                    }
+                }
+                else
+                {
+                    @SectionStatus(instance.Status, instance.Error)
+                }
+            </div>
+
+            @* Apps *@
+            <div class="section">
+                <div class="section-title">Apps <span class="section-count">@CountText(apps)</span> @AdminSectionLink(GetExplorerUrl("apps"))</div>
+                @if (apps.IsLoaded)
+                {
+                    @if (apps.Data.Any())
+                    {
+                        <table class="item-table">
+                            <thead><tr><th>Name</th><th>Route</th><th>Package</th></tr></thead>
+                            <tbody>
+                                @foreach (var app in apps.Data.OrderBy(o => o.Route))
+                                {
+                                    <tr>
+                                        <td>@AdminLink(GetExplorerUrl("apps", app.Id), app.Name ?? app.PackageId)@if (app.PackageId == WelcomePackageId){<span class="tag">This page</span>}</td>
+                                        <td><a href="@GetRouteUrl(app.Route)"><code>@GetRoute(app.Route)</code></a></td>
+                                        <td>@PackageText(app.PackageId, app.PackageVersion)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="empty">No Apps are configured. Add one in the Admin Interface (Apps), or create one with <code>dotnet new trakhound.app</code>.</div>
+                    }
+                }
+                else
+                {
+                    @SectionStatus(apps.Status, apps.Error)
+                }
+            </div>
+
+            @* Apis *@
+            <div class="section">
+                <div class="section-title">APIs <span class="section-count">@CountText(apis)</span> @AdminSectionLink(GetExplorerUrl("api"))</div>
+                @if (apis.IsLoaded)
+                {
+                    @if (apis.Data.Any())
+                    {
+                        <table class="item-table">
+                            <thead><tr><th>Route</th><th>Package</th><th>HTTP</th><th>MCP Tools</th></tr></thead>
+                            <tbody>
+                                @foreach (var api in apis.Data.OrderBy(o => o.Route))
+                                {
+                                    <tr>
+                                        <td>@AdminLink(GetExplorerUrl("api", api.Id), GetRoute(api.Route), true)</td>
+                                        <td>@PackageText(api.PackageId, api.PackageVersion)</td>
+                                        <td>@(api.HttpEnabled ? "Yes" : "No")</td>
+                                        <td>@api.McpTools@(api.McpTools != "Off" && api.McpReadOnly ? " (read only)" : "")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="empty">No APIs are configured. Add one in the Admin Interface (APIs), or create one with <code>dotnet new trakhound.api</code>.</div>
+                    }
+                }
+                else
+                {
+                    @SectionStatus(apis.Status, apis.Error)
+                }
+            </div>
+
+            @* Functions *@
+            <div class="section">
+                <div class="section-title">Functions <span class="section-count">@CountText(functions)</span> @AdminSectionLink(GetExplorerUrl("functions"))</div>
+                @if (functions.IsLoaded)
+                {
+                    @if (functions.Data.Any())
+                    {
+                        <table class="item-table">
+                            <thead><tr><th>Name</th><th>Runs</th></tr></thead>
+                            <tbody>
+                                @foreach (var function in functions.Data.OrderBy(o => o.Name ?? o.FunctionId))
+                                {
+                                    <tr>
+                                        <td>@AdminLink(GetExplorerUrl("functions", function.FunctionId), function.Name ?? function.FunctionId)@if (!string.IsNullOrEmpty(function.Name) && function.Name != function.PackageId){<span class="item-package">@PackageText(function.PackageId, function.PackageVersion)</span>}</td>
+                                        <td>@function.RunCount.ToString("N0")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="empty">No Functions are configured.</div>
+                    }
+                }
+                else
+                {
+                    @SectionStatus(functions.Status, functions.Error)
+                }
+            </div>
+
+            @* Services *@
+            <div class="section">
+                <div class="section-title">Services <span class="section-count">@CountText(services)</span> @AdminSectionLink(GetAdminUrl("configuration/services"))</div>
+                @if (services.IsLoaded)
+                {
+                    @if (services.Data.Any())
+                    {
+                        <table class="item-table">
+                            <thead><tr><th>Name</th><th>Package</th></tr></thead>
+                            <tbody>
+                                @foreach (var service in services.Data.OrderBy(o => o.Name ?? o.Id))
+                                {
+                                    <tr>
+                                        <td>@AdminLink(GetAdminUrl("configuration/services", service.Id), service.Name ?? service.Id)@if (!string.IsNullOrEmpty(service.Description)){<span class="item-package">@service.Description</span>}</td>
+                                        <td>@PackageText(service.PackageId, service.PackageVersion)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="empty">No Services are configured. Apps, Apis, Functions and Workers store their data through Services (ex. a SQL Server or the Memory Service).</div>
+                    }
+                }
+                else
+                {
+                    @SectionStatus(services.Status, services.Error)
+                }
+            </div>
+
+            @* Routers *@
+            @if (routers.IsLoaded && routers.Data.Any())
+            {
+                <div class="section">
+                    <div class="section-title">Service Routers <span class="section-count">@CountText(routers)</span> @AdminSectionLink(GetAdminUrl("configuration/routing"))</div>
+                    <table class="item-table">
+                        <thead><tr><th>Name</th><th>Routes</th></tr></thead>
+                        <tbody>
+                            @foreach (var router in routers.Data.OrderBy(o => o.Name ?? o.Id))
+                            {
+                                <tr>
+                                    <td>@AdminLink(GetAdminUrl("configuration/routing"), router.Name ?? router.Id)</td>
+                                    <td>
+                                        @foreach (var route in router.Routes ?? Enumerable.Empty<TrakHoundServiceRouteConfiguration>())
+                                        {
+                                            <div class="router-route">
+                                                <code>@string.Join(", ", route.Patterns ?? Enumerable.Empty<string>())</code>
+                                                <span class="icon fa-solid fa-sharp fa-arrow-right"></span>
+                                                @string.Join(", ", (route.Targets ?? Enumerable.Empty<TrakHoundServiceTargetConfiguration>()).Select(o => GetServiceName(o.Source)))
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @* Packages *@
+            <div class="section">
+                <div class="section-title">Packages <span class="section-count">@packages?.Count.ToString("N0")</span> @AdminSectionLink(GetAdminUrl("packages"))</div>
+                @if (modules.IsLoaded)
+                {
+                    @if (packages.Any())
+                    {
+                        <table class="item-table">
+                            <thead><tr><th>Package</th><th>Type</th><th>Version</th><th>Status</th></tr></thead>
+                            <tbody>
+                                @foreach (var package in packages)
+                                {
+                                    <tr>
+                                        <td>@package.Id</td>
+                                        <td>@package.Category</td>
+                                        <td>@package.Version</td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(package.Error))
+                                            {
+                                                <a class="status-chip error" href="@GetExplorerUrl("diagnostics/modules")" title="@package.Error">Error</a>
+                                                <span class="item-package">@package.Error</span>
+                                            }
+                                            else if (package.IsLoaded)
+                                            {
+                                                <span class="status-chip success">Loaded</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status-chip">Not Loaded</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <div class="empty">No packages are loaded.</div>
+                    }
+                }
+                else
+                {
+                    @SectionStatus(modules.Status, modules.Error)
+                }
+            </div>
+        }
+
+        @* Getting Started *@
+        <div class="section">
+            <div class="section-title">Create a package</div>
+            <div class="section-description">Install the templates, then create a package that connects to this Instance when you debug it:</div>
+            @foreach (var command in GetTemplateCommands())
+            {
+                <div class="command-row">
+                    <code>@command</code>
+                    <button class="btn btn-light btn-sm" title="Copy" @onclick="() => Copy(command)"><span class="icon fa-solid fa-sharp fa-copy"></span></button>
+                </div>
+            }
+            <div class="section-description">
+                Build and install it with the TrakHound CLI (<code>th packages build</code>, then <code>th packages install</code>), or with <b>Packages</b> in the Admin Interface.
+                See the <a href="@(DocsUrl + "/getting-started")" target="_blank">Quick Start</a> for a walkthrough and the <a href="@(DocsUrl + "/cli")" target="_blank">CLI Reference</a> for the commands.
+            </div>
+        </div>
+    </div>
+
+    @if (toast != null)
+    {
+        <div class="toast-message">@toast</div>
+    }
+</div>
+
+@code {
+
+    private const string WelcomePackageId = "TrakHound.Welcome.App";
+    private const string ApiExplorerPackageId = "TrakHound.ApiExplorer.App";
+    private const string McpPath = "_mcp";
+    private const string WebsiteUrl = "https://www.trakhound.com";
+    private const string FrameworkUrl = WebsiteUrl + "/trakhound-framework";
+    private const string DocsUrl = WebsiteUrl + "/docs/trakhound-framework";
+
+    private static readonly string[] _templates = new[] { "api", "app", "function", "worker", "service", "identity" };
+
+    private WelcomeSystemApi systemApi;
+    private bool loading = true;
+    private string toast;
+
+    private WelcomeSection<WelcomeCatalog> catalog = new();
+    private WelcomeSection<TrakHoundInstanceInformation> instance = new();
+    private WelcomeSection<TrakHoundInstanceHealth> health = new();
+    private WelcomeSection<List<TrakHoundAppInformation>> apps = new();
+    private WelcomeSection<List<WelcomeApiItem>> apis = new();
+    private WelcomeSection<List<TrakHoundFunctionInformation>> functions = new();
+    private WelcomeSection<List<WelcomeServiceItem>> services = new();
+    private WelcomeSection<List<TrakHoundServiceRouterConfiguration>> routers = new();
+    private WelcomeSection<List<TrakHoundModuleInformation>> modules = new();
+    private List<PackageRow> packages;
+
+    private record PackageRow(string Id, string Category, string Version, bool IsLoaded, string Error);
+
+
+    protected override void OnInitialized()
+    {
+        // The Instance's Base URL (Apps share one host page, so it doesn't include this App's Route)
+        systemApi = new WelcomeSystemApi(JSRuntime, Navigation.BaseUri);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Load();
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        var catalogTask = systemApi.Get<WelcomeCatalog>("_developer/catalog");
+        var instanceTask = systemApi.Get<TrakHoundInstanceInformation>("_instances/information/host");
+        var healthTask = systemApi.Get<TrakHoundInstanceHealth>("_instances/health");
+        var appsTask = systemApi.Get<List<TrakHoundAppInformation>>("_apps/information");
+        var apisTask = systemApi.Get<List<WelcomeApiItem>>("_api/information/route");
+        var functionsTask = systemApi.Get<List<TrakHoundFunctionInformation>>("_functions/information");
+        var servicesTask = systemApi.Get<List<WelcomeServiceItem>>("_services/configurations/services");
+        var routersTask = systemApi.Get<List<TrakHoundServiceRouterConfiguration>>("_services/configurations/routers");
+        var modulesTask = systemApi.Get<List<TrakHoundModuleInformation>>("_modules");
+
+        catalog = await catalogTask;
+        instance = await instanceTask;
+        health = await healthTask;
+        apps = await appsTask;
+        apis = await apisTask;
+        functions = await functionsTask;
+        services = await servicesTask;
+        routers = await routersTask;
+        modules = await modulesTask;
+
+        // The Functions area returns a 404 when there are none (while the rest of the System API answers)
+        if (instance.IsLoaded || modules.IsLoaded)
+        {
+            if (functions.Status == WelcomeSectionStatus.Unavailable) functions = new WelcomeSection<List<TrakHoundFunctionInformation>> { Status = WelcomeSectionStatus.Loaded, Data = new() };
+        }
+
+        // A Package is listed once for each type of Module it contains (ex. an App's Components and its Injection Services)
+        packages = modules.Data?
+            .GroupBy(o => (o.PackageCategory, o.PackageId, o.PackageVersion))
+            .Select(o => new PackageRow(o.Key.PackageId, o.Key.PackageCategory, o.Key.PackageVersion, o.Any(m => m.IsLoaded), o.Select(m => m.Error).FirstOrDefault(e => !string.IsNullOrEmpty(e))))
+            .OrderBy(o => o.Category).ThenBy(o => o.Id)
+            .ToList();
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    /// <summary>
+    /// The areas that describe the Instance (not the Api Catalog, which is used for the visitor's Identity)
+    /// </summary>
+    private IEnumerable<WelcomeSectionStatus> GetDetailStatuses() => new[]
+    {
+        instance.Status, apps.Status, apis.Status, functions.Status, services.Status, modules.Status
+    };
+
+    /// <summary>
+    /// Nothing about the Instance could be read (for a reason the Access Notice explains), so its sections aren't shown
+    /// </summary>
+    private bool DetailsBlocked => !loading && GetDetailStatuses().All(o => o == WelcomeSectionStatus.Unavailable || o == WelcomeSectionStatus.SignInRequired || o == WelcomeSectionStatus.Denied);
+
+    private RenderFragment AccessNotice() => __builder =>
+    {
+        var statuses = GetDetailStatuses().ToList();
+
+        // One notice for the whole page when nothing could be read for the same reason (instead of one in every section)
+        if (statuses.All(o => o == WelcomeSectionStatus.Unavailable))
+        {
+            <div class="notice">
+                <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                <span>The System API isn't served at this address, so this page can't show what is installed. It is either turned off (Admin Interface : Settings > Interfaces > System API), or served only on the Instance's separate Admin Port.</span>
+            </div>
+        }
+        else if (statuses.All(o => o == WelcomeSectionStatus.SignInRequired))
+        {
+            <div class="notice">
+                <span class="icon fa-solid fa-sharp fa-lock"></span>
+                <span>Sign in with an account that can read the System API to see what is installed on this Instance.</span>
+            </div>
+        }
+        else if (statuses.All(o => o == WelcomeSectionStatus.Denied || o == WelcomeSectionStatus.SignInRequired))
+        {
+            <div class="notice">
+                <span class="icon fa-solid fa-sharp fa-lock"></span>
+                <span>You don't have access to the System API, so this page can't show what is installed. Ask an administrator for the "read" Permission on the System API Resources (ex. <code>system:modules</code>), or open this page on the Instance's own machine.</span>
+            </div>
+        }
+    };
+
+    private RenderFragment SectionStatus(WelcomeSectionStatus status, string error) => __builder =>
+    {
+        switch (status)
+        {
+            case WelcomeSectionStatus.Loading:
+                <div class="empty"><span class="icon fa-solid fa-sharp fa-loader spin"></span>Loading..</div>
+                break;
+
+            case WelcomeSectionStatus.SignInRequired:
+                <div class="empty"><span class="icon fa-solid fa-sharp fa-lock"></span>Sign in to see this.</div>
+                break;
+
+            case WelcomeSectionStatus.Denied:
+                <div class="empty"><span class="icon fa-solid fa-sharp fa-lock"></span>You don't have read access to this part of the System API.</div>
+                break;
+
+            case WelcomeSectionStatus.Unavailable:
+                <div class="empty"><span class="icon fa-solid fa-sharp fa-circle-info"></span>Not available (the System API may be disabled).</div>
+                break;
+
+            default:
+                <div class="empty"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>Could not be loaded@(error != null ? $" : {error}" : "")</div>
+                break;
+        }
+    };
+
+
+    /// <summary>
+    /// The TrakHound logo (served by the Instance) as a mask, so it takes the header's text color
+    /// </summary>
+    // The Instance's Name once it's loaded (and the visitor can read it), so tabs for different Instances can be told apart
+    private string GetPageTitle()
+    {
+        var name = instance.Data?.Name;
+        return !string.IsNullOrEmpty(name) ? $"Welcome - {name} - TrakHound" : "Welcome - TrakHound";
+    }
+
+    private string GetLogoStyle()
+    {
+        var url = systemApi.GetUrl("img/trakhound-logo.svg");
+        return $"-webkit-mask-image: url('{url}'); mask-image: url('{url}');";
+    }
+
+    private string GetRoute(string route) => "/" + (route ?? "").Trim('/');
+
+    /// <summary>
+    /// A page of the Admin Interface (ex. "packages"), or one item's page (ex. "configuration/services" and its ID)
+    /// </summary>
+    private string GetAdminUrl(string path, string id = null)
+    {
+        return systemApi.GetUrl($"_admin/{path}" + (!string.IsNullOrEmpty(id) ? "/" + Uri.EscapeDataString(id) : ""));
+    }
+
+    /// <summary>
+    /// A page of this Instance in the Admin Interface's Explorer (ex. "apps" and an App's ID). Null until the Instance's ID is read
+    /// </summary>
+    private string GetExplorerUrl(string path, string id = null)
+    {
+        var instanceId = instance.Data?.Id;
+        if (string.IsNullOrEmpty(instanceId)) return null;
+
+        return GetAdminUrl($"explorer/{Uri.EscapeDataString(instanceId)}/{path}", id);
+    }
+
+    private RenderFragment AdminLink(string url, string text, bool code = false) => __builder =>
+    {
+        if (!string.IsNullOrEmpty(url))
+        {
+            <a class="admin-link" href="@url" title="Open in the Admin Interface">@if (code){<code>@text</code>}else{@text}</a>
+        }
+        else if (code)
+        {
+            <code>@text</code>
+        }
+        else
+        {
+            @text
+        }
+    };
+
+    private RenderFragment AdminSectionLink(string url) => __builder =>
+    {
+        if (!string.IsNullOrEmpty(url))
+        {
+            <a class="section-admin-link" href="@url" title="Open in the Admin Interface"><span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span>Admin</a>
+        }
+    };
+
+    private string GetRouteUrl(string route) => systemApi.GetUrl((route ?? "").Trim('/'));
+
+    private string GetSignInUrl(WelcomeSignInProvider provider)
+    {
+        var returnUrl = new Uri(Navigation.Uri).PathAndQuery;
+        return systemApi.GetUrl(provider.SignInPath) + "?returnUrl=" + Uri.EscapeDataString(returnUrl);
+    }
+
+    private string GetServiceName(string serviceId)
+    {
+        var service = services.Data?.FirstOrDefault(o => o.Id == serviceId);
+        return service?.Name ?? serviceId;
+    }
+
+    private IEnumerable<string> GetTemplateCommands()
+    {
+        var instanceUrl = Navigation.BaseUri.TrimEnd('/');
+
+        yield return "dotnet new install TrakHound.DotNet.Templates";
+        foreach (var template in _templates)
+        {
+            // The Service template has no debug host, so it doesn't connect to an Instance
+            yield return template == "service"
+                ? $"dotnet new trakhound.{template} -n MyCompany.My{Capitalize(template)}"
+                : $"dotnet new trakhound.{template} -n MyCompany.My{Capitalize(template)} --instanceUrl {instanceUrl}";
+        }
+    }
+
+    private static string Capitalize(string value) => char.ToUpperInvariant(value[0]) + value.Substring(1);
+
+    private static string PackageText(string packageId, string packageVersion)
+    {
+        if (string.IsNullOrEmpty(packageId)) return null;
+        return !string.IsNullOrEmpty(packageVersion) ? $"{packageId} {packageVersion}" : packageId;
+    }
+
+    private static string CountText<T>(WelcomeSection<List<T>> section) => section.IsLoaded ? section.Data.Count.ToString("N0") : null;
+
+    private static string GetHealthClass(TrakHoundHealthStatus status) => status switch
+    {
+        TrakHoundHealthStatus.Healthy => "success",
+        TrakHoundHealthStatus.Degraded => "warning",
+        TrakHoundHealthStatus.Unhealthy => "error",
+        _ => ""
+    };
+
+    private async Task Copy(string text)
+    {
+        var copied = await systemApi.Copy(text);
+        toast = copied ? "Copied" : "Copy failed";
+        StateHasChanged();
+        await Task.Delay(1500);
+        toast = null;
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,271 @@
+@inject JavascriptService javascriptService
+@using System.Globalization
+@using System.Text
+@using System.Text.Json
+@using TrakHound.Blazor.Services
+@using TrakHound.Services.Tables
+
+<div class="results-panel">
+    <div class="results-toolbar">
+        <span class="results-count">@GetCountText()</span>
+        @if (!rows.IsNullOrEmpty())
+        {
+            <button class="btn btn-sm btn-link" title="Copy the Results as CSV" @onclick="CopyCsv">
+                @if (copied)
+                {
+                    <span class="icon fa-solid fa-sharp fa-check copied"></span><span>Copied</span>
+                }
+                else
+                {
+                    <span class="icon fa-regular fa-sharp fa-copy"></span><span>Copy CSV</span>
+                }
+            </button>
+        }
+    </div>
+
+    @if (!rows.IsNullOrEmpty())
+    {
+        <div class="results-table-panel">
+            <RadzenDataGrid TItem="TableRow" Data="@rows" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true" AllowVirtualization="true" VirtualizationOverscanCount="100">
+                <Columns>
+                    <RadzenDataGridColumn TItem="TableRow" Title="#" Width="60px" Sortable="false" TextAlign="TextAlign.Right" CssClass="row-number-cell" HeaderCssClass="row-number-cell">
+                        <Template Context="row">
+                            <span class="row-number">@((row.Index + 1).ToString("N0"))</span>
+                        </Template>
+                    </RadzenDataGridColumn>
+
+                    @for (var i = 0; i < columns.Length; i++)
+                    {
+                        var columnIndex = i;
+                        var column = columns[i];
+                        var minWidth = $"{Math.Clamp(column.Name.Length * 9 + 30, 90, 260)}px";
+
+                        <RadzenDataGridColumn TItem="TableRow" Property="@($"SortValues[{columnIndex}]")" MinWidth="@minWidth" Width="auto"
+                                              TextAlign="@(column.IsNumeric ? TextAlign.Right : TextAlign.Left)">
+                            <HeaderTemplate>
+                                <span class="column-header" title="@column.Title">@column.Name</span>
+                            </HeaderTemplate>
+                            <Template Context="row">
+                                @{
+                                    var value = row.Values[columnIndex];
+                                    if (value != null)
+                                    {
+                                        <span class="cell-value @(column.IsNumeric ? "number" : "")" title="@(value.Length > 60 ? value : null)">@value</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="cell-value null">NULL</span>
+                                    }
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                    }
+                </Columns>
+            </RadzenDataGrid>
+        </div>
+    }
+    else
+    {
+        <div class="results-empty">
+            <span class="results-empty-title">No Rows</span>
+            <span class="results-empty-description">The query returned @columns.Length.ToString("N0") @(columns.Length == 1 ? "Column" : "Columns") and no Rows</span>
+        </div>
+    }
+</div>
+
+@code {
+
+    private static readonly char[] _csvSpecialCharacters = new[] { ',', '\"', '\r', '\n' };
+
+    private TableColumn[] columns = Array.Empty<TableColumn>();
+    private TableRow[] rows;
+    private TrakHoundTableResult previousResult;
+    private CancellationTokenSource copiedReset;
+    private bool copied;
+
+
+    [Parameter]
+    public TrakHoundTableResult Result { get; set; }
+
+
+    class TableColumn
+    {
+        public string Name { get; set; }
+        public string Title { get; set; }
+        public bool IsNumeric { get; set; }
+    }
+
+    public class TableRow
+    {
+        public int Index { get; set; }
+
+        /// <summary>
+        /// Display Values (null = NULL)
+        /// </summary>
+        public string[] Values { get; set; }
+
+        /// <summary>
+        /// Values used for Sorting (numeric columns sort as numbers)
+        /// </summary>
+        public object[] SortValues { get; set; }
+    }
+
+
+    protected override void OnParametersSet()
+    {
+        // Only rebuild the rows when the Result changes
+        if (Result != previousResult)
+        {
+            previousResult = Result;
+            Load();
+        }
+    }
+
+    private void Load()
+    {
+        columns = Array.Empty<TableColumn>();
+        rows = null;
+
+        if (Result?.Columns == null) return;
+
+        columns = Result.Columns.Select(o => new TableColumn
+        {
+            Name = o?.Name ?? "",
+            Title = GetColumnTitle(o),
+            IsNumeric = IsNumeric(o?.DataType)
+        }).ToArray();
+
+        if (!Result.Rows.IsNullOrEmpty())
+        {
+            var tableRows = new TableRow[Result.Rows.Length];
+            for (var i = 0; i < Result.Rows.Length; i++)
+            {
+                var resultRow = Result.Rows[i] ?? Array.Empty<object>();
+                var values = new string[columns.Length];
+                var sortValues = new object[columns.Length];
+
+                for (var j = 0; j < columns.Length; j++)
+                {
+                    var value = j < resultRow.Length ? GetString(resultRow[j]) : null;
+                    values[j] = value;
+
+                    if (columns[j].IsNumeric && value != null && double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var number))
+                    {
+                        sortValues[j] = number;
+                    }
+                    else
+                    {
+                        // Keep a single type per column (mixed types can't be compared)
+                        sortValues[j] = columns[j].IsNumeric ? (value != null ? double.NaN : null) : value;
+                    }
+                }
+
+                tableRows[i] = new TableRow { Index = i, Values = values, SortValues = sortValues };
+            }
+
+            rows = tableRows;
+        }
+    }
+
+    private async Task CopyCsv()
+    {
+        await javascriptService.CopyClipboard(GetCsv());
+
+        // Show the "Copied" check briefly, then return to the Copy icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copied = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            copied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private string GetCsv()
+    {
+        var csv = new StringBuilder();
+        csv.AppendLine(string.Join(",", columns.Select(o => EscapeCsv(o.Name))));
+
+        if (rows != null)
+        {
+            foreach (var row in rows)
+            {
+                csv.AppendLine(string.Join(",", row.Values.Select(EscapeCsv)));
+            }
+        }
+
+        return csv.ToString();
+    }
+
+    private string GetCountText()
+    {
+        var rowCount = rows?.Length ?? 0;
+        var rowText = rowCount == 1 ? "1 Row" : $"{rowCount:N0} Rows";
+        var columnText = columns.Length == 1 ? "1 Column" : $"{columns.Length:N0} Columns";
+        return $"{rowText} · {columnText}";
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        if (value == null) return "";
+        if (value.IndexOfAny(_csvSpecialCharacters) < 0) return value;
+
+        var quote = "\"";
+        return quote + value.Replace(quote, quote + quote) + quote;
+    }
+
+    private static string GetString(object value)
+    {
+        switch (value)
+        {
+            case null: return null;
+            case DBNull: return null;
+            case JsonElement element:
+                switch (element.ValueKind)
+                {
+                    case JsonValueKind.Null:
+                    case JsonValueKind.Undefined: return null;
+                    case JsonValueKind.String: return element.GetString();
+                    default: return element.GetRawText();
+                }
+            case DateTime dateTime: return dateTime.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            case byte[] bytes: return "0x" + Convert.ToHexString(bytes);
+            case IFormattable formattable: return formattable.ToString(null, CultureInfo.InvariantCulture);
+            default: return value.ToString();
+        }
+    }
+
+    private static bool IsNumeric(TrakHoundTableDataType? dataType)
+    {
+        switch (dataType)
+        {
+            case TrakHoundTableDataType.Byte:
+            case TrakHoundTableDataType.Int16:
+            case TrakHoundTableDataType.Int32:
+            case TrakHoundTableDataType.Int64:
+            case TrakHoundTableDataType.Float:
+            case TrakHoundTableDataType.Decimal:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static string GetColumnTitle(TrakHoundTableColumn column)
+    {
+        if (column == null) return null;
+
+        var title = $"{column.Name} · {column.DataType}";
+        if (column.DataLength > 0) title += $"({column.DataLength})";
+        if (column.AllowNull) title += " · Nullable";
+        return title;
+    }
+
+}

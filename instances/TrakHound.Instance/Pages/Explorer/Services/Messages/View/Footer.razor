@@ -1,0 +1,98 @@
+﻿@implements IDisposable
+@inject ClientService _clientService
+@inject ExplorerService _explorerService
+
+@{
+    var status = _clientService.ConnectionStatus;
+    var message = _clientService.ConnectionMessage;
+    var service = _explorerService.GetServices(_clientService.InstanceId, _clientService.ServiceConfigurationId);
+    var serviceName = service?.Name ?? _clientService.ServiceConfigurationId;
+}
+
+<div class="footer-panel @GetStatusClass(status)" title="@message">
+    <div class="connection-panel">
+        <span class="connection-icon fa-solid fa-sharp @GetStatusIcon(status)"></span>
+        <span class="connection-status">@GetStatusText(status)</span>
+        @if (!string.IsNullOrEmpty(serviceName))
+        {
+            <span class="connection-server">
+                @serviceName
+                @if (!string.IsNullOrEmpty(service?.PackageVersion))
+                {
+                    <span class="connection-version">v@(service.PackageVersion)</span>
+                }
+            </span>
+        }
+        @if (!string.IsNullOrEmpty(message) && (status == ConnectionStatus.Error || status == ConnectionStatus.Disconnected))
+        {
+            <span class="connection-message">@message</span>
+        }
+    </div>
+    <div class="metrics-panel">
+        @if (status != ConnectionStatus.NotSubscribed && status != ConnectionStatus.Error)
+        {
+            <span class="metric">Topic : <span class="metric-value">@_clientService.SubscribePath</span></span>
+            <span class="metric"><span class="metric-value">@_clientService.TopicCount.ToString("N0")</span>@(_clientService.TopicLimitReached ? "+" : "") Topics</span>
+            <span class="metric"><span class="metric-value">@_clientService.MessageCount.ToString("N0")</span> Messages</span>
+        }
+    </div>
+</div>
+
+@code {
+
+    protected override void OnInitialized()
+    {
+        _clientService.StatusUpdated += StatusUpdated;
+    }
+
+    public void Dispose()
+    {
+        _clientService.StatusUpdated -= StatusUpdated;
+    }
+
+    private async void StatusUpdated(object sender, EventArgs args)
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    private static string GetStatusText(ConnectionStatus status)
+    {
+        switch (status)
+        {
+            case ConnectionStatus.Connecting: return "Connecting";
+            case ConnectionStatus.Connected: return "Connected";
+            case ConnectionStatus.Disconnected: return "Disconnected";
+            case ConnectionStatus.Error: return "Error";
+            default: return "Not Subscribed";
+        }
+    }
+
+    private static string GetStatusIcon(ConnectionStatus status)
+    {
+        switch (status)
+        {
+            case ConnectionStatus.Connecting: return "fa-loader spin";
+            case ConnectionStatus.Connected: return "fa-plug";
+            case ConnectionStatus.Disconnected: return "fa-plug-circle-xmark";
+            case ConnectionStatus.Error: return "fa-triangle-exclamation";
+            default: return "fa-plug";
+        }
+    }
+
+    private static string GetStatusClass(ConnectionStatus status)
+    {
+        switch (status)
+        {
+            case ConnectionStatus.Connecting: return "connecting";
+            case ConnectionStatus.Connected: return "connected";
+            case ConnectionStatus.Disconnected: return "disconnected";
+            case ConnectionStatus.Error: return "error";
+            default: return "not-subscribed";
+        }
+    }
+
+}

@@ -1,0 +1,30 @@
+.verification-impact {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 10px 14px;
+    color: var(--textMild);
+    background: var(--panelItemBackground);
+    border-radius: 4px;
+}
+
+    .verification-impact ul {
+        margin: 6px 0;
+        padding-left: 18px;
+    }
+
+    .verification-impact li {
+        overflow-wrap: anywhere;
+    }
+
+    .verification-impact a {
+        color: var(--accentLight);
+    }
+
+    .verification-impact .icon.warning {
+        color: var(--bs-warning, #ffc107);
+    }
+
+    .verification-impact .icon.ok {
+        color: var(--bs-success, #198754);
+    }

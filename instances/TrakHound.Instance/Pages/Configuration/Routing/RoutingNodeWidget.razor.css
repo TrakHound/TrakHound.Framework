@@ -1,0 +1,197 @@
+.routing-node {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 260px;
+    /* Fits the usual three rows of each kind (a Target's header is taller for its order badge), so the nodes are the same height and their ports line up.
+       A minimum rather than a height : nodes with more to show (a Description, Fallbacks) grow */
+    min-height: 88px;
+    padding: 8px 14px 10px;
+    color: var(--textDark);
+    background: var(--panelItemBackground);
+    border: 1px solid var(--borderColorMedium);
+    border-left-width: 4px;
+    border-radius: 6px;
+}
+
+    .routing-node.router {
+        border-left-color: var(--accentLight);
+    }
+
+    .routing-node.route {
+        border-left-color: var(--bs-info, #0dcaf0);
+    }
+
+    .routing-node.target {
+        border-left-color: var(--bs-success, #198754);
+    }
+
+.diagram-node:hover .routing-node,
+.diagram-node.selected .routing-node {
+    border-top-color: var(--accentLight);
+    border-right-color: var(--accentLight);
+    border-bottom-color: var(--accentLight);
+}
+
+.diagram-node.selected .routing-node {
+    box-shadow: 0 0 0 2px var(--accentLight);
+}
+
+.routing-node.has-errors {
+    border-color: var(--bs-danger, #dc3545);
+}
+
+/* Header */
+
+.node-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fontSizeXs, 11px);
+    color: var(--textMild);
+}
+
+.node-icon {
+    width: 14px;
+    text-align: center;
+    color: var(--accentLight);
+}
+
+.node-kind {
+    flex: 1;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.node-issue {
+    font-size: var(--fontSizeSm);
+}
+
+.routing-node.has-errors .node-issue {
+    color: var(--bs-danger, #dc3545);
+}
+
+.routing-node.has-warnings .node-issue {
+    color: var(--bs-warning, #ffc107);
+}
+
+/* Content */
+
+.node-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.node-title {
+    overflow: hidden;
+    font-weight: 600;
+    font-size: var(--fontSizeBase);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+    .node-title.missing {
+        font-style: italic;
+        color: var(--bs-danger, #dc3545);
+    }
+
+.node-subtitle {
+    overflow: hidden;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.node-badge {
+    flex-shrink: 0;
+    padding: 0 7px;
+    font-size: var(--fontSizeXs, 11px);
+    line-height: 17px;
+    color: var(--accentLight);
+    border: 1px solid var(--accentLight);
+    border-radius: 9px;
+}
+
+.node-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.node-label {
+    font-size: var(--fontSizeXs, 11px);
+    font-weight: bold;
+    color: var(--textMild);
+}
+
+.node-chip {
+    max-width: 100%;
+    padding: 1px 7px;
+    overflow: hidden;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    background: var(--panelBackgroundDark);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 4px;
+}
+
+.node-more,
+.node-empty {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.node-empty {
+    font-style: italic;
+}
+
+/* Ports : Input on the left, Output on the right */
+
+.routing-node ::deep .diagram-port {
+    position: absolute;
+    top: calc(50% - 8px);
+    width: 16px;
+    height: 16px;
+    background: var(--panelItemBackground);
+    border: 2px solid var(--borderColorMedium);
+    border-radius: 50%;
+    cursor: crosshair;
+}
+
+    .routing-node ::deep .diagram-port:hover {
+        border-color: var(--accentLight);
+    }
+
+    .routing-node ::deep .diagram-port.has-links {
+        background: var(--accentLight);
+        border-color: var(--accentLight);
+    }
+
+    .routing-node ::deep .diagram-port.input {
+        left: -10px;
+    }
+
+    .routing-node ::deep .diagram-port.output {
+        right: -10px;
+    }
+
+/* The order a Route's Targets are tried in */
+
+.node-order {
+    min-width: 18px;
+    padding: 0 5px;
+    font-size: var(--fontSizeXs, 11px);
+    font-weight: bold;
+    line-height: 18px;
+    text-align: center;
+    color: var(--accentLight);
+    border: 1px solid var(--accentLight);
+    border-radius: 9px;
+}

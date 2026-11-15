@@ -1,0 +1,13 @@
+﻿{
+  "id": "TrakHound.SqlServer.Service",
+  "category": "service",
+  "version": "0.5",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "SQL Server Services for use in the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.SqlServer.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".configurationParameters": "server,port,database,user,password,connectionTimeout,trustServerCertificate"
+  }
+}

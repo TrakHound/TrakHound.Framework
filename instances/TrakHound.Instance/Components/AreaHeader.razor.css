@@ -1,0 +1,120 @@
+.area-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 20px;
+    /* As tall as a header with tools (ex. the Package Source), so every area's header is the same height */
+    min-height: 53px;
+    padding: 7px 25px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.area-header-trail {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px 10px;
+    min-width: 0;
+    font-size: var(--fontSizeBase);
+    white-space: nowrap;
+}
+
+    /* The description and the page's name are cut short before the area's tools wrap */
+    .area-header-trail > * {
+        flex: none;
+    }
+
+    .area-header-trail > .area-subtitle,
+    .area-header-trail > .crumb.current {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+.area-icon {
+    width: 20px;
+    margin-right: 2px;
+    font-size: 1.125rem;
+    text-align: center;
+    color: var(--accent);
+}
+
+/* Larger than a page's own title below it */
+.area-title {
+    font-size: var(--fontSizeLg);
+    font-weight: bold;
+    color: var(--textDark);
+    text-decoration: none;
+}
+
+a.area-title:hover,
+a.crumb:hover {
+    color: var(--buttonLinkTextHover);
+    text-decoration: underline;
+}
+
+.area-subtitle {
+    margin-left: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.divider {
+    flex: none;
+    font-size: 11px;
+    color: var(--textLight);
+}
+
+.crumb {
+    color: var(--textMild);
+}
+
+a.crumb {
+    color: var(--buttonLinkText);
+    text-decoration: none;
+}
+
+.crumb.current {
+    color: var(--textDark);
+}
+
+.area-header-tools {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* The link to the page's docs : last of the tools */
+.area-help {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    font-size: 1.125rem;
+    color: var(--textLight);
+    text-decoration: none;
+}
+
+    .area-help:hover {
+        color: var(--accent);
+        background: var(--panelItemBackgroundHover);
+    }
+
+/* The area's tools go under the title on a narrow window */
+@media (max-width: 900px) {
+    .area-header {
+        flex-wrap: wrap;
+    }
+
+    .area-header-trail {
+        flex-basis: 100%;
+    }
+
+    .area-subtitle {
+        display: none;
+    }
+}

@@ -1,0 +1,255 @@
+.variables-page {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+.muted {
+    color: var(--textMild);
+}
+
+/* Header */
+
+.variables-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    padding: 14px 25px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.variables-title .title {
+    display: block;
+    font-size: var(--fontSizeMd, 15px);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.variables-title .description {
+    display: block;
+    margin-top: 3px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.variables-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+    .variables-actions .btn {
+        white-space: nowrap;
+    }
+
+.save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 4px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .save-status .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--bs-warning, #ffc107);
+    }
+
+/* Content */
+
+.variables-content {
+    height: 100%;
+    overflow: auto;
+}
+
+.form-content {
+    max-width: 950px;
+    padding: 20px 25px 80px;
+}
+
+.form-errors {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    font-size: var(--fontSizeBase);
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--bs-danger, #dc3545);
+    border-left-width: 4px;
+    border-radius: 4px;
+}
+
+    .form-errors .icon {
+        margin-top: 3px;
+        color: var(--bs-danger, #dc3545);
+    }
+
+    .form-errors .errors-title {
+        font-weight: 600;
+    }
+
+    .form-errors ul {
+        margin: 4px 0 0;
+        padding-left: 18px;
+    }
+
+.restart-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 10px 14px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--colorOrange);
+    border-radius: 3px;
+}
+
+    .restart-notice .icon {
+        color: var(--colorOrange);
+    }
+
+    .restart-notice .notice-text {
+        flex: 1 1 300px;
+    }
+
+    .restart-notice .btn {
+        white-space: nowrap;
+    }
+
+        .restart-notice .btn .icon {
+            color: inherit;
+        }
+
+/* Variables */
+
+.no-variables {
+    margin: 12px 0 4px;
+    font-size: var(--fontSizeSm);
+}
+
+/* Wider than the section body by the cell padding, so the names and inputs line up with the Add row and the row hover runs past them */
+.variables-table {
+    width: calc(100% + 24px);
+    margin: 8px -12px 4px;
+    border-collapse: collapse;
+}
+
+    .variables-table td {
+        padding: 6px 12px;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .variables-table tbody tr:hover {
+        background: var(--panelItemBackground);
+    }
+
+.variable-name {
+    width: 35%;
+    overflow-wrap: anywhere;
+}
+
+    .variable-name code {
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+    }
+
+.variable-badge {
+    margin-left: 8px;
+    padding: 0 5px;
+    font-size: 10px;
+    color: var(--textMild);
+    border: 1px solid var(--borderColor);
+    border-radius: 3px;
+    cursor: default;
+    white-space: nowrap;
+}
+
+    .variable-badge.unused {
+        opacity: 0.7;
+    }
+
+.variable-usages {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.value-input,
+.variable-add {
+    display: flex;
+    align-items: center;
+}
+
+    .value-input input,
+    .variable-add input {
+        height: 32px;
+        font-size: var(--fontSizeBase);
+        color: var(--inputText);
+        background: var(--inputBackground);
+        border: 1px solid var(--inputBorder);
+        border-radius: 3px;
+    }
+
+    .value-input .btn {
+        color: var(--textMild);
+    }
+
+.variable-actions {
+    width: 40px;
+    text-align: right;
+}
+
+.variable-add {
+    gap: 8px;
+    padding: 12px 0;
+}
+
+    .variable-add .btn {
+        white-space: nowrap;
+    }
+
+.add-error {
+    margin: 0 0 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--bs-danger, #dc3545);
+}
+
+.usage-list {
+    margin: 10px 0 4px;
+    padding-left: 18px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .usage-list li {
+        margin-bottom: 6px;
+    }
+
+@media (max-width: 700px) {
+    .variables-header {
+        padding: 12px 16px;
+    }
+
+    .form-content {
+        padding: 16px 16px 60px;
+    }
+
+    .variable-add {
+        flex-wrap: wrap;
+    }
+}

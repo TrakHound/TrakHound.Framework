@@ -1,0 +1,46 @@
+/* Borderless so it can sit inside a containing panel or table row */
+.cpu-usage-chart {
+    width: 100%;
+}
+
+.cpu-usage-chart-header {
+    margin-bottom: 5px;
+}
+
+.cpu-usage-chart-subtitle {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.cpu-usage-chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+/* Keep the area fill light so the 2px line reads as the primary mark */
+.cpu-usage-chart ::deep .rz-area-series path[stroke="none"] {
+    fill-opacity: 0.2;
+}
+
+.cpu-usage-chart ::deep .rz-tick-text {
+    fill: var(--textMild);
+}
+
+.cpu-usage-chart-tooltip {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--fontSizeSm);
+}
+
+    .cpu-usage-chart-tooltip .tooltip-time {
+        color: var(--textMild);
+    }
+
+    .cpu-usage-chart-tooltip .tooltip-value {
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+    }

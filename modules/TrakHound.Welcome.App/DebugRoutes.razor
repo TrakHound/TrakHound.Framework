@@ -1,0 +1,28 @@
+﻿@inject ITrakHoundClient client
+@inject TrakHound.Volumes.ITrakHoundVolumeProvider volumeProvider
+@rendermode InteractiveServer
+@using TrakHound.Clients
+
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        <CascadingValue Name="AppId" Value="@("trakhound-debug-app")">
+            <CascadingValue Name="Client" Value="@client">
+                <CascadingValue Name="Volume" Value="@volume">
+                    <RouteView RouteData="@routeData" DefaultLayout="typeof(Layout)" />
+                    <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+                </CascadingValue>
+            </CascadingValue>
+        </CascadingValue>
+    </Found>
+</Router>
+
+@code {
+
+    private TrakHound.Volumes.ITrakHoundVolume volume;
+
+    protected override void OnInitialized()
+    {
+        volume = volumeProvider.GetVolume("TrakHound.Welcome.App");
+    }
+
+}

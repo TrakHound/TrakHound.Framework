@@ -1,0 +1,71 @@
+@* A Package's (or App's) icon, with a placeholder icon when there isn't one or it can't be loaded (ex. the URL is broken or its host is offline).
+   The Admin interface only renders once the Blazor Circuit is connected, so the image's error event is never missed.
+   The parent's scoped CSS reaches these elements with ::deep. *@
+
+@if (!string.IsNullOrEmpty(Src) && !failed)
+{
+    <img class="@Join(Class, ImageClass)" src="@Src" alt="" loading="@(Lazy ? "lazy" : null)" @onerror="ImageFailed" />
+}
+else
+{
+    <span class="@Join(Class, PlaceholderClass, PlaceholderIcon)"></span>
+}
+
+
+@code {
+
+    private string loadedSrc;
+    private bool failed;
+
+
+    /// <summary>
+    /// The image URL (ex. the Package's ".image" Metadata)
+    /// </summary>
+    [Parameter]
+    public string Src { get; set; }
+
+    /// <summary>
+    /// CSS classes for both the image and the placeholder
+    /// </summary>
+    [Parameter]
+    public string Class { get; set; }
+
+    /// <summary>
+    /// CSS classes for the image only
+    /// </summary>
+    [Parameter]
+    public string ImageClass { get; set; }
+
+    /// <summary>
+    /// CSS classes for the placeholder only
+    /// </summary>
+    [Parameter]
+    public string PlaceholderClass { get; set; }
+
+    /// <summary>
+    /// The Font Awesome classes for the placeholder icon
+    /// </summary>
+    [Parameter]
+    public string PlaceholderIcon { get; set; } = "fa-solid fa-sharp fa-box";
+
+    /// <summary>
+    /// Load the image only when it's scrolled into view (for long lists)
+    /// </summary>
+    [Parameter]
+    public bool Lazy { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // A different image gets its own try (the component can be reused for another Package)
+        if (Src != loadedSrc)
+        {
+            loadedSrc = Src;
+            failed = false;
+        }
+    }
+
+    private void ImageFailed() => failed = true;
+
+    private static string Join(params string[] classes) => string.Join(" ", classes.Where(o => !string.IsNullOrEmpty(o)));
+}

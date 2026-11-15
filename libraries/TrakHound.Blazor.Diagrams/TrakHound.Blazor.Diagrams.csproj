@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<!-- Allows the nullable annotations from Z.Blazor.Diagrams without turning on its null checking -->
+		<Nullable>annotations</Nullable>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+		<RuntimeIdentifiers>win-x64;win-x86</RuntimeIdentifiers>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<SupportedPlatform Include="browser" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
+		<PackageReference Include="SvgPathProperties" Version="1.1.2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\TrakHound.Common\TrakHound.Common.csproj" />
+	</ItemGroup>
+
+</Project>

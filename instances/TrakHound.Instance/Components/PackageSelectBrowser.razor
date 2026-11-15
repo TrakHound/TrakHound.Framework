@@ -1,0 +1,357 @@
+@implements IDisposable
+@using TrakHound.Packages
+
+<div class="package-select-browser">
+    <div class="package-select-browser-content">
+        <div class="package-toolbar">
+            <div class="package-toolbar-content">
+                <div class="package-toolbar-buttons">
+
+                    @if (!loading)
+                    {
+                        <button class="btn-search btn-command btn" @onclick="Load"><span class="icon fas fa-magnifying-glass"></span>Search</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary btn-search btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Searching..</button>
+                    }
+
+                </div>
+                <div class="package-toolbar-search">
+                    <TextBox Value="@query" ValueChanged="QueryInputChanged" InputChangeType="InputChangeType.OnValueChange" PlaceHolder="Search for a package by Package ID.." SpellCheck="false" />
+                </div>
+            </div>
+        </div>
+
+        <div class="package-list">
+
+            @if (!loading)
+            {
+                if (loadError != null)
+                {
+                    <div class="not-found error">
+                        <div class="not-found-container">
+                            <span class="icon fa-solid fa-sharp fa-plug-circle-exclamation"></span>
+                            <span class="label">Unable to load Packages</span>
+                            <span class="sublabel">@loadError</span>
+                            <button class="btn btn-light btn-retry" @onclick="Load"><span class="icon fa-solid fa-sharp fa-rotate-right"></span>Try Again</button>
+                        </div>
+                    </div>
+                }
+                else if (!listItems.IsNullOrEmpty())
+                {
+                    foreach (var listItem in listItems)
+                    {
+                        var isSelected = selectedPackage != null ? listItem.PackageId == selectedPackage.Id : false;
+
+                        <PackageSelectItem Package="@listItem.LatestPackage"
+                                           IsSelected="@isSelected"
+                                           Selected="() => SelectPackage(listItem.LatestPackage)" />
+                    }
+                }
+                else if (!queryChanged)
+                {
+                    <div class="not-found">
+                        <div class="not-found-container">
+                            <span class="icon fas fa-ban"></span>
+
+                            @if (!string.IsNullOrEmpty(query))
+                            {
+                                <span class="label">No Packages found that match "@query"</span>
+                            }
+                            else
+                            {
+                                <span class="label">No Packages found</span>
+                            }
+
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <Loading Message="Loading Packages.." />
+            }
+
+        </div>
+        <div class="package-information">
+            <PackageInformation Package="@selectedPackage" PackageClient="@packageClient" PackagePath="@PackagePath" VersionSelected="PackageVersionSelected" />
+        </div>
+    </div>
+</div>
+
+@code {
+
+    IEnumerable<TrakHoundPackage> packages;
+    IEnumerable<ListItem> listItems;
+
+    // Internal state (synced from the Parameters in OnParametersSet) so a parent re-render doesn't undo it
+    string query;
+    TrakHoundPackage selectedPackage;
+    TrakHoundPackageClient packageClient;
+    TrakHoundPackage previousSelectedPackageParameter;
+    TrakHoundPackageClient previousPackageClientParameter;
+    string previousQueryParameter;
+
+    string loadError;
+    System.Timers.Timer queryTimer;
+    bool loading = false;
+    bool queryChanged = false;
+    bool disposed = false;
+    int loadVersion;
+
+
+    struct ListItem
+    {
+        public string PackageId { get; set; }
+
+        public string Description { get; set; }
+
+        public string Publisher { get; set; }
+
+        public TrakHoundPackage LatestPackage { get; set; }
+
+        public IEnumerable<TrakHoundPackage> Packages { get; set; }
+    }
+
+
+    [Parameter]
+    public string Query { get; set; }
+
+    [Parameter]
+    public EventCallback<string> QueryChanged { get; set; }
+
+    [Parameter]
+    public TrakHoundPackageClient PackageClient { get; set; }
+
+    [Parameter]
+    public string PackagePath { get; set; }
+
+    [Parameter]
+    public string Category { get; set; }
+
+    [Parameter]
+    public TrakHoundPackage SelectedPackage { get; set; }
+
+    [Parameter]
+    public EventCallback<TrakHoundPackage> SelectedPackageChanged { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        if (PackageClient != previousPackageClientParameter)
+        {
+            previousPackageClientParameter = PackageClient;
+            packageClient = PackageClient;
+        }
+
+        if (SelectedPackage != previousSelectedPackageParameter)
+        {
+            previousSelectedPackageParameter = SelectedPackage;
+            selectedPackage = SelectedPackage;
+        }
+
+        // Only a Query set by the parent (not the echo of QueryChanged) needs a new search
+        if (Query != previousQueryParameter)
+        {
+            previousQueryParameter = Query;
+            if (Query != query)
+            {
+                query = Query;
+                UpdateTimer();
+                queryChanged = true;
+            }
+        }
+    }
+
+    protected async override Task OnInitializedAsync()
+    {
+        queryTimer = new System.Timers.Timer();
+        queryTimer.Interval = 1000;
+        queryTimer.AutoReset = false; // Debounce : Query once after typing stops (not every second)
+        queryTimer.Elapsed += QueryTimerElapsed;
+
+        // Parameters are assigned before OnInitialized, so take the initial values here (the first Load uses them)
+        packageClient = PackageClient;
+        previousPackageClientParameter = PackageClient;
+        selectedPackage = SelectedPackage;
+        previousSelectedPackageParameter = SelectedPackage;
+        query = Query;
+        previousQueryParameter = Query;
+
+        await Load();
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+
+        if (queryTimer != null)
+        {
+            queryTimer.Stop();
+            queryTimer.Elapsed -= QueryTimerElapsed;
+            queryTimer.Dispose();
+        }
+    }
+
+    private async void QueryTimerElapsed(object sender, System.Timers.ElapsedEventArgs args)
+    {
+        if (disposed) return;
+
+        try
+        {
+            // Run on the Renderer's context so Load doesn't race with UI events
+            await InvokeAsync(Load);
+        }
+        catch (ObjectDisposedException) { } // Component or Circuit disposed during the Query
+        catch (Exception) { } // Load reports its own errors (an exception here must not crash the process)
+    }
+
+    private void UpdateTimer()
+    {
+        if (queryTimer == null || disposed) return;
+
+        queryTimer.Stop();
+        queryTimer.Start();
+    }
+
+    private async Task QueryInputChanged(string value)
+    {
+        if (value == query) return;
+
+        query = value;
+        queryChanged = true;
+        UpdateTimer();
+
+        await QueryChanged.InvokeAsync(query);
+    }
+
+
+    private async Task Load()
+    {
+        if (disposed) return;
+
+        // Only the latest Load applies its result (an older, slower Query must not overwrite a newer one)
+        var version = ++loadVersion;
+
+        packages = null;
+        listItems = null;
+        loadError = null;
+
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        if (queryTimer != null && !disposed) queryTimer.Stop();
+
+        IEnumerable<TrakHoundPackage> result = null;
+        string error = null;
+
+        try
+        {
+            if (!string.IsNullOrEmpty(Category))
+            {
+                if (packageClient != null)
+                {
+                    // Remote
+                    result = await packageClient.Query(Category, query);
+                }
+                else
+                {
+                    // Local (installed Packages of the Category, matching the Query)
+                    result = TrakHoundPackage.GetInstalled(PackagePath)?
+                        .Where(o => string.Equals(o.Category, Category, StringComparison.OrdinalIgnoreCase))
+                        .Where(o => string.IsNullOrWhiteSpace(query) || o.Id.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+            }
+
+            result = result?.OrderByDescending(o => o.BuildDate).ToList();
+        }
+        catch (Exception ex)
+        {
+            result = null;
+            error = ex.Message;
+        }
+
+        if (disposed || version != loadVersion) return;
+
+        packages = result;
+        loadError = error;
+        queryChanged = false;
+
+        if (!packages.IsNullOrEmpty())
+        {
+            var items = new List<ListItem>();
+
+            if (packages.Count() == 1) await SelectPackage(packages.FirstOrDefault());
+
+            var packageIds = packages.Select(o => o.Id).Distinct();
+            foreach (var packageId in packageIds)
+            {
+                var x = packages.Where(o => o.Id == packageId);
+                var latest = x.OrderByDescending(o => o.Version, TrakHound.Extensions.VersionComparer.PreferStable).FirstOrDefault();
+
+                var listItem = new ListItem();
+                listItem.PackageId = packageId;
+                listItem.Publisher = latest.Metadata != null && latest.Metadata.ContainsKey("publisher") ? latest.Metadata["publisher"]?.ToString() : null;
+                listItem.Description = latest.Metadata != null && latest.Metadata.ContainsKey("description") ? latest.Metadata["description"]?.ToString() : null;
+                listItem.LatestPackage = latest;
+                listItem.Packages = x;
+                items.Add(listItem);
+            }
+
+            listItems = items;
+        }
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task SetPackageClient(TrakHoundPackageClient packageClient)
+    {
+        this.packageClient = packageClient;
+        await Load();
+    }
+
+    private async Task SelectPackage(TrakHoundPackage package)
+    {
+        if (package != null)
+        {
+            selectedPackage = package;
+
+            await SelectedPackageChanged.InvokeAsync(package);
+        }
+    }
+
+    private async Task PackageVersionSelected(string version)
+    {
+        var current = selectedPackage;
+        if (current != null)
+        {
+            TrakHoundPackage package = null;
+
+            try
+            {
+                if (packageClient != null)
+                {
+                    package = await packageClient.Get(current.Id, version);
+                }
+                else
+                {
+                    // Installed mode (no Source) : resolve the version from the installed Packages
+                    package = TrakHoundPackage.GetInstalledVersions(current.Category, current.Id, PackagePath)?
+                        .FirstOrDefault(o => o.Version == version);
+                }
+            }
+            catch (Exception) { } // Keep the current selection if the version can't be resolved
+
+            if (package != null && !disposed)
+            {
+                selectedPackage = package;
+
+                await SelectedPackageChanged.InvokeAsync(package);
+            }
+        }
+    }
+
+}

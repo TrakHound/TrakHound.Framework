@@ -1,0 +1,16 @@
+﻿@using TrakHound.Logging
+@using TrakHound.Workers
+
+@* The Worker's Loggers (workers/{package}/{worker}/..., see TrakHoundWorkerManager) *@
+@if (WorkerInformation != null)
+{
+    var pattern = $"workers/{WorkerInformation.PackageId}/{WorkerInformation.Id}/**";
+    <LoggerLog @key="pattern" Pattern="@pattern" MinimumLevel="TrakHoundLogLevel.Debug" />
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundWorkerInformation WorkerInformation { get; set; }
+
+}

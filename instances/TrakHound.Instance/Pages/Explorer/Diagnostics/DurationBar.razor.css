@@ -1,0 +1,24 @@
+﻿.duration-bar {
+    display: block;
+    height: 100%;
+    width: 100%;
+    position: relative;
+    padding: 5px;
+}
+
+.duration-bar-container {
+    background: var(--borderColorLight);
+    height: 100%;
+    width: 100%;
+    position: relative;
+    display: block;
+}
+
+.duration-bar-value {
+    position: absolute;
+    display: block;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--accentLight);
+}

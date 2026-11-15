@@ -1,0 +1,118 @@
+.hidden-input {
+    display: none;
+}
+
+.upload-panel {
+    margin: 0 10px 10px;
+    padding: 10px 12px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+}
+
+.upload-fields {
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(220px, 2fr) minmax(140px, 1fr);
+    gap: 10px;
+}
+
+@media (max-width: 1100px) {
+    .upload-fields {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+    .field label {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+        .field label .required {
+            margin-left: 3px;
+            color: var(--colorRed);
+        }
+
+    .field input {
+        width: 100%;
+        height: 30px;
+        padding: 2px 8px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        background: var(--inputBackground);
+        border: 1px solid var(--borderColorLight);
+        border-radius: 3px;
+        outline: none;
+    }
+
+        .field input:focus {
+            border-color: var(--accent);
+        }
+
+        .field input:disabled {
+            opacity: 0.6;
+        }
+
+.file-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    min-width: 0;
+}
+
+    .file-input .btn-browse {
+        flex: none;
+    }
+
+    .file-input .file-name {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+    }
+
+        .file-input .file-name.placeholder {
+            color: var(--textLight);
+        }
+
+    .file-input .file-size {
+        flex: none;
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+        font-variant-numeric: tabular-nums;
+    }
+
+.upload-buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+    .upload-buttons .upload-option {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-left: 8px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .upload-buttons .upload-note {
+        margin-left: 8px;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }

@@ -1,0 +1,7 @@
+/* The area's header, sidebar and page are laid out by AreaLayout */
+
+.packages-page {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+}

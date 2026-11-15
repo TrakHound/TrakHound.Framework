@@ -1,0 +1,106 @@
+@using TrakHound.Api
+
+@if (Api != null && Endpoint != null)
+{
+    <table class="table table-sm">
+        <tbody>
+            <tr>
+                <td class="label">Api ID</td>
+                <td class="value">@Api.Id</td>
+            </tr>
+            <tr>
+                <td class="label">Api Route</td>
+                <td class="value">@(!string.IsNullOrEmpty(Api.Route) ? Api.Route : "/")</td>
+            </tr>
+            <tr>
+                <td class="label">Api Package ID</td>
+                <td class="value">@Api.PackageId</td>
+            </tr>
+            <tr>
+                <td class="label">Api Package Version</td>
+                <td class="value">@Api.PackageVersion</td>
+            </tr>
+
+            @if (Controller != null)
+            {
+                <tr>
+                    <td class="label">Controller</td>
+                    <td class="value">@Controller.Name</td>
+                </tr>
+                <tr>
+                    <td class="label">Controller Route</td>
+                    <td class="value">@(!string.IsNullOrEmpty(Controller.Route) ? Controller.Route : "/")</td>
+                </tr>
+            }
+
+            <tr>
+                <td class="label">Endpoint ID</td>
+                <td class="value">@Endpoint.Id</td>
+            </tr>
+            <tr>
+                <td class="label">Endpoint Type</td>
+                <td class="value">@Endpoint.Type</td>
+            </tr>
+            <tr>
+                <td class="label">Endpoint Method</td>
+                <td class="value">@(Endpoint.Method?.ToString() ?? "-")</td>
+            </tr>
+            <tr>
+                <td class="label">Endpoint Route</td>
+                <td class="value">@Endpoint.Route</td>
+            </tr>
+
+            @if (!string.IsNullOrEmpty(Route))
+            {
+                <tr>
+                    <td class="label">Full Route</td>
+                    <td class="value route">@Route</td>
+                </tr>
+            }
+
+            @if (!string.IsNullOrEmpty(Endpoint.Group))
+            {
+                <tr>
+                    <td class="label">Group</td>
+                    <td class="value">@Endpoint.Group</td>
+                </tr>
+            }
+
+            @if (!Endpoint.Permissions.IsNullOrEmpty())
+            {
+                <tr>
+                    <td class="label">Permissions</td>
+                    <td class="value">@string.Join(", ", Endpoint.Permissions)</td>
+                </tr>
+            }
+
+            @if (!string.IsNullOrEmpty(Endpoint.Description))
+            {
+                <tr>
+                    <td class="label">Description</td>
+                    <td class="value">@Endpoint.Description</td>
+                </tr>
+            }
+
+        </tbody>
+    </table>
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundApiInformation Api { get; set; }
+
+    [Parameter]
+    public TrakHoundApiControllerInformation Controller { get; set; }
+
+    [Parameter]
+    public TrakHoundApiEndpointInformation Endpoint { get; set; }
+
+    /// <summary>
+    /// The full Route (Api + Controller + Endpoint)
+    /// </summary>
+    [Parameter]
+    public string Route { get; set; }
+
+}

@@ -1,0 +1,711 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/api"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@using TrakHound.Api
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="API Metrics - Diagnostics" />
+
+<div class="api-metrics-page" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-gauge-high"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">API Metrics</span>
+                <span class="header-description">Request rate, errors, response time and data for each API · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <a class="btn btn-light" href="@($"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/connections/api/requests")"><span class="icon fa-solid fa-sharp fa-list"></span>Recent Requests</a>
+
+        <MetricsDisabledNotice Area="Api" />
+        <MetricsDisabledNotice Area="Cpu" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (!tableItems.IsNullOrEmpty())
+            {
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@tableItems"
+                                    TItem="TableItem"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Route" Title="API" MinWidth="130px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="PackageId" Title="Package" MinWidth="140px">
+                                <Template Context="item">
+                                    <span>@item.PackageId</span>
+                                    @if (!string.IsNullOrEmpty(item.PackageVersion))
+                                    {
+                                        <span class="version">@item.PackageVersion</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="SourceTypes" Title="Sources" MinWidth="110px">
+                                <Template Context="item">
+                                    <span class="source-types" title="@item.SourceTypes">@item.SourceTypes</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalRequests" Title="Requests" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.TotalRequests.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="RequestRate" Title="Req/s" Width="85px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatRate(item.RequestRate)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalErrors" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.TotalErrors.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="AverageDuration" Title="Avg Time" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.HasRecentRequests ? FormatDuration(item.AverageDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="MaxDuration" Title="Max Time" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.HasRecentRequests ? FormatDuration(item.MaxDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="CpuUsage" Title="CPU" Width="80px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number" title="@($"{FormatCpuTime(item.CpuTime)} of CPU time since the Instance started")">@FormatPercent(item.CpuUsage)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastRequested" Title="Last Request" Width="130px">
+                                <Template Context="item">
+                                    <span class="number">@FormatLastRequested(item.LastRequested)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = tableItems.FirstOrDefault(o => o.ApiId == selectedApiId);
+                if (selected != null)
+                {
+                    var samples = GetSamples(selected.ApiId);
+
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <span class="detail-name">@selected.Route</span>
+                            @if (!string.IsNullOrEmpty(selected.PackageId))
+                            {
+                                <span class="detail-type">@selected.PackageId @selected.PackageVersion</span>
+                            }
+                            <span class="detail-state"><span class="icon fa-regular fa-sharp fa-clock"></span>@(selected.LastRequested != null ? $"Last request {FormatLastRequested(selected.LastRequested)}" : "No requests yet")</span>
+                        </div>
+
+                        @* Current values (also the text equivalent of each chart Series) *@
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-1"></span>Requests</span>
+                                <span class="stat-value">@FormatRate(selected.RequestRate)<span class="stat-unit">req/s</span></span>
+                                <span class="stat-detail">@selected.TotalRequests.ToString("N0") total</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-2"></span>Errors</span>
+                                <span class="stat-value">@FormatRate(selected.ErrorRate)<span class="stat-unit">err/s</span></span>
+                                <span class="stat-detail">@selected.TotalErrors.ToString("N0") total (@GetErrorPercent(selected)) · status ≥ 400</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-3"></span>Avg Response</span>
+                                <span class="stat-value">@(selected.HasRecentRequests ? FormatDuration(selected.AverageDuration) : "-")</span>
+                                <span class="stat-detail">last @_metricsWindowText</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-4"></span>Max Response</span>
+                                <span class="stat-value">@(selected.HasRecentRequests ? FormatDuration(selected.MaxDuration) : "-")</span>
+                                <span class="stat-detail">last @_metricsWindowText</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-5"></span>Received</span>
+                                <span class="stat-value">@FormatBytes(selected.RequestByteRate)<span class="stat-unit">/s</span></span>
+                                <span class="stat-detail">@FormatBytes(selected.TotalRequestBytes) total · request bodies</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-6"></span>Sent</span>
+                                <span class="stat-value">@FormatBytes(selected.ResponseByteRate)<span class="stat-unit">/s</span></span>
+                                <span class="stat-detail">@FormatBytes(selected.TotalResponseBytes) total · response bodies</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label" title="The CPU used handling the API's Requests and Streams (and the Services they call)">CPU</span>
+                                <span class="stat-value">@FormatPercent(selected.CpuUsage)</span>
+                                <span class="stat-detail">@FormatCpuTime(selected.CpuTime) total · of all processors</span>
+                            </div>
+                        </div>
+
+                        <div class="chart-grid">
+                            <MetricsChart TItem="ApiSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                          Title="Requests"
+                                          Subtitle="@($"per second · last {_windowText}")"
+                                          Samples="@samples"
+                                          Series="@requestSeries"
+                                          ValueFormatter="@FormatRate" />
+
+                            <MetricsChart TItem="ApiSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                          Title="Response Time"
+                                          Subtitle="@($"milliseconds · last {_windowText}")"
+                                          Samples="@samples"
+                                          Series="@durationSeries"
+                                          ValueFormatter="@FormatDuration" />
+
+                            <MetricsChart TItem="ApiSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                          Title="Data"
+                                          Subtitle="@($"bytes/s · last {_windowText}")"
+                                          Samples="@samples"
+                                          Series="@dataSeries"
+                                          ValueFormatter="@FormatByteRate" />
+
+                            <MetricsChart TItem="ApiSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                          Title="CPU"
+                                          Subtitle="@($"% of total machine capacity · last {_windowText}")"
+                                          Samples="@samples"
+                                          Series="@cpuSeries"
+                                          ValueFormatter="@FormatPercent" />
+                        </div>
+
+                        @if (!selected.Sources.IsNullOrEmpty())
+                        {
+                            <div class="section-title">Sources <span class="section-subtitle">what made the requests</span></div>
+                            <div class="table-panel endpoints-panel">
+                                <RadzenDataGrid Data="@selected.Sources"
+                                                TItem="TrakHoundApiSourceMetrics"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="Type" Title="Type" Width="105px">
+                                            <Template Context="source">
+                                                <span class="source-type"><span class="icon @GetSourceIcon(source.Type)"></span>@source.Type</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="Name" Title="Source" MinWidth="160px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="Id" Title="ID" MinWidth="120px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="TotalRequestCount" Title="Requests" Width="105px" TextAlign="TextAlign.Right">
+                                            <Template Context="source">
+                                                <span class="number">@source.TotalRequestCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="TotalErrorCount" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="source">
+                                                <span class="number">@source.TotalErrorCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="AverageDuration" Title="Avg Time" Width="105px" TextAlign="TextAlign.Right">
+                                            <Template Context="source">
+                                                <span class="number">@FormatDuration(source.AverageDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="MaxDuration" Title="Max Time" Width="105px" TextAlign="TextAlign.Right">
+                                            <Template Context="source">
+                                                <span class="number">@FormatDuration(source.MaxDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiSourceMetrics" Property="LastRequested" Title="Last Request" Width="130px">
+                                            <Template Context="source">
+                                                <span class="number">@FormatLastRequested(source.LastRequested)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+
+                        @if (!selected.Endpoints.IsNullOrEmpty())
+                        {
+                            <div class="section-title">Endpoints</div>
+                            <div class="table-panel endpoints-panel">
+                                <RadzenDataGrid Data="@selected.Endpoints"
+                                                TItem="TrakHoundApiEndpointMetrics"
+                                                Density="Density.Compact"
+                                                AllowSorting="false"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Property="Method" Title="Method" Width="90px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Property="Route" Title="Route" MinWidth="200px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Property="Type" Title="Type" Width="90px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Title="Requests" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@endpoint.TotalRequestCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@endpoint.TotalErrorCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@FormatDuration(endpoint.AverageDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Title="Max Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@FormatDuration(endpoint.MaxDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Property="CpuUsage" Title="CPU" Width="80px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@FormatPercent(endpoint.CpuUsage)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Property="CpuTime" Title="CPU Time" Width="95px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@FormatCpuTime(endpoint.CpuTime)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Title="Last Status" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="endpoint">
+                                                <span class="number">@(endpoint.LastStatusCode > 0 ? endpoint.LastStatusCode.ToString() : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundApiEndpointMetrics" Title="Last Request" Width="150px">
+                                            <Template Context="endpoint">
+                                                <span class="number">@FormatLastRequested(endpoint.LastRequested)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-gauge-high"></span>
+                    <span class="empty-title">No APIs</span>
+                    <span class="empty-description">No APIs are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+
+    private readonly Dictionary<string, Queue<ApiSample>> _history = new Dictionary<string, Queue<ApiSample>>();
+    private readonly object _lock = new object();
+    private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>();
+
+    private IEnumerable<TrakHoundApiInformation> apis;
+    private IEnumerable<TableItem> tableItems;
+    private string selectedApiId;
+    private string _metricsWindowText = "10 sec";
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    // Each Series has its own color slot across all charts on the page
+    private MetricsChartSeries[] requestSeries;
+    private MetricsChartSeries[] durationSeries;
+    private MetricsChartSeries[] dataSeries;
+    private MetricsChartSeries[] cpuSeries;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Selects this Api when the page opens (ex. from the Api page)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string ApiId { get; set; }
+
+
+    public class TableItem
+    {
+        public string ApiId { get; set; }
+        public string Route { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public long TotalRequests { get; set; }
+        public long TotalErrors { get; set; }
+        public long TotalRequestBytes { get; set; }
+        public long TotalResponseBytes { get; set; }
+        public double RequestRate { get; set; }
+        public double ErrorRate { get; set; }
+        public double RequestByteRate { get; set; }
+        public double ResponseByteRate { get; set; }
+        public double AverageDuration { get; set; }
+        public double MaxDuration { get; set; }
+        public DateTime? LastRequested { get; set; }
+        public double CpuUsage { get; set; }
+        public double CpuTime { get; set; }
+        public IEnumerable<TrakHoundApiEndpointMetrics> Endpoints { get; set; }
+        public IEnumerable<TrakHoundApiSourceMetrics> Sources { get; set; }
+
+        /// <summary>
+        /// The Source Types that made Requests (most Requests first)
+        /// </summary>
+        public string SourceTypes { get; set; }
+
+        public bool HasRecentRequests => RequestRate > 0;
+
+        public TableItem(TrakHoundApiInformation information, TrakHoundApiMetrics metrics)
+        {
+            ApiId = information.Id;
+            Update(information, metrics);
+        }
+
+        public void Update(TrakHoundApiInformation information, TrakHoundApiMetrics metrics)
+        {
+            Route = !string.IsNullOrEmpty(information.Route) ? information.Route : "/";
+            PackageId = information.PackageId ?? metrics?.PackageId;
+            PackageVersion = information.PackageVersion ?? metrics?.PackageVersion;
+
+            TotalRequests = metrics?.TotalRequestCount ?? 0;
+            TotalErrors = metrics?.TotalErrorCount ?? 0;
+            TotalRequestBytes = metrics?.TotalRequestBytes ?? 0;
+            TotalResponseBytes = metrics?.TotalResponseBytes ?? 0;
+            RequestRate = metrics?.RequestRate ?? 0;
+            ErrorRate = metrics?.ErrorRate ?? 0;
+            RequestByteRate = metrics?.RequestByteRate ?? 0;
+            ResponseByteRate = metrics?.ResponseByteRate ?? 0;
+            AverageDuration = metrics?.AverageDuration ?? 0;
+            MaxDuration = metrics?.MaxDuration ?? 0;
+            LastRequested = metrics?.LastRequested;
+            CpuUsage = metrics?.CpuUsage ?? 0;
+            CpuTime = metrics?.CpuTime ?? 0;
+            Endpoints = metrics?.Endpoints;
+            Sources = metrics?.Sources;
+
+            SourceTypes = null;
+            if (!(metrics?.Sources).IsNullOrEmpty())
+            {
+                SourceTypes = string.Join(", ", metrics.Sources
+                    .GroupBy(o => o.Type)
+                    .OrderByDescending(o => o.Sum(x => x.TotalRequestCount))
+                    .Select(o => o.Key));
+            }
+        }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading API Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            lock (_lock) _history.Clear();
+            tableItems = null;
+            _tableItemsById.Clear();
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+            if (!string.IsNullOrEmpty(ApiId)) selectedApiId = ApiId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Api", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                // List every configured API (including those without Requests yet)
+                apis = await client.Api.GetRouteInformation();
+
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var metrics = await client.Api.GetMetrics();
+        var metricsByApi = metrics?.Where(o => !string.IsNullOrEmpty(o?.ApiId)).ToDictionary(o => o.ApiId) ?? new Dictionary<string, TrakHoundApiMetrics>();
+
+        var window = metricsByApi.Values.FirstOrDefault()?.Window ?? 0;
+        if (window > 0) _metricsWindowText = $"{window} sec";
+
+        var now = DateTime.UtcNow;
+        var items = new List<TableItem>();
+
+        lock (_lock)
+        {
+            if (!apis.IsNullOrEmpty())
+            {
+                foreach (var api in apis.Where(o => !string.IsNullOrEmpty(o?.Id)).OrderBy(o => o.Route))
+                {
+                    metricsByApi.TryGetValue(api.Id, out var apiMetrics);
+                    items.Add(GetTableItem(api, apiMetrics));
+
+                    if (!_history.TryGetValue(api.Id, out var samples))
+                    {
+                        samples = new Queue<ApiSample>();
+                        _history.Add(api.Id, samples);
+                    }
+
+                    samples.Enqueue(ApiSample.Create(apiMetrics, now));
+                    while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
+                }
+            }
+        }
+
+        SetTableItems(items);
+
+        // Select the busiest API by default (or if the selected one went away)
+        if (selectedApiId == null || !items.Any(o => o.ApiId == selectedApiId))
+        {
+            selectedApiId = items.OrderByDescending(o => o.TotalRequests).FirstOrDefault()?.ApiId;
+        }
+    }
+
+    // Rows are updated in place (and the list kept while the APIs are the same) so the grid
+    // doesn't replace every row on each update
+    private TableItem GetTableItem(TrakHoundApiInformation information, TrakHoundApiMetrics metrics)
+    {
+        if (_tableItemsById.TryGetValue(information.Id, out var item))
+        {
+            item.Update(information, metrics);
+            return item;
+        }
+
+        item = new TableItem(information, metrics);
+        _tableItemsById[information.Id] = item;
+        return item;
+    }
+
+    private void SetTableItems(List<TableItem> items)
+    {
+        if (tableItems != null && tableItems.SequenceEqual(items)) return;
+
+        tableItems = items;
+
+        var ids = items.Select(o => o.ApiId).ToHashSet();
+        foreach (var id in _tableItemsById.Keys.Where(o => !ids.Contains(o)).ToList()) _tableItemsById.Remove(id);
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private IEnumerable<ApiSample> GetSamples(string apiId)
+    {
+        lock (_lock)
+        {
+            return _history.TryGetValue(apiId, out var samples) ? samples.ToArray() : Array.Empty<ApiSample>();
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        selectedApiId = args.Data?.ApiId;
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        if (args.Data?.ApiId == selectedApiId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        requestSeries = new[]
+        {
+            new MetricsChartSeries("Requests", nameof(ApiSample.RequestRate), colors[0]),
+            new MetricsChartSeries("Errors", nameof(ApiSample.ErrorRate), colors[1])
+        };
+        durationSeries = new[]
+        {
+            new MetricsChartSeries("Average", nameof(ApiSample.AverageDuration), colors[2]),
+            new MetricsChartSeries("Max", nameof(ApiSample.MaxDuration), colors[3])
+        };
+        dataSeries = new[]
+        {
+            new MetricsChartSeries("Received", nameof(ApiSample.RequestByteRate), colors[4]),
+            new MetricsChartSeries("Sent", nameof(ApiSample.ResponseByteRate), colors[5])
+        };
+        cpuSeries = new[]
+        {
+            new MetricsChartSeries("CPU", nameof(ApiSample.CpuUsage), colors[0])
+        };
+    }
+
+    private static double GetSampleValue(ApiSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(ApiSample sample) => sample.Timestamp;
+
+
+    private static string GetSourceIcon(string sourceType)
+    {
+        switch (sourceType)
+        {
+            case nameof(TrakHoundApiRequestSourceType.App): return "fa-solid fa-sharp fa-browsers";
+            case nameof(TrakHoundApiRequestSourceType.Api): return "fa-solid fa-sharp fa-circle-location-arrow";
+            case nameof(TrakHoundApiRequestSourceType.Function): return "fa-solid fa-sharp fa-code";
+            case nameof(TrakHoundApiRequestSourceType.Worker): return "fa-solid fa-sharp fa-gears";
+            case nameof(TrakHoundApiRequestSourceType.Http): return "fa-solid fa-sharp fa-globe";
+            default: return "fa-solid fa-sharp fa-server";
+        }
+    }
+
+    private static string GetErrorPercent(TableItem item)
+    {
+        if (item.TotalRequests < 1) return "0%";
+        return $"{(double)item.TotalErrors / item.TotalRequests:0.#%}";
+    }
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.##} s";
+        if (milliseconds >= 100) return $"{milliseconds:0} ms";
+        if (milliseconds >= 1) return $"{milliseconds:0.#} ms";
+        return $"{milliseconds:0.##} ms";
+    }
+
+    private static string FormatBytes(double value)
+    {
+        if (value >= 1024 * 1024 * 1024) return $"{value / (1024 * 1024 * 1024):0.#} GB";
+        if (value >= 1024 * 1024) return $"{value / (1024 * 1024):0.#} MB";
+        if (value >= 1024) return $"{value / 1024:0.#} KB";
+        return value >= 10 ? $"{value:0} B" : $"{value:0.#} B";
+    }
+
+    private static string FormatByteRate(double value) => $"{FormatBytes(value)}/s";
+
+    private static string FormatPercent(double value) => value >= 10 ? $"{value:0}%" : $"{value:0.#}%";
+
+    /// <summary>
+    /// Milliseconds of CPU time
+    /// </summary>
+    private static string FormatCpuTime(double milliseconds)
+    {
+        if (milliseconds >= 3600000) return $"{milliseconds / 3600000:0.#} h";
+        if (milliseconds >= 60000) return $"{milliseconds / 60000:0.#} min";
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.#} s";
+        return $"{milliseconds:0} ms";
+    }
+
+    private static string FormatLastRequested(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

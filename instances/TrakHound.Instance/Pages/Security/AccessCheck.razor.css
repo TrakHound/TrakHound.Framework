@@ -1,0 +1,103 @@
+.access-page {
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 60px;
+}
+
+    .access-page > * {
+        max-width: 1100px;
+    }
+
+.card-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 18px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.card-section-title {
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.card-section .hint {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.form-actions {
+    margin-top: 0;
+}
+
+.key-select {
+    margin-top: 6px;
+}
+
+.result-card {
+    display: flex;
+    gap: 16px;
+    padding: 18px 20px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 4px solid var(--textLight);
+    border-radius: 6px;
+}
+
+    .result-card.allowed {
+        border-left-color: var(--bs-success, #198754);
+    }
+
+        .result-card.allowed .result-icon {
+            color: var(--bs-success, #198754);
+        }
+
+    .result-card.sign-in {
+        border-left-color: var(--bs-warning, #ffc107);
+    }
+
+        .result-card.sign-in .result-icon {
+            color: var(--bs-warning, #ffc107);
+        }
+
+    .result-card.denied {
+        border-left-color: var(--bs-danger, #dc3545);
+    }
+
+        .result-card.denied .result-icon {
+            color: var(--bs-danger, #dc3545);
+        }
+
+.result-icon {
+    font-size: 26px;
+}
+
+.result-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.result-title {
+    font-size: var(--fontSizeLg);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.result-subject {
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+.result-message {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+.chips {
+    align-items: center;
+}

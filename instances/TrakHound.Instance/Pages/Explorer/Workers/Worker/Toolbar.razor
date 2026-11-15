@@ -1,0 +1,109 @@
+﻿@implements IDisposable
+@rendermode InteractiveServer
+@inject ExplorerService explorerService
+@inject TrakHound.Instances.ITrakHoundInstance instance
+@using TrakHound.Instance.Pages.Configuration
+@using TrakHound.Workers
+
+@if (WorkerInformation != null)
+{
+    var startDisabled = !WorkerActions.CanStart(WorkerInformation.Status);
+    var startLabel = WorkerInformation.Status == TrakHoundWorkerStatusType.Starting ? "Starting.." : "Start";
+    var startIcon = WorkerInformation.Status == TrakHoundWorkerStatusType.Starting ? "fa-solid fa-sharp fa-loader spin" : "fa-solid fa-sharp fa-play";
+
+    var stopDisabled = !WorkerActions.CanStop(WorkerInformation.Status);
+    var stopLabel = WorkerInformation.Status == TrakHoundWorkerStatusType.Stopping ? "Stopping.." : "Stop";
+    var stopIcon = WorkerInformation.Status == TrakHoundWorkerStatusType.Stopping ? "fa-solid fa-sharp fa-loader spin" : "fa-solid fa-sharp fa-stop";
+
+    var lastUpdatedAgo = GetLastUpdatedAgo();
+    renderedLastUpdatedAgo = lastUpdatedAgo;
+
+    <div class="toolbar-panel">
+        <div class="toolbar-group" role="group" aria-label="Run">
+            <button class="admin-write btn btn-light btn-start" disabled="@startDisabled" @onclick="StartClicked"><span class="icon @startIcon"></span>@startLabel</button>
+            <button class="admin-write btn btn-light btn-stop" disabled="@stopDisabled" @onclick="StopClicked"><span class="icon @stopIcon"></span>@stopLabel</button>
+        </div>
+        @if (IsLocal && !string.IsNullOrEmpty(WorkerInformation.ConfigurationId))
+        {
+            @* Configurations can only be edited on this Instance *@
+            <div class="toolbar-group" role="group" aria-label="Links">
+                <a class="btn btn-light" href="@ConfigurationCategories.GetLink(TrakHoundWorkerConfiguration.ConfigurationCategory, WorkerInformation.ConfigurationId)" title="Edit the Worker Configuration"><span class="icon fa-solid fa-sharp fa-gear"></span>Configuration</a>
+            </div>
+        }
+        <div class="toolbar-status status-@WorkerInformation.Status.ToString().ToLower()" role="status">
+            <span class="status-dot"></span>
+            <span class="status-label">@WorkerInformation.Status</span>
+            <span class="status-timer" title="@WorkerInformation.LastUpdated.ToLocalTime()">for @lastUpdatedAgo</span>
+        </div>
+    </div>
+}
+
+@code {
+
+    private System.Timers.Timer updateTimer;
+    private string renderedLastUpdatedAgo;
+
+    private bool IsLocal => instance != null && explorerService.SelectedInstanceId == instance.Id;
+
+
+    [Parameter]
+    public TrakHoundWorkerInformation WorkerInformation { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        // Ticks the elapsed time (shown in whole seconds). Status changes come from the parent as Parameters
+        updateTimer = new System.Timers.Timer();
+        updateTimer.Interval = 1000;
+        updateTimer.Elapsed += UpdateTimerElapsed;
+        updateTimer.Start();
+    }
+
+    void IDisposable.Dispose()
+    {
+        try
+        {
+            if (updateTimer != null)
+            {
+                updateTimer.Elapsed -= UpdateTimerElapsed;
+                updateTimer.Dispose();
+            }
+        }
+        catch { }
+    }
+
+    private async void UpdateTimerElapsed(object sender, System.Timers.ElapsedEventArgs args)
+    {
+        // Only re-render when the displayed elapsed time changed
+        if (GetLastUpdatedAgo() != renderedLastUpdatedAgo)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetLastUpdatedAgo()
+    {
+        var workerInformation = WorkerInformation;
+        return workerInformation != null ? (DateTime.UtcNow - workerInformation.LastUpdated).ToFormattedString() : null;
+    }
+
+
+    private async void StartClicked()
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null)
+        {
+            var status = await client.Workers.StartWorker(WorkerInformation.Id);
+        }
+    }
+
+    private async void StopClicked()
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null)
+        {
+            var status = await client.Workers.StopWorker(WorkerInformation.Id);
+        }
+    }
+
+}

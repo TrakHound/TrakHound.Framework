@@ -1,0 +1,13 @@
+{
+  "id": "TrakHound.Timescale.Service",
+  "category": "service",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "TimescaleDB Time Series Services for use in the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Timescale.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".configurationParameters": "server,port,database,user,password,connectionTimeout,schema,chunkDays,compressAfterDays"
+  }
+}

@@ -1,0 +1,302 @@
+﻿.endpoint-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 20px;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+    container: endpoint-page / inline-size;
+}
+
+    .header-panel .header-content {
+        display: grid;
+        grid-template-rows: 1fr max-content;
+        grid-template-columns: 105px minmax(0, max-content) max-content minmax(0, 1fr);
+        grid-column-gap: 10px;
+        padding-left: 0px;
+        padding-bottom: 5px;
+        min-width: 0;
+    }
+
+.header-panel .header-icon-container {
+    grid-column: 1;
+    padding: 15px 15px 15px 0;
+}
+
+.header-panel .header-icon-container .header-type {
+    display: inline-block;
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 5px 8px;
+    vertical-align: top;
+    width: 100%;
+    text-align: center;
+}
+
+.header-panel .header-description-container {
+    grid-column: 2;
+    padding-right: 80px;
+    min-width: 0;
+}
+
+    .header-panel .header-description-container .header-title {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+    .header-panel .header-description-container .header-route {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 26px;
+        color: var(--textDark);
+    }
+
+        /* Long Routes truncate (the full Route is in the tooltip and the Information tab) */
+        .header-panel .header-description-container .header-route-value {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+    .header-panel .header-description-container .header-description {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textLight);
+    }
+
+    .header-panel .header-package-icon-container {
+        grid-column: 3;
+        padding: 5px 10px;
+    }
+
+    .header-panel ::deep span.header-package-icon {
+        font-size: var(--fontSize3xl);
+        line-height: 30px;
+        color: var(--textLight);
+    }
+
+    .header-panel ::deep img.header-package-icon {
+        height: 50px;
+    }
+
+    .header-panel .header-package-container {
+        grid-column: 4;
+        border-left: 1px solid var(--borderColorLight);
+        padding: 0 20px;
+        min-width: 0;
+    }
+
+        /* Long Package IDs truncate instead of overflowing the page */
+        .header-panel .header-package-container span {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .header-panel .header-package-container .header-title {
+            display: block;
+            font-size: var(--fontSizeSm);
+            font-weight: bold;
+            color: var(--textMild);
+        }
+
+        .header-panel .header-package-container .header-package {
+            display: block;
+            font-size: var(--fontSizeBase);
+            line-height: 20px;
+            color: var(--textDark);
+        }
+
+        .header-panel .header-package-container .header-version {
+            display: block;
+            font-size: var(--fontSizeSm);
+            line-height: 14px;
+            color: var(--textMild);
+        }
+
+
+.tab-panel {
+    grid-row: 2;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .tab-panel ::deep .rz-tabview {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .tab-panel ::deep .rz-tabview-panels {
+        height: 100%;
+        overflow: hidden;
+        border-top: 1px solid var(--borderColor);
+    }
+
+    .tab-panel ::deep .rz-tabview-panel {
+        height: 100%;
+        overflow: hidden;
+        padding: 0;
+    }
+
+
+.parameters-panel {
+    margin-bottom: 30px;
+}
+
+.parameters-panel label {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textMild);
+    margin-bottom: 10px;
+}
+
+
+.responses-panel {
+    margin-bottom: 30px;
+}
+
+.responses-panel label {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textMild);
+    margin-bottom: 10px;
+}
+
+
+.information-panel {
+    padding: 20px 0;
+}
+
+.information-tab {
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 50px;
+}
+
+/* Endpoint Request Metrics */
+.metrics-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+    padding: 6px 0 8px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .metrics-strip .metric {
+        display: flex;
+        flex-direction: column;
+        padding: 0 18px 0 0;
+        margin-right: 18px;
+        border-right: 1px solid var(--borderColorLight);
+    }
+
+        .metrics-strip .metric:last-of-type {
+            border-right: none;
+        }
+
+    .metrics-strip .metric-label {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+    .metrics-strip .metric-value {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        font-variant-numeric: tabular-nums;
+    }
+
+        .metrics-strip .metric-value.status-warning {
+            color: var(--colorOrange);
+        }
+
+        .metrics-strip .metric-value.status-error {
+            color: var(--colorRed);
+        }
+
+    .metrics-strip .metric-unit {
+        font-size: var(--fontSizeXs);
+        font-weight: normal;
+        color: var(--textMild);
+    }
+
+    .metrics-strip .metrics-link {
+        margin-left: auto;
+        font-size: var(--fontSizeSm);
+        color: var(--textLink);
+        text-decoration: none;
+    }
+
+        .metrics-strip .metrics-link .icon {
+            margin-left: 6px;
+            font-size: var(--fontSizeXs);
+        }
+
+        .metrics-strip .metrics-link:hover {
+            text-decoration: underline;
+        }
+
+/* Loading / Not Found */
+.endpoint-loading {
+    height: 100%;
+    background: var(--panelBackground);
+}
+
+.endpoint-not-found {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    height: 100%;
+    padding: 60px 20px;
+    text-align: center;
+    background: var(--panelBackground);
+}
+
+    .endpoint-not-found .icon {
+        font-size: var(--fontSize3xl);
+        color: var(--textVeryLight);
+        margin-bottom: 6px;
+    }
+
+    .endpoint-not-found .empty-title {
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .endpoint-not-found .empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+    .endpoint-not-found .btn {
+        margin-top: 12px;
+    }
+
+        .endpoint-not-found .btn .icon {
+            color: inherit;
+        }
+
+/* Narrow pages (a narrow screen, or a wide Explorer tree): the Package is also on the Api page */
+@container endpoint-page (max-width: 600px) {
+    .header-panel .header-package-icon-container,
+    .header-panel .header-package-container {
+        display: none;
+    }
+
+    .header-panel .header-description-container {
+        padding-right: 0;
+    }
+}

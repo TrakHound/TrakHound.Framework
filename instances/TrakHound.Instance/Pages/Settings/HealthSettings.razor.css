@@ -1,0 +1,68 @@
+.settings-health ::deep .list-input {
+    width: 100%;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm);
+}
+
+.keys-table {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+}
+
+.key-row {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) 90px max-content max-content;
+    align-items: center;
+    gap: 10px;
+    padding: 3px 4px;
+    border-radius: 3px;
+}
+
+    .key-row:hover {
+        background: var(--panelBackgroundMedium);
+    }
+
+    .key-row.item .key-text {
+        padding-left: 18px;
+    }
+
+    .key-row.check .key-text {
+        font-weight: bold;
+    }
+
+.key-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--textLight);
+}
+
+    .key-dot.status-healthy {
+        background: var(--colorGreen);
+    }
+
+    .key-dot.status-degraded {
+        background: var(--colorOrange);
+    }
+
+    .key-dot.status-unhealthy {
+        background: var(--colorRed);
+    }
+
+.key-text {
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.key-status {
+    font-size: var(--fontSizeXs);
+    color: var(--textMild);
+    text-transform: uppercase;
+}
+

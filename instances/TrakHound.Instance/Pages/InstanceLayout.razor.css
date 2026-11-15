@@ -1,0 +1,117 @@
+﻿.instance-page {
+    display: grid;
+    grid-template-rows: max-content 1fr max-content;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.instance-header {
+    grid-row: 1;
+    grid-column-start: 1;
+    grid-column-end: 4;
+}
+
+.instance-status {
+    grid-row: 3;
+    grid-column-start: 1;
+    grid-column-end: 4;
+}
+
+.instance-sidebar {
+    grid-row: 2;
+    grid-column: 1;
+    border-right: 1px solid var(--borderColorLight);
+    background: var(--panelSidebarBackground);
+    height: 100%;
+    overflow-y: auto;
+}
+
+    .instance-sidebar ::deep .btn-navigation {
+        display: block;
+        height: 65px;
+        width: 65px;
+        border: none;
+        border-bottom: 1px solid var(--borderColorLight);
+        border-bottom: 1px solid var(--borderColorVeryLight);
+        border-radius: 0;
+        padding: 0;
+        padding-top: 12px;
+    }
+
+        .instance-sidebar ::deep .btn-navigation.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .instance-sidebar ::deep .btn-navigation:focus {
+            box-shadow: none;
+        }
+
+        .instance-sidebar ::deep .btn-navigation .icon {
+            display: block;
+            font-size: var(--fontSizeXl);
+            margin: 0;
+            margin-bottom: 6px;
+        }
+
+        .instance-sidebar ::deep .btn-navigation.active .icon {
+            color: #fff;
+        }
+
+        .instance-sidebar ::deep .btn-navigation .text {
+            display: block;
+            font-size: var(--fontSizeXs);
+            margin: 0;
+        }
+
+.instance-body {
+    grid-row: 2;
+    grid-column: 2;
+    height: 100%;
+    overflow: hidden;
+}
+
+.instance-notifications {
+    grid-row: 2;
+    grid-column: 3;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* On a page the signed in Admin can view but not change, the actions that change something aren't shown (they would only be refused) */
+.instance-body.admin-view-only ::deep .admin-write {
+    display: none !important;
+}
+
+/* Shown in place of the page when something was refused because the signed in Admin's Roles don't allow it (AdminAccessBoundary) */
+.instance-body ::deep .admin-access-denied {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100%;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+    .instance-body ::deep .admin-access-denied .icon {
+        font-size: 32px;
+        color: var(--textLight);
+    }
+
+    .instance-body ::deep .admin-access-denied .title {
+        margin: 0;
+        font-size: var(--fontSizeLg);
+        font-weight: 600;
+        color: var(--textDark);
+    }
+
+    .instance-body ::deep .admin-access-denied .description {
+        margin: 0 0 6px 0;
+        max-width: 460px;
+        font-size: var(--fontSizeBase);
+        color: var(--textMild);
+    }

@@ -1,0 +1,34 @@
+@* Notifications (bottom right) for Package and Configuration actions, shown with the shared Notifications toasts *@
+
+@if (Context != null)
+{
+    <TrakHound.Instance.Components.Notifications Items="@GetItems()" MaxItems="10" OnDismiss="Context.Dismiss" />
+}
+
+@code {
+
+    [Parameter]
+    public PackagesContext Context { get; set; }
+
+
+    private IEnumerable<TrakHound.Instance.Components.Notifications.NotificationItem> GetItems()
+    {
+        List<PackageNotification> notifications;
+        lock (Context.Notifications) notifications = Context.Notifications.ToList();
+
+        return notifications.Select(o => new TrakHound.Instance.Components.Notifications.NotificationItem
+        {
+            Id = o.Id,
+            Type = o.Type switch
+            {
+                PackageNotificationType.Success => NotificationType.Success,
+                PackageNotificationType.Warning => NotificationType.Warning,
+                _ => NotificationType.Error
+            },
+            Message = o.Title,
+            Details = o.Message,
+            Timestamp = o.Timestamp
+        });
+    }
+
+}

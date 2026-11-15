@@ -1,0 +1,48 @@
+@using TrakHound.Instances
+
+<div class="settings-rate-limits">
+
+    <SettingsSection Title="Rate Limits" HelpLink="@TrakHoundWebsite.Docs(TrakHoundWebsite.Topics.Security, "rate-limits")" Description="Limit how often each caller can call the Apis, the System API and the MCP Tools. Callers are counted by Identity (ex. an API Key), or by IP Address when anonymous. Calls made inside the Instance (Functions, Workers, Apps and Module Tokens) are not limited. Applied when Saved." Icon="fa-solid fa-sharp fa-gauge-high">
+        <SettingsField Label="Limit Requests" Description="Requests over a limit get a 429 (Too Many Requests) with Retry-After, and MCP Tool calls get a Tool error. When disabled, nothing is limited.">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.RateLimits.Enabled" @bind-Value:after="EditContext.Changed" />
+                <span class="switch-label">@(Model.RateLimits.Enabled ? "Enabled" : "Disabled")</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+
+    @RenderLimit("APIs", "HTTP Requests to the Apis' Endpoints", "fa-solid fa-sharp fa-code", Model.RateLimits.Api)
+
+    @RenderLimit("System API", "HTTP Requests to the System API (not including the MCP Server)", "fa-solid fa-sharp fa-server", Model.RateLimits.SystemApi)
+
+    @RenderLimit("MCP Tools", "Tool calls to the MCP Server (listing the Tools, Resources and Prompts is not limited)", "fa-solid fa-sharp fa-robot", Model.RateLimits.McpTools)
+
+</div>
+
+@code {
+
+    [Parameter]
+    public InstanceSettingsModel Model { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    private RenderFragment RenderLimit(string title, string description, string icon, TrakHoundRateLimit limit) => __builder =>
+    {
+        <SettingsSection Title="@title" Description="@description" Icon="@icon" Class="@(Model.RateLimits.Enabled ? "" : "disabled")">
+            <SettingsField Label="Requests" Description="The most Requests each caller can make in the Window (0 = no limit). Callers can use them in a burst; they are given back evenly over the Window.">
+                <div class="numeric-control">
+                    <RadzenNumeric TValue="int" Style="width: 130px;" @bind-Value="@limit.PermitLimit" @bind-Value:after="EditContext.Changed" Min="0" Step="10" Disabled="@(!Model.RateLimits.Enabled)" />
+                    <span class="units">per</span>
+                    <RadzenNumeric TValue="int" Style="width: 110px;" @bind-Value="@limit.Window" @bind-Value:after="EditContext.Changed" Min="1" Max="@TrakHoundRateLimit.MaxWindow" Disabled="@(!Model.RateLimits.Enabled)" />
+                    <span class="units">seconds</span>
+                </div>
+            </SettingsField>
+            <SettingsField Label="Concurrent Requests" Description="The most Requests each caller can have running at the same time (0 = no limit). WebSocket and Server-Sent Events streams are not counted.">
+                <RadzenNumeric TValue="int" @bind-Value="@limit.ConcurrencyLimit" @bind-Value:after="EditContext.Changed" Min="0" Disabled="@(!Model.RateLimits.Enabled)" />
+            </SettingsField>
+        </SettingsSection>
+    };
+
+}

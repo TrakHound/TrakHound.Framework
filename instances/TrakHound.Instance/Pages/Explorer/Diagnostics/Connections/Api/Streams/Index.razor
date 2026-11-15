@@ -1,0 +1,606 @@
+﻿@page "/_admin/explorer/{instanceId}/diagnostics/connections/api/streams"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Api
+@using TrakHound.Clients
+
+<TrakHoundPageTitle Text="API Streams - Diagnostics" />
+
+<div class="api-streams-page @(_selected != null ? "has-details" : null)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-sharp fa-solid fa-signal-stream"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">API Streams</span>
+                <span class="header-description">The Streams open to the APIs on this Instance from any Source (HTTP clients, Apps, Workers, Functions and other APIs), and the most recently closed ones</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        <div class="toolbar-row">
+            <div class="btn-group">
+                @if (!loading)
+                {
+                    <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+                }
+                else
+                {
+                    <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+                }
+
+                @if (_paused)
+                {
+                    <button class="btn btn-light btn-paused" @onclick="PauseClicked" title="Resume updating every second"><span class="icon fa-solid fa-sharp fa-play"></span>Resume</button>
+                }
+                else
+                {
+                    <button class="btn btn-light" @onclick="PauseClicked" title="Stop updating so the rows stay where they are"><span class="icon fa-solid fa-sharp fa-pause"></span>Pause</button>
+                }
+            </div>
+
+            <a class="btn btn-light" href="@GetStreamMetricsLink()" title="The HTTP side of these Streams (WebSocket and Server-Sent Events connections), and the System API Streams"><span class="icon fa-solid fa-sharp fa-chart-simple"></span>Stream Metrics</a>
+
+            <span class="update-status">@GetUpdateStatus()</span>
+        </div>
+
+        <div class="toolbar-row filters">
+            <div class="status-filter" role="group" aria-label="Streams">
+                <button class="btn btn-filter @(!_showClosed ? "active" : null)" @onclick="() => ViewClicked(false)">Open (@_open.Length.ToString("N0"))</button>
+                <button class="btn btn-filter @(_showClosed ? "active" : null)" @onclick="() => ViewClicked(true)" title="@(_closedCapacity > 0 ? $"The most recently closed {_closedCapacity:N0} Streams" : "Closed Streams are not kept (Settings > Metrics > Recent Requests)")">Closed (@_closed.Length.ToString("N0"))</button>
+            </div>
+
+            <RadzenDropDown TValue="string" Data="@_apis" @bind-Value="_apiFilter" @bind-Value:after="FilterChanged" AllowClear="true" Placeholder="All APIs" class="api-filter dropdown-sm" />
+
+            <RadzenDropDown TValue="string" Data="@_sourceTypes" @bind-Value="_sourceFilter" @bind-Value:after="FilterChanged" AllowClear="true" Placeholder="All Sources" class="source-filter dropdown-sm" />
+
+            <div class="idle-filter" title="Only show Streams that haven't delivered a Message for at least this long">
+                <span class="filter-label">Idle longer than</span>
+                <RadzenNumeric TValue="int?" @bind-Value="_idleFilter" @bind-Value:after="FilterChanged" Min="0" Step="1" Placeholder="min" class="idle-filter-input" />
+                <span class="filter-label">min</span>
+            </div>
+
+            @if (IsFiltered)
+            {
+                <button class="btn btn-link btn-clear" @onclick="ClearFiltersClicked">Clear filters</button>
+            }
+        </div>
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="table-panel">
+
+            @if (!_received)
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-sharp fa-solid fa-signal-stream"></span>
+                    <span class="empty-title">No API Streams</span>
+                    <span class="empty-description">The API Streams are not available for this Instance</span>
+                </div>
+            }
+            else if (_showClosed && _closedCapacity == 0)
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-sharp fa-solid fa-signal-stream"></span>
+                    <span class="empty-title">Closed Streams are not kept</span>
+                    <span class="empty-description">Set the Closed API Streams to Keep in Settings > Metrics > Recent Requests (applied when the Instance is restarted)</span>
+                </div>
+            }
+            else
+            {
+                <RadzenDataGrid Data="@_visible"
+                                TItem="TrakHoundApiStreamInformation"
+                                Density="Density.Compact"
+                                AllowFiltering="true"
+                                FilterMode="FilterMode.Simple"
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                AllowSorting="true"
+                                AllowColumnResize="true"
+                                AllowPaging="true"
+                                PageSize="50"
+                                RowClick="@RowClicked"
+                                RowRender="@RowRender"
+                                EmptyText="@(_showClosed ? "No closed Streams match the filters" : "No open Streams match the filters")">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="Opened" Title="Opened" Width="95px" Filterable="false">
+                            <Template Context="context">
+                                <span class="number" title="@FormatTimestamp(context.Opened)">@FormatTime(context.Opened)</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="Source" Title="Source" Width="150px">
+                            <Template Context="context">
+                                <span class="ellipsis" title="@context.Source">@context.Source</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="ApiId" Title="API" Width="130px">
+                            <Template Context="context">
+                                <span class="ellipsis" title="@GetApiTitle(context)">@context.ApiId</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="Path" Title="Path" MinWidth="200px">
+                            <Template Context="context">
+                                <span class="ellipsis path" title="@($"{context.Path} (Route: {context.Route})")">@(context.Path ?? context.Route)@if (!context.Query.IsNullOrEmpty()) {<span class="query-count">?@context.Query.Count</span>}</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="Closed" Title="Closed" Width="95px" Visible="@_showClosed" Filterable="false">
+                            <Template Context="context">
+                                <span class="number" title="@(context.Closed != null ? FormatTimestamp(context.Closed.Value) : null)">@(context.Closed != null ? FormatTime(context.Closed.Value) : "-")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="CloseReason" Title="Reason" Width="130px" Visible="@_showClosed">
+                            <Template Context="context">
+                                <span class="ellipsis @GetReasonClass(context.CloseReason)" title="@context.Error">@context.CloseReason</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="Duration" Title="Duration" Width="95px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number" title="@(context.IsOpen ? "Open for" : "Was open for") @FormatDuration(context.Duration)">@FormatDuration(context.Duration)</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="MessageCount" Title="Messages" Width="105px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number">@context.MessageCount.ToString("N0")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="ByteCount" Title="Data" Width="80px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number">@(context.ByteCount > 0 ? context.ByteCount.ToFileSize() : "-")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundApiStreamInformation" Property="Idle" Title="Last Message" Width="115px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number @(IsIdle(context) ? "idle" : null)" title="@(context.LastMessage != null ? FormatTimestamp(context.LastMessage.Value) : "No Messages yet")">@FormatLastMessage(context)</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+
+        </div>
+
+        @if (_selected != null)
+        {
+            var stream = _selected;
+
+            <div class="details-panel">
+                <div class="details-header">
+                    <span class="details-method">@(stream.IsOpen ? "Open" : "Closed")</span>
+                    <span class="details-url" title="@stream.Path">@(stream.Path ?? stream.Route)</span>
+                    @if (!stream.IsOpen)
+                    {
+                        <span class="details-status @GetReasonClass(stream.CloseReason)">@stream.CloseReason</span>
+                    }
+                    <button class="btn btn-link btn-close-details" @onclick="CloseDetailsClicked" title="Close the details (and resume updating)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                </div>
+
+                <div class="details-content">
+                    <table class="details-table">
+                        <tr><td class="label">API</td><td class="value">@stream.ApiId</td></tr>
+                        <tr><td class="label">Package</td><td class="value">@(stream.PackageId ?? "-")@if (!string.IsNullOrEmpty(stream.PackageVersion)) {<span class="muted suffix">@stream.PackageVersion</span>}</td></tr>
+                        <tr><td class="label">Route</td><td class="value">@(stream.Route ?? "-")</td></tr>
+                        <tr><td class="label">Source</td><td class="value">@stream.Source@if (!string.IsNullOrEmpty(stream.SourceId) && stream.SourceId != stream.SourceName) {<span class="muted suffix">(@stream.SourceId)</span>}</td></tr>
+                        @if (!string.IsNullOrEmpty(stream.ClientAgent))
+                        {
+                            <tr><td class="label">User Agent</td><td class="value">@stream.ClientAgent</td></tr>
+                        }
+                        <tr><td class="label">Opened</td><td class="value number">@FormatTimestamp(stream.Opened)</td></tr>
+                        @if (stream.Closed != null)
+                        {
+                            <tr><td class="label">Closed</td><td class="value number">@FormatTimestamp(stream.Closed.Value)</td></tr>
+                        }
+                        <tr><td class="label">Duration</td><td class="value number">@FormatDuration(stream.Duration)</td></tr>
+                        <tr><td class="label">Messages</td><td class="value number">@stream.MessageCount.ToString("N0")</td></tr>
+                        <tr><td class="label">Data</td><td class="value number">@(stream.ByteCount > 0 ? $"{stream.ByteCount.ToFileSize()} ({stream.ByteCount:N0} bytes)" : "-")</td></tr>
+                        <tr><td class="label">Last Message</td><td class="value number">@(stream.LastMessage != null ? FormatTimestamp(stream.LastMessage.Value) : "No Messages")</td></tr>
+                        <tr><td class="label">Stream ID</td><td class="value mono">@stream.StreamId</td></tr>
+                        <tr><td class="label">Request ID</td><td class="value mono" title="Shown in the Endpoint's Log entries for the Request that opened the Stream">@(stream.RequestId ?? "-")</td></tr>
+                    </table>
+
+                    <div class="details-query">
+                        @if (!string.IsNullOrEmpty(stream.Error))
+                        {
+                            <span class="details-section-title">Error</span>
+                            <pre class="details-error">@stream.Error</pre>
+                        }
+
+                        <span class="details-section-title">Query</span>
+                        @if (!stream.Query.IsNullOrEmpty())
+                        {
+                            <table class="details-table query-table">
+                                @foreach (var parameter in stream.Query)
+                                {
+                                    var masked = parameter.Value == _mask;
+                                    <tr><td class="label">@parameter.Key</td><td class="value @(masked ? "masked" : null)" title="@(masked ? "Hidden (sensitive parameter)" : null)">@parameter.Value</td></tr>
+                                }
+                            </table>
+                        }
+                        else
+                        {
+                            <span class="muted">No Query parameters</span>
+                        }
+
+                        <div class="details-links">
+                            <a class="btn btn-light" href="@GetMetricsLink(stream.ApiId)"><span class="icon fa-solid fa-sharp fa-chart-simple"></span>API Metrics</a>
+                            @if (!string.IsNullOrEmpty(stream.ControllerId) && !string.IsNullOrEmpty(stream.EndpointId))
+                            {
+                                <a class="btn btn-light" href="@GetEndpointLink(stream)"><span class="icon fa-solid fa-sharp fa-play"></span>Endpoint</a>
+                            }
+                            @if (stream.IsOpen)
+                            {
+                                var confirming = _confirmCloseId == stream.StreamId && DateTime.UtcNow < _confirmExpires;
+                                <button class="btn btn-light btn-close-stream @(confirming ? "btn-confirm" : null)" disabled="@_closing" @onclick="() => CloseStreamClicked(stream)" title="@(confirming ? "Click again to close the Stream now" : "Close the Stream (its Source sees the Stream end)")"><span class="icon fa-solid fa-sharp @(confirming ? "fa-check" : "fa-ban")"></span>@(confirming ? "Confirm Close?" : "Close Stream")</button>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(_actionMessage))
+                        {
+                            <span class="action-message">@_actionMessage</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private const string _mask = "***"; // TrakHoundHttpQueryMask.Mask
+
+    // Rendered when the Streams change, otherwise only this often (so the Durations of open Streams keep counting up without rendering the grid every second)
+    private static readonly TimeSpan _renderInterval = TimeSpan.FromSeconds(10);
+
+    private TrakHoundApiStreamInformation[] _open = Array.Empty<TrakHoundApiStreamInformation>();
+    private TrakHoundApiStreamInformation[] _closed = Array.Empty<TrakHoundApiStreamInformation>();
+    private List<TrakHoundApiStreamInformation> _visible = new List<TrakHoundApiStreamInformation>();
+    private int _closedCapacity;
+    private bool _received;
+    private DateTime? _lastUpdated;
+    private DateTime _lastRendered;
+    private string _previousSignature;
+
+    // APIs and Source Types seen so far (kept so the filters' options don't change as Streams close)
+    private readonly SortedSet<string> _apis = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+    private readonly SortedSet<string> _sourceTypes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    private System.Threading.Timer _updateTimer;
+    private int _updating;
+    private volatile bool _disposed;
+
+    // Updates stop while Paused or while a Stream's details are open (so the rows don't move)
+    private bool _paused;
+    private TrakHoundApiStreamInformation _selected;
+
+    private bool _showClosed;
+    private string _apiFilter;
+    private string _sourceFilter;
+    private int? _idleFilter;
+
+    // Close Stream (the second click within 5 seconds closes it)
+    private string _confirmCloseId;
+    private DateTime _confirmExpires;
+    private bool _closing;
+    private string _actionMessage;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    void IDisposable.Dispose()
+    {
+        _disposed = true;
+        _updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading API Streams..";
+            await InvokeAsync(StateHasChanged);
+
+            _updateTimer?.Dispose();
+            _open = Array.Empty<TrakHoundApiStreamInformation>();
+            _closed = Array.Empty<TrakHoundApiStreamInformation>();
+            _visible = new List<TrakHoundApiStreamInformation>();
+            _apis.Clear();
+            _sourceTypes.Clear();
+            _received = false;
+            _previousSignature = null;
+            _selected = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Connections", null));
+            breadcrumbItems.Add(new BreadcrumbItem("API", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Streams", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            // Read from the selected Instance (which may not be the one hosting this page)
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                try { await UpdateStreams(client); } catch { }
+
+                _updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            _lastRendered = DateTime.UtcNow;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Returns true when the Streams changed (opened, closed or delivered Messages)
+    /// </summary>
+    private async Task<bool> UpdateStreams(ITrakHoundClient client)
+    {
+        var streams = await client.Api.GetStreams();
+        if (streams == null) return false;
+
+        _received = true;
+        _closedCapacity = streams.ClosedCapacity;
+        _lastUpdated = DateTime.Now;
+
+        var open = streams.Open?.ToArray() ?? Array.Empty<TrakHoundApiStreamInformation>();
+        var closed = streams.Closed?.ToArray() ?? Array.Empty<TrakHoundApiStreamInformation>();
+
+        var signature = string.Join(',', open.Select(o => $"{o.StreamId}:{o.MessageCount}")) + "|" + closed.Length + ":" + closed.FirstOrDefault()?.StreamId;
+        if (signature == _previousSignature) return false;
+        _previousSignature = signature;
+
+        _open = open;
+        _closed = closed;
+
+        foreach (var stream in _open.Concat(_closed))
+        {
+            if (!string.IsNullOrEmpty(stream.ApiId)) _apis.Add(stream.ApiId);
+            _sourceTypes.Add(stream.SourceType.ToString());
+        }
+
+        UpdateVisible();
+        return true;
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip while Paused, or if the previous update is still running
+        if (_disposed || _paused || _selected != null || Interlocked.Exchange(ref _updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                // On the Renderer's context so the rows don't change while they are rendered
+                await InvokeAsync(async () =>
+                {
+                    if (_disposed) return;
+
+                    var changed = await UpdateStreams(client);
+                    var now = DateTime.UtcNow;
+                    var refreshDurations = !_showClosed && _open.Length > 0 && now - _lastRendered >= _renderInterval;
+
+                    if (changed || refreshDurations)
+                    {
+                        if (!changed) UpdateVisible(); // The Idle filter depends on the time
+                        _lastRendered = now;
+                        StateHasChanged();
+                    }
+                });
+            }
+        }
+        catch
+        {
+            // The page may have been Disposed while updating
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _updating, 0);
+        }
+    }
+
+    private void UpdateVisible()
+    {
+        IEnumerable<TrakHoundApiStreamInformation> streams = _showClosed ? _closed : _open;
+
+        if (!string.IsNullOrEmpty(_apiFilter)) streams = streams.Where(o => string.Equals(o.ApiId, _apiFilter, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(_sourceFilter)) streams = streams.Where(o => string.Equals(o.SourceType.ToString(), _sourceFilter, StringComparison.OrdinalIgnoreCase));
+        if (_idleFilter > 0) streams = streams.Where(o => o.Idle.TotalMinutes >= _idleFilter.Value);
+
+        _visible = streams.ToList();
+    }
+
+    private bool IsFiltered => !string.IsNullOrEmpty(_apiFilter) || !string.IsNullOrEmpty(_sourceFilter) || _idleFilter > 0;
+
+    private bool IsIdle(TrakHoundApiStreamInformation stream) => _idleFilter > 0 ? stream.Idle.TotalMinutes >= _idleFilter.Value : stream.IsOpen && stream.Idle.TotalMinutes >= 10;
+
+    private void FilterChanged() => UpdateVisible();
+
+    private void ViewClicked(bool closed)
+    {
+        _showClosed = closed;
+        _selected = null;
+        UpdateVisible();
+    }
+
+    private void ClearFiltersClicked()
+    {
+        _apiFilter = null;
+        _sourceFilter = null;
+        _idleFilter = null;
+        UpdateVisible();
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private void PauseClicked()
+    {
+        _paused = !_paused;
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TrakHoundApiStreamInformation> args)
+    {
+        _selected = _selected?.StreamId == args.Data?.StreamId ? null : args.Data;
+        _confirmCloseId = null;
+        _actionMessage = null;
+    }
+
+    private void RowRender(RowRenderEventArgs<TrakHoundApiStreamInformation> args)
+    {
+        var classes = "stream-row";
+        if (_selected != null && args.Data?.StreamId == _selected.StreamId) classes += " selected";
+        args.Attributes.Add("class", classes);
+    }
+
+    private void CloseDetailsClicked()
+    {
+        _selected = null;
+        _confirmCloseId = null;
+        _actionMessage = null;
+    }
+
+    private async Task CloseStreamClicked(TrakHoundApiStreamInformation stream)
+    {
+        if (_confirmCloseId != stream.StreamId || DateTime.UtcNow >= _confirmExpires)
+        {
+            _confirmCloseId = stream.StreamId;
+            _confirmExpires = DateTime.UtcNow.AddSeconds(5);
+            _actionMessage = null;
+            return;
+        }
+
+        _confirmCloseId = null;
+        _closing = true;
+
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null && await client.Api.CloseStream(stream.StreamId))
+            {
+                // Show the Stream in the Closed list
+                _selected = null;
+                _showClosed = true;
+                _previousSignature = null;
+                await UpdateStreams(client);
+                UpdateVisible();
+            }
+            else
+            {
+                _actionMessage = "The Stream could not be closed (it may have already closed)";
+            }
+        }
+        catch (Exception ex)
+        {
+            _actionMessage = $"The Stream could not be closed : {ex.Message}";
+        }
+        finally
+        {
+            _closing = false;
+        }
+    }
+
+
+    private string GetUpdateStatus()
+    {
+        if (loading || !_received) return null;
+
+        var total = _showClosed ? _closed.Length : _open.Length;
+        var shown = IsFiltered ? $"{_visible.Count:N0} of {total:N0}" : $"{total:N0}";
+        var label = $"{shown} {(_showClosed ? "closed" : "open")} Stream{(total == 1 ? "" : "s")}";
+        var updated = _lastUpdated != null ? $"updated {_lastUpdated:HH:mm:ss}" : null;
+
+        if (_paused) return $"{label} · Paused · {updated}";
+        if (_selected != null) return $"{label} · Paused while a Stream is open · {updated}";
+        return $"{label} · {updated} · updates every second";
+    }
+
+    private static string GetApiTitle(TrakHoundApiStreamInformation stream)
+    {
+        if (string.IsNullOrEmpty(stream.PackageId)) return stream.ApiId;
+        return $"{stream.ApiId} ({stream.PackageId} {stream.PackageVersion})";
+    }
+
+    private static string GetReasonClass(string reason)
+    {
+        switch (reason)
+        {
+            case TrakHoundApiStreamCloseReasons.Error: return "reason-error";
+            case TrakHoundApiStreamCloseReasons.ClosedByAdmin: return "reason-admin";
+            default: return null;
+        }
+    }
+
+    private string GetStreamMetricsLink() => $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/streams";
+
+    private string GetMetricsLink(string apiId)
+    {
+        var link = $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/api";
+        if (!string.IsNullOrEmpty(apiId)) link += $"?apiId={Uri.EscapeDataString(apiId)}";
+        return link;
+    }
+
+    private string GetEndpointLink(TrakHoundApiStreamInformation stream)
+    {
+        return $"_admin/explorer/{explorerService.SelectedInstanceId}/api/{Uri.EscapeDataString(stream.ApiId)}/{Uri.EscapeDataString(stream.ControllerId)}/{Uri.EscapeDataString(stream.EndpointId)}";
+    }
+
+    private static string FormatTime(DateTime timestamp)
+    {
+        var local = timestamp.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("MM-dd HH:mm");
+    }
+
+    private static string FormatTimestamp(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff");
+
+    private static string FormatLastMessage(TrakHoundApiStreamInformation stream)
+    {
+        if (stream.LastMessage == null) return "-";
+        return $"{FormatDuration(stream.Idle)} ago";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalSeconds < 1) return $"{duration.TotalMilliseconds:0} ms";
+        if (duration.TotalMinutes < 1) return $"{duration.TotalSeconds:0} s";
+        if (duration.TotalHours < 1) return $"{(int)duration.TotalMinutes} min {duration.Seconds} s";
+        if (duration.TotalDays < 1) return $"{(int)duration.TotalHours} h {duration.Minutes} min";
+        return $"{(int)duration.TotalDays} d {duration.Hours} h";
+    }
+
+}

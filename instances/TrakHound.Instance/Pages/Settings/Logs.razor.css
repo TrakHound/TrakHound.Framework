@@ -1,0 +1,111 @@
+.settings-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 10px 14px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--bs-warning, #ffc107);
+    border-left-width: 4px;
+    border-radius: 4px;
+    overflow-wrap: anywhere;
+}
+
+    .settings-notice .icon {
+        margin-top: 2px;
+        color: var(--bs-warning, #ffc107);
+    }
+
+    .settings-notice.error {
+        margin: 12px 0;
+        border-color: var(--bs-danger, #dc3545);
+    }
+
+        .settings-notice.error .icon {
+            color: var(--bs-danger, #dc3545);
+        }
+
+.path {
+    color: var(--textDark);
+}
+
+/* Archive settings when the Archive Mode is Delete */
+.settings-logs ::deep .settings-field.disabled .settings-field-title,
+.settings-logs ::deep .settings-field.disabled .settings-field-description {
+    opacity: 0.5;
+}
+
+.numeric-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+    .numeric-control .units {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+/* Status */
+
+.stat-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    padding: 14px 0 6px;
+}
+
+.stat-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+    background: var(--inputBackground);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 4px;
+}
+
+.stat-label {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.stat-value {
+    font-size: var(--fontSizeLg);
+    font-weight: 600;
+    color: var(--textDark);
+    font-variant-numeric: tabular-nums;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 8px 30px;
+    padding: 12px 0 14px;
+    font-size: var(--fontSizeBase);
+}
+
+.status-label {
+    color: var(--textMild);
+    white-space: nowrap;
+}
+
+.status-value {
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+    .status-value.path {
+        font-size: var(--fontSizeSm);
+    }
+
+    .status-value .muted {
+        color: var(--textMild);
+    }
+
+    .status-value.error {
+        color: var(--bs-danger, #dc3545);
+    }
+

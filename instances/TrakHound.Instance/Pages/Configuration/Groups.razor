@@ -1,0 +1,268 @@
+@page "/_admin/configuration/groups"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/groups"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.GroupConfigurations)]
+@layout ConfigurationLayout
+@implements IDisposable
+@inject ConfigurationsService configurationsService
+@inject NavigationManager navigationManager
+@using TrakHound.Configurations
+@using TrakHound.Groups
+@using TrakHound.Zones
+
+<TrakHoundPageTitle Text="Groups" />
+<AreaBreadcrumbs Items="@([new("Groups")])" />
+
+<div class="list-page">
+
+    <div class="list-header">
+        <span class="list-icon fa-solid fa-sharp fa-layer-group"></span>
+        <div class="list-title">
+            <span class="title">Groups</span>
+            <span class="description">Organize Apis, Apps, Functions and Workers, and set the Router their Service calls use. A Zone can list a Group to restrict every Module in it</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input class="form-control" type="search" placeholder="Search groups.." value="@search" @oninput="e => search = e.Value?.ToString()" spellcheck="false" />
+        </div>
+        <div class="toolbar-buttons">
+            <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Group</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        @if (groups.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-layer-group"></span>
+                <span class="empty-title">No Groups</span>
+                <span class="empty-description">Add a Group to keep related Modules together (ex. the Api, App, Functions and Workers of one line), and to give them a Router in one place.</span>
+                <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Group</button>
+            </div>
+        }
+        else
+        {
+            var rows = GetRows();
+            @if (rows.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                    <span class="empty-title">No Groups match "@search"</span>
+                    <button class="btn btn-light" @onclick="() => search = null">Clear Search</button>
+                </div>
+            }
+            else
+            {
+                <table class="config-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th class="col-count">Modules</th>
+                            <th class="col-router">Router</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var group in rows)
+                        {
+                            var link = configurationsService.GetLink(GroupModules.GetLink(group.Id));
+
+                            <tr>
+                                <td class="col-name">
+                                    <a class="config-name" href="@link">@GroupModules.GetName(group)</a>
+                                    @if (!string.IsNullOrEmpty(group.Name))
+                                    {
+                                        <code class="config-id">@group.Id</code>
+                                    }
+                                    @if (!string.IsNullOrEmpty(group.Description))
+                                    {
+                                        <span class="config-description">@group.Description</span>
+                                    }
+                                </td>
+                                <td class="col-count">@GetMembers(group).Count</td>
+                                <td class="col-router">@(string.IsNullOrEmpty(group.RouterId) ? "default" : group.RouterId)</td>
+                                <td class="col-actions">
+                                    <a class="btn btn-sm btn-command" href="@link"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</a>
+                                    <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removeGroup = group"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+
+</div>
+
+@* Add Dialog *@
+<Modal Class="packages-modal" Visible="@addVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-layer-group"></span>
+        <span class="modal-header-title">Add Group</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="form-field">
+            <label for="group-id">ID</label>
+            <input id="group-id" class="form-control" @bind="addId" @bind:event="oninput" placeholder="ex. line-1" spellcheck="false" />
+            <span class="field-hint">Letters, numbers, '-', '_', and '.'. Modules and Zones refer to the Group by its ID</span>
+        </div>
+        <div class="form-field">
+            <label for="group-name">Name</label>
+            <input id="group-name" class="form-control" @bind="addName" @bind:event="oninput" placeholder="Optional" />
+        </div>
+        <div class="form-field">
+            <label for="group-description">Description</label>
+            <input id="group-description" class="form-control" @bind="addDescription" placeholder="Optional" />
+        </div>
+        @if (addError != null)
+        {
+            <span class="field-error">@addError</span>
+        }
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="() => addVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+        <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(addId)" @onclick="AddConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Group</button>
+    </FooterContent>
+</Modal>
+
+@* Remove Dialog *@
+<Modal Class="packages-modal" Visible="@(removeGroup != null)">
+    <HeaderContent>
+        <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+        <span class="modal-header-title">Remove Group</span>
+    </HeaderContent>
+    <BodyContent>
+        @if (removeGroup != null)
+        {
+            var members = GetMembers(removeGroup);
+            var zones = GetZones(removeGroup);
+
+            <p class="modal-description">Remove the Group <strong>@GroupModules.GetName(removeGroup)</strong>?</p>
+            @if (members.Count > 0)
+            {
+                <p class="modal-description">Its @members.Count Module(s) are taken out of the Group. Those that don't name their own Router use the default Router.</p>
+            }
+            @if (zones.Count > 0)
+            {
+                <p class="modal-description">The Zone(s) @string.Join(", ", zones) list this Group, so they no longer cover its Modules.</p>
+            }
+        }
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="() => removeGroup = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+        <button class="admin-write btn btn-danger" @onclick="RemoveConfirmClicked"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    // The Profile subscribed to (kept, since the URL has already changed when the page is disposed)
+    private ITrakHoundConfigurationProfile _subscribedProfile;
+    private ITrakHoundConfigurationProfile subscribedProfile => _subscribedProfile ??= configurationsService.ConfigurationProfile;
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    private List<TrakHoundGroupConfiguration> groups = new List<TrakHoundGroupConfiguration>();
+    private List<GroupModule> modules = new List<GroupModule>();
+    private string search;
+
+    private bool addVisible;
+    private string addId;
+    private string addName;
+    private string addDescription;
+    private string addError;
+
+    private TrakHoundGroupConfiguration removeGroup;
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+        subscribedProfile.ConfigurationAdded += ConfigurationChanged;
+        subscribedProfile.ConfigurationRemoved += ConfigurationChanged;
+    }
+
+    public void Dispose()
+    {
+        if (_subscribedProfile != null)
+        {
+            _subscribedProfile.ConfigurationAdded -= ConfigurationChanged;
+            _subscribedProfile.ConfigurationRemoved -= ConfigurationChanged;
+        }
+    }
+
+    private void ConfigurationChanged(object sender, ITrakHoundConfiguration configuration) => _ = InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void Load()
+    {
+        groups = GroupModules.GetGroups(configurationsService.ConfigurationProfile);
+        modules = GroupModules.GetModules(configurationsService.ConfigurationProfile);
+    }
+
+    private List<GroupModule> GetMembers(TrakHoundGroupConfiguration group) => modules.Where(o => GroupModules.IsMember(o.Configuration, group.Id)).ToList();
+
+    // The Zones that list the Group as a Member or Allowed Caller
+    private List<string> GetZones(TrakHoundGroupConfiguration group)
+    {
+        var reference = TrakHoundZoneResources.GetGroupReference(group.Id);
+        return configurationsService.ConfigurationProfile.Get<TrakHoundZoneConfiguration>(TrakHoundZoneConfiguration.ConfigurationCategory)?
+            .Where(o => (o.Members?.Contains(reference, StringComparer.OrdinalIgnoreCase) ?? false) || (o.AllowedCallers?.Contains(reference, StringComparer.OrdinalIgnoreCase) ?? false))
+            .Select(o => o.Id).ToList() ?? new List<string>();
+    }
+
+    private List<TrakHoundGroupConfiguration> GetRows()
+    {
+        if (string.IsNullOrWhiteSpace(search)) return groups;
+
+        var query = search.Trim();
+        return groups.Where(o => Contains(o.Id, query) || Contains(o.Name, query) || Contains(o.Description, query)).ToList();
+    }
+
+    private static bool Contains(string value, string query) => value != null && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private void AddClicked()
+    {
+        addId = null;
+        addName = null;
+        addDescription = null;
+        addError = null;
+        addVisible = true;
+    }
+
+    private void AddConfirmClicked()
+    {
+        var id = addId?.Trim();
+
+        addError = TrakHound.Instance.Pages.Security.SecurityProfileValidation.ValidateId(id);
+        if (addError == null && GroupModules.GetGroup(configurationsService.ConfigurationProfile, id) != null) addError = $"A Group with the ID \"{id}\" already exists.";
+        if (addError != null) return;
+
+        var group = new TrakHoundGroupConfiguration();
+        group.Id = id;
+        group.Name = string.IsNullOrWhiteSpace(addName) ? null : addName.Trim();
+        group.Description = string.IsNullOrWhiteSpace(addDescription) ? null : addDescription.Trim();
+
+        configurationsService.Save(group);
+        addVisible = false;
+
+        navigationManager.NavigateTo(configurationsService.GetLink(GroupModules.GetLink(id)));
+    }
+
+    private void RemoveConfirmClicked()
+    {
+        if (removeGroup != null)
+        {
+            // Take the Modules out of the Group first, so none is left naming a Group that doesn't exist
+            foreach (var member in GetMembers(removeGroup)) GroupModules.SetGroup(configurationsService, member, null);
+            configurationsService.Remove(TrakHoundGroupConfiguration.ConfigurationCategory, removeGroup.Id);
+        }
+
+        removeGroup = null;
+    }
+
+}

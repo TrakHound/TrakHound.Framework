@@ -1,0 +1,13 @@
+{
+  "id": "TrakHound.Postgres.Service",
+  "category": "service",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "PostgreSQL Services for use in the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Postgres.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".configurationParameters": "server,port,database,user,password,connectionTimeout"
+  }
+}

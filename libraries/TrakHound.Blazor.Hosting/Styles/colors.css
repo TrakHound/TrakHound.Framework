@@ -1,0 +1,19 @@
+:root {
+    /* Green Colors */
+    --colorGreen: #19b419;
+    --colorGreenLight: #54c654;
+    --colorGreenDark: #2d862d;
+    --colorGreenHover: #c6ecc6;
+    /* Orange Colors */
+    --colorOrange: #ff8b00;
+    --colorOrangeVeryLight: #ffe8cc;
+    --colorOrangeDark: #e67e00;
+    /* Red Colors */
+    --colorRed: #d92b2b;
+    --colorRedLight: #ef4b4b;
+    --colorRedVeryLight: #ffb3b3;
+    --colorRedDark: #a61e1e;
+    --colorRedHover: #ffb3b3;
+    /* Blue Colors */
+    --colorBlue: #0063cc;
+}

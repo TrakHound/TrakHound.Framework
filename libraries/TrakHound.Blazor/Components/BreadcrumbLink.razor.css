@@ -1,0 +1,24 @@
+﻿.breadcrumb-link {
+    color: var(--buttonLinkText);
+    font-size: 13px;
+    display: inline-block;
+    height: auto;
+    padding: .25rem .5rem;
+    font-weight: 400;
+    line-height: 1.5;
+    text-decoration: none;
+}
+
+    .breadcrumb-link:hover a {
+        text-decoration: underline;
+        color: var(--buttonLinkTextHover);
+    }
+
+.breadcrumb-organizer {
+    color: var(--textDark);
+    font-size: 13px;
+    display: inline-block;
+    margin-left: 5px;
+    margin-right: 5px;
+    text-decoration: none;
+}

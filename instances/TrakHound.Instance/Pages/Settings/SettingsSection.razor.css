@@ -1,0 +1,68 @@
+.settings-section {
+    margin-bottom: 20px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 6px;
+}
+
+.settings-section-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.settings-section-icon {
+    margin-top: 2px;
+    width: 18px;
+    font-size: 15px;
+    text-align: center;
+    color: var(--accentLight);
+}
+
+.settings-section-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-section-title {
+    display: block;
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    line-height: 20px;
+    color: var(--textDark);
+}
+
+.settings-section-description {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.settings-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-section-help {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    color: var(--textLight);
+    text-decoration: none;
+}
+
+    .settings-section-help:hover {
+        color: var(--accent);
+        background: var(--panelItemBackgroundHover);
+    }
+
+.settings-section-body {
+    padding: 4px 20px;
+}

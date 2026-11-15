@@ -1,0 +1,28 @@
+.assignment-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.editor-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.editor-section-title {
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.editor-section-description {
+    margin-top: -8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .editor-section-description strong {
+        color: var(--textDark);
+    }

@@ -1,0 +1,754 @@
+@page "/_admin/explorer/{instanceId}/apps"
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHoundAppConnectionManager connectionManager
+@inject ExplorerService explorerService
+@inject NavigationManager navigationManager
+@using TrakHound.Apps
+@using TrakHound.Clients
+@using TrakHound.Instance.Apps
+@using TrakHound.Instance.Http
+@using TrakHound.Instance.Pages.Configuration
+@using TrakHound.Instances
+@using TrakHound.Modules
+
+<TrakHoundPageTitle Text="Apps" />
+
+<div class="apps-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-browsers"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Apps</span>
+                <span class="header-description">User Interfaces served by this Instance · usage updates every 5 seconds</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <div class="btn-group">
+            <a class="btn btn-light" href="@TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId)" title="Access Log : the page views of every App (client, page and time on page)"><span class="icon fa-solid fa-sharp fa-file-lines"></span>Access Log</a>
+            @if (IsLocal)
+            {
+                <a class="btn btn-light" href="@TrakHoundAppConnectionManager.GetLink(explorerService.SelectedInstanceId)" title="App Connections : the open pages of every App (client, page, Version), with Identify, Notify, Send Message and Reload"><span class="icon fa-solid fa-sharp fa-plug"></span>Connections</a>
+            }
+        </div>
+
+        <div class="search-box">
+            <span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="search" placeholder="Filter by name, route or package" value="@searchText" @oninput="SearchChanged" />
+        </div>
+
+        @if (!string.IsNullOrEmpty(actionMessage))
+        {
+            <span class="action-message @(actionFailed ? "failed" : actionPrompt ? "prompt" : null)" role="status"><span class="icon fa-solid fa-sharp @(actionFailed ? "fa-circle-exclamation" : actionPrompt ? "fa-circle-question" : "fa-circle-check")"></span>@actionMessage</span>
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="summary-panel">
+            @if (!_items.IsNullOrEmpty())
+            {
+                <div class="summary-tiles">
+                    <button class="summary-tile apps @(statusFilter == null ? "selected" : null)" title="Show all Apps" @onclick="() => SetStatusFilter(null)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-browsers"></span>Apps</span>
+                        <span class="tile-value">@LoadedCount.ToString("N0")</span>
+                        <span class="tile-detail">loaded@(NotLoadedCount > 0 ? $" · {NotLoadedCount:N0} not loaded" : "")</span>
+                    </button>
+                    <div class="summary-tile static">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-plug"></span>Open Connections</span>
+                        <span class="tile-value">@_items.Sum(o => o.OpenConnections).ToString("N0")</span>
+                        <span class="tile-detail">@_items.Sum(o => o.TotalPageViews).ToString("N0") page views</span>
+                    </div>
+                    <button class="summary-tile retired @(RetiredCount > 0 ? null : "zero") @(statusFilter == RetiredFilter ? "selected" : null)" title="Show Apps with connections on a Retired Version" @onclick="() => SetStatusFilter(RetiredFilter)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Retired Connections</span>
+                        <span class="tile-value">@RetiredCount.ToString("N0")</span>
+                        <span class="tile-detail">@(RetiredCount > 0 ? "on a previous Version" : "None")</span>
+                    </button>
+                    <button class="summary-tile not-loaded @(NotLoadedCount > 0 ? null : "zero") @(statusFilter == NotLoadedFilter ? "selected" : null)" title="Show App Configurations that are not loaded" @onclick="() => SetStatusFilter(NotLoadedFilter)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-circle-xmark"></span>Not Loaded</span>
+                        <span class="tile-value">@NotLoadedCount.ToString("N0")</span>
+                        <span class="tile-detail">@(NotLoadedCount > 0 ? "Package or Module missing" : "None")</span>
+                    </button>
+                </div>
+            }
+        </div>
+
+        <div class="status-panel">
+
+            @if (!_items.IsNullOrEmpty())
+            {
+                var displayItems = GetDisplayItems();
+                if (!displayItems.IsNullOrEmpty())
+                {
+                    <RadzenDataGrid Data="@displayItems" TItem="TableItem" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true">
+                        <Columns>
+                            @* Frozen first so the Actions stay visible when the table scrolls sideways (a confirming click only changes the icon, never the width) *@
+                            <RadzenDataGridColumn TItem="TableItem" Title="Actions" Width="198px" Sortable="false" Frozen="true" CssClass="actions-cell" HeaderCssClass="actions-cell">
+                                <Template Context="item">
+                                    @if (item.IsLoaded)
+                                    {
+                                        var reloadPagesKey = $"pages:{item.Id}";
+                                        var reloadConfigKey = $"config:{item.Id}";
+                                        var confirmingPages = confirmKey == reloadPagesKey;
+                                        var confirmingConfig = confirmKey == reloadConfigKey;
+
+                                        <span class="actions">
+                                            @if (IsLocal)
+                                            {
+                                                <button class="admin-write btn-action" title="Identify : show each open page's connection Code in its lower right corner for @TrakHoundAppIdentifyRequest.DefaultSeconds seconds (the Codes are listed on App Connections)" aria-label="Identify" @onclick="() => IdentifyClicked(item)"><span class="icon fa-solid fa-sharp fa-location-crosshairs"></span></button>
+                                                <button class="admin-write btn-action" title="Notify Users : show a banner on every open page of this App, which reloads on its next page change or when idle (nothing is lost)" aria-label="Notify Users" @onclick="() => NotifyClicked(item)"><span class="icon fa-solid fa-sharp fa-bell"></span></button>
+                                                <button class="admin-write btn-action" title="Send Message : show a Message on every open page of this App until dismissed (pages opened later do not show it)" aria-label="Send Message" @onclick="() => MessageClicked(item)"><span class="icon fa-solid fa-sharp fa-message"></span></button>
+                                            }
+                                            <a class="btn-action" href="@GetAccessLogLink(item)" title="Access Log : the page views of this App (client, page and time on page)" aria-label="Access Log"><span class="icon fa-solid fa-sharp fa-file-lines"></span></a>
+                                            <button class="admin-write btn-action @(confirmingPages ? "btn-confirm" : null)" title="@(confirmingPages ? "Click again to reload every open page of this App now" : "Reload Pages : reload every open page of this App now (unsaved changes on those pages are lost)")" aria-label="@(confirmingPages ? "Confirm Reload Pages" : "Reload Pages")" @onclick="() => ReloadPagesClicked(item, reloadPagesKey)"><span class="icon fa-solid fa-sharp @(confirmingPages ? "fa-check" : "fa-arrows-rotate")"></span></button>
+                                            <button class="admin-write btn-action @(confirmingConfig ? "btn-confirm" : null)" title="@(confirmingConfig ? "Click again to apply the App Configuration again and recreate the App's Services" : "Reload Configuration : apply the App Configuration again and recreate the App's Services (open pages using them may stop working until they reload)")" aria-label="@(confirmingConfig ? "Confirm Reload Configuration" : "Reload Configuration")" @onclick="() => ReloadConfigurationClicked(item, reloadConfigKey)"><span class="icon fa-solid fa-sharp @(confirmingConfig ? "fa-check" : "fa-sliders")"></span></button>
+                                        </span>
+                                    }
+                                    else if (IsLocal)
+                                    {
+                                        <a class="btn-action" href="@GetModulesLink()" title="Modules : see why the Module did not load" aria-label="Modules"><span class="icon fa-solid fa-sharp fa-cubes"></span></a>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="DisplayName" Title="App" MinWidth="220px">
+                                <Template Context="item">
+                                    <div class="app-cell">
+                                        <PackageIcon Src="@item.Icon" ImageClass="app-icon" PlaceholderClass="app-icon-placeholder" PlaceholderIcon="fa-solid fa-sharp fa-browser" />
+                                        <span class="app-text">
+                                            @if (item.IsLoaded)
+                                            {
+                                                <a class="app-name" href="@GetViewLink(item)" title="View the App's details">@item.DisplayName</a>
+                                            }
+                                            else
+                                            {
+                                                <a class="app-name" href="@GetConfigurationLink(item)" title="Edit the App Configuration">@item.DisplayName</a>
+                                            }
+                                            <span class="app-package">@item.PackageId</span>
+                                        </span>
+                                    </div>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Route" Title="Route" Width="200px">
+                                <Template Context="item">
+                                    @if (item.IsLoaded)
+                                    {
+                                        <a class="route-link" href="@GetNavigateLink(item)" target="_blank" title="Open the App in a new tab">@item.DisplayRoute<span class="icon fa-regular fa-sharp fa-arrow-up-right-from-square"></span></a>
+                                    }
+                                    else
+                                    {
+                                        <span class="route-text">@item.DisplayRoute</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="VersionSort" Title="Version" Width="130px">
+                                <Template Context="item">
+                                    <span class="version" title="@GetVersionTooltip(item)">@(item.PackageVersion ?? "-")</span>
+                                    @if (item.RequestedLatest)
+                                    {
+                                        <span class="version-tag" title="The Configuration uses the latest installed Version">latest</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="StatusSort" Title="Status" Width="210px">
+                                <Template Context="item">
+                                    @if (!item.IsLoaded)
+                                    {
+                                        <span class="status-badge not-loaded" title="@item.NotLoadedReason"><span class="status-dot"></span>Not Loaded</span>
+                                    }
+                                    else if (item.RetiredConnections > 0)
+                                    {
+                                        <a class="status-badge retired" href="@TrakHoundAppConnectionManager.GetLink(explorerService.SelectedInstanceId, item.Id)" title="@item.RetiredVersions — open App Connections"><span class="status-dot"></span>@Plural(item.RetiredConnections, "connection") on @item.RetiredVersions</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-badge loaded"><span class="status-dot"></span>Loaded</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="OpenConnections" Title="Open" Width="75px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number" title="Open connections (pages being viewed)">@item.OpenConnections.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalPageViews" Title="Views" Width="80px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    @if (item.IsLoaded)
+                                    {
+                                        <a class="number metrics-link" href="@GetMetricsLink(item)" title="Page views since the Instance started — open App Metrics">@item.TotalPageViews.ToString("N0")</a>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastViewed" Title="Last Viewed" Width="115px">
+                                <Template Context="item">
+                                    <span class="number">@FormatTime(item.LastViewed)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                }
+                else
+                {
+                    <div class="empty-message">No Apps match @(!string.IsNullOrWhiteSpace(searchText) ? $"\"{searchText}\"" : "the selected filter")</div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-browsers"></span>
+                    <span class="empty-title">No Apps</span>
+                    <span class="empty-description">No Apps are configured in this Instance</span>
+                    @if (IsLocal)
+                    {
+                        <a class="btn btn-light" href="@ConfigurationCategories.GetLink(TrakHoundAppConfiguration.ConfigurationCategory)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add an App</a>
+                    }
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+    <AppMessageDialog Visible="@(messageItem != null)" Description="@GetMessageDescription()" Send="SendMessage" Cancel="() => messageItem = null" />
+
+</div>
+
+@code {
+
+    private const string RetiredFilter = "Retired";
+    private const string NotLoadedFilter = "NotLoaded";
+    private const int _updateInterval = 5000;
+
+    private List<TableItem> _items = new List<TableItem>();
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private volatile bool disposed;
+
+    private string previousInstanceId;
+    private string searchText;
+    private string statusFilter;
+
+    private string confirmKey;
+    private DateTime confirmExpires;
+    private string actionMessage;
+    private bool actionFailed;
+    private bool actionPrompt;
+    private DateTime actionMessageExpires;
+    private TableItem messageItem;
+
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    // Connections, Configurations and Module failures are only known for this Instance (the Explorer may be showing another Instance)
+    private bool IsLocal => instance != null && explorerService.SelectedInstanceId == instance.Id;
+
+    private int LoadedCount => _items.Count(o => o.IsLoaded);
+
+    private int NotLoadedCount => _items.Count(o => !o.IsLoaded);
+
+    private int RetiredCount => _items.Sum(o => o.RetiredConnections);
+
+
+    class TableItem
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Route { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public string PackageHash { get; set; }
+        public DateTime? PackageBuildDate { get; set; }
+        public string Icon { get; set; }
+
+        /// <summary>
+        /// The Version requested by the Configuration (ex. "*" for the latest)
+        /// </summary>
+        public string RequestedVersion { get; set; }
+
+        public bool IsLoaded { get; set; }
+        public string NotLoadedReason { get; set; }
+
+        public int OpenConnections { get; set; }
+        public int RetiredConnections { get; set; }
+        public string RetiredVersions { get; set; }
+        public long TotalPageViews { get; set; }
+        public DateTime? LastViewed { get; set; }
+
+        public string DisplayName => !string.IsNullOrWhiteSpace(Name) ? Name : !string.IsNullOrWhiteSpace(PackageId) ? PackageId : Id;
+        public string DisplayRoute => "/" + (Route?.Trim('/') ?? "");
+        public bool RequestedLatest => string.IsNullOrEmpty(RequestedVersion) || RequestedVersion.Contains('*');
+        public Version VersionSort => PackageVersion?.ToVersion();
+        public int StatusSort => !IsLoaded ? 0 : RetiredConnections > 0 ? 1 : 2;
+    }
+
+
+    protected override void OnInitialized()
+    {
+        updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Apps..";
+            await InvokeAsync(StateHasChanged);
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Apps", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            try
+            {
+                await UpdateApps();
+            }
+            catch (Exception ex)
+            {
+                // Rebuilt on every Load (so Apps from another Instance, or removed Apps, never remain)
+                _items = new List<TableItem>();
+                ShowMessage($"Error Loading Apps : {ex.Message}", true);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Rebuild the list of Apps (Information, Configurations, Usage)
+    /// </summary>
+    private async Task UpdateApps()
+    {
+        var items = new List<TableItem>();
+
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null)
+        {
+            var apps = await client.Apps.GetInformation() ?? Enumerable.Empty<TrakHoundAppInformation>();
+            foreach (var app in apps.Where(o => o?.Id != null))
+            {
+                items.Add(new TableItem
+                {
+                    Id = app.Id,
+                    Name = app.Name,
+                    Route = app.Route,
+                    PackageId = app.PackageId,
+                    PackageVersion = app.PackageVersion,
+                    PackageHash = app.PackageHash,
+                    PackageBuildDate = app.PackageBuildDate > DateTime.MinValue ? app.PackageBuildDate : null,
+                    Icon = app.PackageIcon,
+                    IsLoaded = true
+                });
+            }
+
+            if (IsLocal)
+            {
+                // Configurations (the requested Version, and Apps that are configured but not loaded)
+                var configurations = instance.ConfigurationProfile?.Get<TrakHoundAppConfiguration>(TrakHoundAppConfiguration.ConfigurationCategory) ?? Enumerable.Empty<TrakHoundAppConfiguration>();
+                IEnumerable<TrakHoundModuleInformation> modules = null;
+
+                foreach (var configuration in configurations.Where(o => o?.Id != null))
+                {
+                    var item = items.FirstOrDefault(o => o.Id == configuration.Id);
+                    if (item != null)
+                    {
+                        item.RequestedVersion = configuration.PackageVersion;
+                    }
+                    else
+                    {
+                        modules ??= await client.Modules.GetModules() ?? Enumerable.Empty<TrakHoundModuleInformation>();
+
+                        items.Add(new TableItem
+                        {
+                            Id = configuration.Id,
+                            Name = configuration.Name,
+                            Route = configuration.Route,
+                            PackageId = configuration.PackageId,
+                            RequestedVersion = configuration.PackageVersion,
+                            IsLoaded = false,
+                            NotLoadedReason = GetNotLoadedReason(configuration, modules)
+                        });
+                    }
+                }
+            }
+
+            _items = items;
+            await UpdateUsage(client);
+        }
+        else
+        {
+            _items = items;
+        }
+    }
+
+    /// <summary>
+    /// Update the Connections and Page Views (polled)
+    /// </summary>
+    private async Task UpdateUsage(ITrakHoundClient client)
+    {
+        var items = _items;
+        if (client == null || items.IsNullOrEmpty()) return;
+
+        var metrics = (await client.Apps.GetMetrics())?.Where(o => o?.AppId != null).ToDictionary(o => o.AppId) ?? new Dictionary<string, TrakHoundAppMetrics>();
+        var connections = IsLocal ? connectionManager.GetConnections()?.Where(o => o.AppId != null).ToList() : null;
+
+        foreach (var item in items)
+        {
+            metrics.TryGetValue(item.Id, out var appMetrics);
+            item.TotalPageViews = appMetrics?.TotalPageViews ?? 0;
+            item.LastViewed = appMetrics?.LastViewed;
+
+            if (connections != null)
+            {
+                var appConnections = connections.Where(o => o.AppId == item.Id).ToList();
+                item.OpenConnections = appConnections.Count;
+
+                // Connections whose page was loaded before a newer Version was loaded
+                var retired = item.IsLoaded
+                    ? appConnections.Where(o => o.PackageVersion != null && (o.PackageVersion != item.PackageVersion || o.PackageHash != item.PackageHash)).ToList()
+                    : new List<TrakHoundAppConnection>();
+                item.RetiredConnections = retired.Count;
+                item.RetiredVersions = string.Join(", ", retired.Select(o => $"v{o.PackageVersion}").Distinct());
+            }
+            else
+            {
+                // Another Instance : the open Page Views are the closest to open connections
+                item.OpenConnections = appMetrics?.ActivePageViews ?? 0;
+            }
+        }
+    }
+
+    private static string GetNotLoadedReason(TrakHoundAppConfiguration configuration, IEnumerable<TrakHoundModuleInformation> modules)
+    {
+        if (string.IsNullOrEmpty(configuration.PackageId)) return "The Configuration has no Package";
+
+        var failure = modules?
+            .Where(o => !o.IsLoaded && o.PackageId == configuration.PackageId && !string.IsNullOrEmpty(o.Error))
+            .OrderByDescending(o => o.ErrorTime)
+            .FirstOrDefault();
+
+        if (failure != null)
+        {
+            var failedVersion = !string.IsNullOrEmpty(failure.PackageVersion) && !failure.PackageVersion.Contains('*') ? $" v{failure.PackageVersion}" : "";
+            return $"{configuration.PackageId}{failedVersion} failed to load : {failure.Error}";
+        }
+
+        var version = string.IsNullOrEmpty(configuration.PackageVersion) || configuration.PackageVersion.Contains('*') ? "" : $" v{configuration.PackageVersion}";
+        return $"The Package {configuration.PackageId}{version} is not installed, or the App could not be loaded";
+    }
+
+    private IEnumerable<TableItem> GetDisplayItems()
+    {
+        IEnumerable<TableItem> items = _items;
+
+        if (statusFilter == RetiredFilter) items = items.Where(o => o.RetiredConnections > 0);
+        else if (statusFilter == NotLoadedFilter) items = items.Where(o => !o.IsLoaded);
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.Trim();
+            items = items.Where(o =>
+                (o.DisplayName?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (o.DisplayRoute?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (o.PackageId?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        // Not Loaded first, then by Route
+        return items.OrderBy(o => o.IsLoaded).ThenBy(o => o.DisplayRoute).ToList();
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running (or the page is loading)
+        if (disposed || loading || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+
+            // Update the rows on the Renderer (so they don't change while rendering)
+            await InvokeAsync(async () =>
+            {
+                if (disposed) return;
+                await UpdateUsage(client);
+                ExpireMessages();
+                StateHasChanged();
+            });
+        }
+        catch
+        {
+            // The page may have been Disposed while updating
+        }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private void SearchChanged(ChangeEventArgs args)
+    {
+        searchText = args.Value?.ToString();
+    }
+
+    private void SetStatusFilter(string filter)
+    {
+        // Clicking the selected Tile again clears the Filter
+        statusFilter = statusFilter == filter ? null : filter;
+    }
+
+
+    private void IdentifyClicked(TableItem item)
+    {
+        var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+        if (appProvider != null && appProvider.IdentifyApp(item.Id))
+        {
+            ShowMessage(item.OpenConnections > 0
+                ? $"Showing the Code of each of the {Plural(item.OpenConnections, "open page")} of {item.DisplayName} for {TrakHoundAppIdentifyRequest.DefaultSeconds} seconds (listed on App Connections)"
+                : $"{item.DisplayName} has no open pages to Identify");
+        }
+        else
+        {
+            ShowMessage($"Could not Identify the pages of {item.DisplayName}", true);
+        }
+    }
+
+    private void NotifyClicked(TableItem item)
+    {
+        var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+        if (appProvider != null && appProvider.NotifyAppReload(item.Id))
+        {
+            ShowMessage($"Reload requested for {Plural(item.OpenConnections, "open page")} of {item.DisplayName}. Each reloads on its next page change or when idle");
+        }
+        else
+        {
+            ShowMessage($"Could not notify the pages of {item.DisplayName}", true);
+        }
+    }
+
+    private void MessageClicked(TableItem item)
+    {
+        messageItem = item;
+    }
+
+    private string GetMessageDescription()
+    {
+        if (messageItem == null) return null;
+
+        return messageItem.OpenConnections > 0
+            ? $"Show a Message on the {Plural(messageItem.OpenConnections, "open page")} of {messageItem.DisplayName}."
+            : $"{messageItem.DisplayName} has no open pages.";
+    }
+
+    private void SendMessage(TrakHoundAppMessageRequest request)
+    {
+        var item = messageItem;
+        messageItem = null;
+        if (item == null || request == null) return;
+
+        var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+        if (appProvider != null && appProvider.SendAppMessage(item.Id, request.Message, request.Severity, request.From, request.Seconds))
+        {
+            ShowMessage($"Message sent to {Plural(item.OpenConnections, "open page")} of {item.DisplayName}");
+        }
+        else
+        {
+            ShowMessage($"Could not send the Message to the pages of {item.DisplayName}", true);
+        }
+    }
+
+    private async Task ReloadPagesClicked(TableItem item, string key)
+    {
+        // Reloading loses any unsaved changes on the pages, so it takes a second click to confirm
+        if (!Confirm(key))
+        {
+            ShowPrompt($"Click the check mark again to reload the open pages of {item.DisplayName}{GetActivitySummary(item)} (unsaved changes on those pages are lost)");
+            return;
+        }
+
+        await RunAction(item, "Reloaded the open pages of", async client => await client.Apps.RefreshApp(item.Id));
+    }
+
+    private async Task ReloadConfigurationClicked(TableItem item, string key)
+    {
+        if (!Confirm(key))
+        {
+            ShowPrompt($"Click the check mark again to reload the Configuration of {item.DisplayName} (its Services are recreated)");
+            return;
+        }
+
+        await RunAction(item, "Reloaded the Configuration of", async client => await client.Apps.ReloadConfiguration(item.Id));
+    }
+
+    private async Task RunAction(TableItem item, string successMessage, Func<ITrakHoundClient, Task<bool>> action)
+    {
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+            if (client != null && await action(client))
+            {
+                ShowMessage($"{successMessage} {item.DisplayName}");
+            }
+            else
+            {
+                ShowMessage($"{successMessage.Replace("Reloaded", "Could not reload")} {item.DisplayName}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error : {item.DisplayName} : {ex.Message}", true);
+        }
+    }
+
+    /// <summary>
+    /// Returns true on the second click (within 5 seconds) of the same action
+    /// </summary>
+    private bool Confirm(string key)
+    {
+        if (confirmKey == key && DateTime.UtcNow < confirmExpires)
+        {
+            confirmKey = null;
+            return true;
+        }
+
+        confirmKey = key;
+        confirmExpires = DateTime.UtcNow.AddSeconds(5);
+        return false;
+    }
+
+    private void ShowMessage(string message, bool failed = false)
+    {
+        actionMessage = message;
+        actionFailed = failed;
+        actionPrompt = false;
+        actionMessageExpires = DateTime.UtcNow.AddSeconds(8);
+    }
+
+    /// <summary>
+    /// Ask for the confirming click (shown for as long as the confirmation is waiting)
+    /// </summary>
+    private void ShowPrompt(string message)
+    {
+        actionMessage = message;
+        actionFailed = false;
+        actionPrompt = true;
+        actionMessageExpires = confirmExpires;
+    }
+
+    /// <summary>
+    /// How the App's open pages are being used (ex. " : 3 idle, 1 in use"). Only known for this Instance
+    /// </summary>
+    private string GetActivitySummary(TableItem item)
+    {
+        if (!IsLocal) return null;
+
+        var connections = connectionManager.GetConnections()?.Where(o => o.AppId == item.Id).ToList();
+        var summary = TrakHoundAppConnectionActivity.Summarize(connections, DateTime.UtcNow);
+        return summary != null ? $" : {summary}" : null;
+    }
+
+    private void ExpireMessages()
+    {
+        var now = DateTime.UtcNow;
+        if (actionMessage != null && now > actionMessageExpires) actionMessage = null;
+        if (confirmKey != null && now > confirmExpires) confirmKey = null;
+    }
+
+
+    private string GetViewLink(TableItem item) => Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "apps", item.Id);
+
+    private string GetConfigurationLink(TableItem item) => ConfigurationCategories.GetLink(TrakHoundAppConfiguration.ConfigurationCategory, item.Id);
+
+    private string GetMetricsLink(TableItem item) => $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/apps?appId={Uri.EscapeDataString(item.Id)}";
+
+    private string GetAccessLogLink(TableItem item) => TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId, item.PackageId);
+
+
+    private string GetModulesLink() => $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/modules";
+
+    /// <summary>
+    /// The App's URL (on the selected Instance's server when it is another Instance)
+    /// </summary>
+    private string GetNavigateLink(TableItem item)
+    {
+        var route = item.Route?.Trim('/') ?? "";
+
+        if (!IsLocal)
+        {
+            var serverUrl = explorerService.GetServerUrl(explorerService.SelectedInstanceId);
+            if (!string.IsNullOrEmpty(serverUrl)) return Url.Combine(serverUrl, route);
+        }
+
+        // On the HTTP Port when the Admin Interface has its own Port
+        if (TrakHoundAdminPort.IsEnabled) return TrakHoundAdminPort.GetHttpLink(navigationManager.BaseUri, route);
+
+        // Relative to the base path (a root App is "./", since an empty link would point to this page)
+        return !string.IsNullOrEmpty(route) ? route : "./";
+    }
+
+    private static string GetVersionTooltip(TableItem item)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(item.RequestedVersion)) parts.Add($"Configured Version : {item.RequestedVersion}");
+        if (item.PackageBuildDate.HasValue) parts.Add($"Built {item.PackageBuildDate.Value.ToLocalTime():yyyy-MM-dd HH:mm}");
+        return string.Join("\n", parts);
+    }
+
+    private static string FormatTime(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private static string Plural(int count, string label) => $"{count:N0} {label}{(count == 1 ? "" : "s")}";
+}

@@ -1,0 +1,154 @@
+@page "/"
+@inherits TrakHoundComponentBase
+@layout Layout
+@using System.Threading
+@using TrakHound.Example
+
+<PageTitle>TrakHound Example</PageTitle>
+
+<div class="example-page">
+
+    <div class="example-header">
+        <h3>Simulated Sensor</h3>
+        <span class="example-subtitle">Read by TrakHound.Example.Worker and served by TrakHound.Example.Api at <code>@_apiRoute</code></span>
+    </div>
+
+    @if (_error != null)
+    {
+        <div class="example-error">@_error</div>
+    }
+
+    <div class="example-cards">
+        <div class="example-card">
+            <div class="example-card-label">Latest Reading</div>
+            <div class="example-card-value">@(_latest != null ? _latest.Value.ToString("0.00") : "--")</div>
+            <div class="example-card-detail">@(_latest != null ? _latest.Timestamp.ToLocalTime().ToString("G") : "Waiting for the Worker..")</div>
+        </div>
+
+        <div class="example-card">
+            <div class="example-card-label">Summary (last @SummaryMinutes minutes)</div>
+            @if (_summary != null)
+            {
+                <div class="example-summary">
+                    <span>Count</span><span>@_summary.GetValueOrDefault("count")</span>
+                    <span>Minimum</span><span>@_summary.GetValueOrDefault("minimum")</span>
+                    <span>Maximum</span><span>@_summary.GetValueOrDefault("maximum")</span>
+                    <span>Average</span><span>@_summary.GetValueOrDefault("average")</span>
+                </div>
+            }
+            else
+            {
+                <div class="example-card-detail">Runs TrakHound.Example.Function through the Api</div>
+            }
+            <RadzenButton Text="Summarize" Icon="functions" Size="ButtonSize.Small" IsBusy="@_summarizing" Click="Summarize" />
+        </div>
+    </div>
+
+    <h4>Recent Readings</h4>
+    <table class="example-table">
+        <thead>
+            <tr><th>Timestamp</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+            @if (_readings != null)
+            {
+                foreach (var reading in _readings)
+                {
+                    <tr><td>@reading.Timestamp.ToLocalTime().ToString("G")</td><td>@reading.Value.ToString("0.00")</td></tr>
+                }
+            }
+        </tbody>
+    </table>
+
+</div>
+
+@code {
+
+    private const string DefaultApiRoute = "example/api";
+    private const int SummaryMinutes = 10;
+    private static readonly TimeSpan _refreshInterval = TimeSpan.FromSeconds(2);
+
+    private readonly CancellationTokenSource _stop = new CancellationTokenSource();
+
+    private string _apiRoute;
+    private SensorReading _latest;
+    private IEnumerable<SensorReading> _readings;
+    private Dictionary<string, string> _summary;
+    private bool _summarizing;
+    private string _error;
+
+
+    protected override void OnInitialized()
+    {
+        // The "apiRoute" Parameter in the App's Configuration, for when the Api was added at a different Route
+        _apiRoute = GetParameter("apiRoute");
+        if (string.IsNullOrEmpty(_apiRoute)) _apiRoute = DefaultApiRoute;
+
+        _ = RefreshLoop(_stop.Token);
+    }
+
+    public override void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+        base.Dispose();
+    }
+
+    private async Task RefreshLoop(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(_refreshInterval);
+
+        try
+        {
+            do
+            {
+                await Load();
+                await InvokeAsync(StateHasChanged);
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            // The App calls the Api through the Client, the same way it would call any Api on the Instance
+            _readings = await Client.Api.GetJson<List<SensorReading>>(Url.Combine(_apiRoute, "readings"), new Dictionary<string, string> { ["take"] = "20" });
+            _latest = _readings?.FirstOrDefault();
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to read from {_apiRoute} : {ex.Message}";
+        }
+    }
+
+    private async Task Summarize()
+    {
+        _summarizing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await Client.Api.Get(Url.Combine(_apiRoute, "summary"), new Dictionary<string, string> { ["minutes"] = SummaryMinutes.ToString() });
+            if (response.Success)
+            {
+                _summary = response.GetJsonContentObject<Dictionary<string, string>>();
+                _error = null;
+            }
+            else
+            {
+                _error = response.GetContentUtf8String() ?? $"Summary returned {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+
+        _summarizing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+}

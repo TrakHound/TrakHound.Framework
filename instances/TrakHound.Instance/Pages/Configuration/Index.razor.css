@@ -1,0 +1,135 @@
+.overview-page {
+    height: 100%;
+    overflow: auto;
+    padding: 25px 30px 60px;
+}
+
+.overview-group {
+    max-width: 1300px;
+    margin-bottom: 28px;
+}
+
+.group-title {
+    display: block;
+    margin-bottom: 10px;
+    font-size: var(--fontSizeSm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--textMild);
+}
+
+.category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    max-width: 1300px;
+}
+
+.category-card {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 20px;
+    color: var(--textDark);
+    text-decoration: none;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 6px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+    .category-card:hover {
+        color: var(--textDark);
+        text-decoration: none;
+        background: var(--panelItemBackground);
+        border-color: var(--accentLight);
+    }
+
+.card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.card-icon {
+    width: 26px;
+    margin-top: 2px;
+    font-size: 20px;
+    text-align: center;
+    color: var(--accentLight);
+}
+
+.card-title .title {
+    display: block;
+    font-size: var(--fontSizeMd, 15px);
+    font-weight: bold;
+}
+
+.card-title .description {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.card-stats {
+    display: flex;
+    gap: 30px;
+    padding-top: 12px;
+    border-top: 1px solid var(--borderColorLight);
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: var(--fontSizeLg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.card-alerts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.alert-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px;
+    font-size: var(--fontSizeSm);
+    border: 1px solid var(--borderColor);
+    border-radius: 11px;
+}
+
+    .alert-chip.error {
+        border-color: var(--bs-danger, #dc3545);
+    }
+
+        .alert-chip.error .icon {
+            color: var(--bs-danger, #dc3545);
+        }
+
+    .alert-chip.update {
+        border-color: var(--accentLight);
+    }
+
+        .alert-chip.update .icon {
+            color: var(--accentLight);
+        }
+
+@media (max-width: 700px) {
+    .overview-page {
+        padding: 16px;
+    }
+}

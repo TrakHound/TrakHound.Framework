@@ -1,0 +1,526 @@
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+@using TrakHound.Services.MessageQueues
+
+<div class="metrics-panel" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="metrics-toolbar">
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <span class="metrics-updated">
+            Updated every @((_updateInterval / 1000).ToString("0")) s@(lastUpdated.HasValue ? $" · last {lastUpdated.Value.ToLocalTime():HH:mm:ss}" : "")
+        </span>
+
+        <div class="filter">
+            <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" placeholder="Filter Queues" aria-label="Filter Queues" value="@filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+            @if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            }
+        </div>
+    </div>
+
+    <div class="metrics-content">
+
+        @if (loading && current == null)
+        {
+            <div class="loading-panel">
+                <Loading Message="Loading Metrics.." />
+            </div>
+        }
+        else if (notSupported)
+        {
+            <div class="empty-panel">
+                <span class="icon fa-solid fa-sharp fa-chart-line"></span>
+                <span class="empty-title">Metrics Not Supported</span>
+                <span class="empty-description">The Message Queue Service doesn't provide Metrics</span>
+            </div>
+        }
+        else if (current == null)
+        {
+            <div class="empty-panel error">
+                <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                <span class="empty-title">Metrics could not be Loaded</span>
+                <span class="empty-description">@errorMessage</span>
+            </div>
+        }
+        else
+        {
+            var selected = GetSelectedSample();
+            var samples = GetSamples(selectedQueue);
+            var hasRates = selected?.HasRates ?? false;
+
+            @if (errorMessage != null)
+            {
+                <div class="metrics-note error">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Last update failed : @errorMessage
+                </div>
+            }
+
+            <div class="detail-header">
+                <span class="detail-name">@(selectedQueue ?? "All Queues")</span>
+                @if (selectedQueue != null)
+                {
+                    <span class="detail-type">Queue</span>
+                    <button class="btn btn-sm btn-light" @onclick="() => SelectQueue(null)"><span class="icon fa-solid fa-sharp fa-layer-group"></span>All Queues</button>
+                    <button class="btn btn-sm btn-light" @onclick="() => ViewMessages.InvokeAsync(selectedQueue)"><span class="icon fa-solid fa-sharp fa-envelope"></span>View Messages</button>
+                }
+                else
+                {
+                    <span class="detail-state">@(current.Count == 1 ? "1 Queue" : $"{current.Count:N0} Queues")</span>
+                }
+            </div>
+
+            @if (selected != null)
+            {
+                @* Current values (also the text equivalent of each chart Series) *@
+                <div class="stat-tiles">
+                    <div class="stat-tile">
+                        <span class="stat-label">Queued Messages</span>
+                        <span class="stat-value">@selected.Messages.ToString("N0")</span>
+                        <span class="stat-detail">@selected.Consumers.ToString("N0") @(selected.Consumers == 1 ? "Consumer" : "Consumers")</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-1"></span>Ready</span>
+                        <span class="stat-value">@selected.Ready.ToString("N0")</span>
+                        <span class="stat-detail">waiting to be delivered</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-2"></span>Unacknowledged</span>
+                        <span class="stat-value">@selected.Unacknowledged.ToString("N0")</span>
+                        <span class="stat-detail">delivered, not yet acknowledged</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-3"></span>Publish</span>
+                        <span class="stat-value">@FormatNullableRate(selected.PublishRate)<span class="stat-unit">msg/s</span></span>
+                        <span class="stat-detail">@FormatTotal(selected.PublishedTotal, "published")</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-4"></span>Deliver</span>
+                        <span class="stat-value">@FormatNullableRate(selected.DeliverRate)<span class="stat-unit">msg/s</span></span>
+                        <span class="stat-detail">@FormatTotal(selected.DeliveredTotal, "delivered")</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-5"></span>Acknowledge</span>
+                        <span class="stat-value">@FormatNullableRate(selected.AcknowledgeRate)<span class="stat-unit">msg/s</span></span>
+                        <span class="stat-detail">@FormatTotal(selected.AcknowledgedTotal, "acknowledged")</span>
+                    </div>
+                </div>
+
+                <div class="chart-grid">
+                    <MetricsChart TItem="QueueMetricsSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp" Title="Queued Messages"
+                                  Subtitle="@($"messages · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@countSeries"
+                                  ValueFormatter="@FormatCount" />
+
+                    @if (hasRates)
+                    {
+                        <MetricsChart TItem="QueueMetricsSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp" Title="Message Rates"
+                                      Subtitle="@($"messages/s · last {_windowText}")"
+                                      Samples="@samples"
+                                      Series="@rateSeries"
+                                      ValueFormatter="@FormatRate" />
+                    }
+                </div>
+
+                @if (!hasRates)
+                {
+                    <div class="metrics-note">
+                        <span class="icon fa-solid fa-sharp fa-circle-info"></span>This Service doesn't report Message rates (for RabbitMQ, the management plugin is required). Only the Ready count of known Queues is shown.
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="metrics-note">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>The @selectedQueue Queue was not found
+                </div>
+            }
+
+            var items = GetItems();
+
+            <div class="table-header">
+                <span class="table-title">Queues</span>
+            </div>
+
+            @if (!items.IsNullOrEmpty())
+            {
+                <div class="table-panel">
+                    <RadzenDataGrid Data="@items" TItem="TrakHoundMessageQueueMetrics" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true"
+                                    RowClick="@RowClicked" RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="Queue" Title="Queue" MinWidth="200px">
+                                <Template Context="item">
+                                    <span class="queue" title="@item.Queue">@item.Queue</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="MessageCount" Title="Messages" Width="110px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.MessageCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="ReadyCount" Title="Ready" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.ReadyCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="UnacknowledgedCount" Title="Unacked" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.UnacknowledgedCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="ConsumerCount" Title="Consumers" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.ConsumerCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="PublishRate" Title="Publish" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatNullableRate(item.PublishRate)/s</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="DeliverRate" Title="Deliver" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatNullableRate(item.DeliverRate)/s</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" Property="AcknowledgeRate" Title="Ack" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatNullableRate(item.AcknowledgeRate)/s</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundMessageQueueMetrics" CssClass="buttons actions-cell" Width="110px" Sortable="false">
+                                <Template Context="item">
+                                    <button class="btn btn-sm btn-link" title="View the Messages in @item.Queue" @onclick="() => ViewMessages.InvokeAsync(item.Queue)" @onclick:stopPropagation="true"><span class="icon fa-solid fa-sharp fa-envelope"></span>Messages</button>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-inbox"></span>
+                    @if (current.Count > 0)
+                    {
+                        <span class="empty-title">No matching Queues</span>
+                        <span class="empty-description">No Queues match "@filter?.Trim()"</span>
+                    }
+                    else
+                    {
+                        <span class="empty-title">No Queues</span>
+                        <span class="empty-description">Publish a Message to create a Queue</span>
+                    }
+                </div>
+            }
+        }
+
+    </div>
+
+</div>
+
+@code {
+
+    // Matches the RabbitMQ management plugin's statistics interval (rates change every 5 seconds)
+    private const int _updateInterval = 5000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(10);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+    private const string _totalKey = "\0total";
+
+    private readonly Dictionary<string, Queue<QueueMetricsSample>> _history = new Dictionary<string, Queue<QueueMetricsSample>>();
+    private readonly object _lock = new object();
+
+    private List<TrakHoundMessageQueueMetrics> current;
+    private System.Threading.Timer updateTimer;
+    private MetricsChartSeries[] countSeries;
+    private MetricsChartSeries[] rateSeries;
+    private DateTime? lastUpdated;
+    private string previousKey;
+    private string selectedQueue;
+    private string filter;
+    private string errorMessage;
+    private bool notSupported;
+    private bool loading;
+    private int updating;
+    private bool disposed;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    /// <summary>
+    /// The Queue to select (ex. the Queue entered on the Messages view)
+    /// </summary>
+    [Parameter]
+    public string Queue { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ViewMessages { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        var key = $"{InstanceId}:{ConfigurationId}";
+        if (key != previousKey)
+        {
+            previousKey = key;
+            selectedQueue = !string.IsNullOrWhiteSpace(Queue) ? Queue.Trim() : null;
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        updateTimer?.Dispose();
+        lock (_lock) _history.Clear();
+        current = null;
+        errorMessage = null;
+        notSupported = false;
+        lastUpdated = null;
+
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        await UpdateMetrics();
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+
+        // Services that don't provide Metrics aren't asked again
+        if (!disposed && !notSupported)
+        {
+            updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+        }
+    }
+
+    private async Task UpdateMetrics()
+    {
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null)
+        {
+            errorMessage = $"Instance {InstanceId} is not available";
+            return;
+        }
+
+        try
+        {
+            var response = await client.Services.MessageQueues.GetMetrics(routerId: ConfigurationId);
+            if (response.Success)
+            {
+                var metrics = response.Result?.Where(o => !string.IsNullOrEmpty(o?.Queue)).ToList() ?? new List<TrakHoundMessageQueueMetrics>();
+                var now = DateTime.UtcNow;
+
+                lock (_lock)
+                {
+                    AddSample(_totalKey, QueueMetricsSample.Total(metrics, now), now);
+
+                    var queueNames = new HashSet<string>();
+                    foreach (var queueMetrics in metrics)
+                    {
+                        queueNames.Add(queueMetrics.Queue);
+                        AddSample(queueMetrics.Queue, QueueMetricsSample.Create(queueMetrics, now), now);
+                    }
+
+                    // Drop history for Queues that no longer exist
+                    foreach (var queueName in _history.Keys.Where(o => o != _totalKey && !queueNames.Contains(o)).ToList())
+                    {
+                        _history.Remove(queueName);
+                    }
+                }
+
+                current = metrics;
+                lastUpdated = now;
+                errorMessage = null;
+            }
+            else if (response.StatusCode == 405 && current == null)
+            {
+                // Route Not Configured = no Service on the Router provides Metrics
+                notSupported = true;
+            }
+            else
+            {
+                errorMessage = Index.GetErrorMessage(response.StatusCode, response.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void AddSample(string key, QueueMetricsSample sample, DateTime now)
+    {
+        if (!_history.TryGetValue(key, out var samples))
+        {
+            samples = new Queue<QueueMetricsSample>();
+            _history.Add(key, samples);
+        }
+
+        samples.Enqueue(sample);
+        while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (disposed || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            await UpdateMetrics();
+            if (!disposed) await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load();
+    }
+
+    private QueueMetricsSample GetSelectedSample()
+    {
+        lock (_lock)
+        {
+            var key = selectedQueue ?? _totalKey;
+            return _history.TryGetValue(key, out var samples) && samples.Count > 0 ? samples.Last() : null;
+        }
+    }
+
+    private IEnumerable<QueueMetricsSample> GetSamples(string queue)
+    {
+        lock (_lock)
+        {
+            return _history.TryGetValue(queue ?? _totalKey, out var samples) ? samples.ToArray() : Array.Empty<QueueMetricsSample>();
+        }
+    }
+
+    private List<TrakHoundMessageQueueMetrics> GetItems()
+    {
+        var items = current ?? new List<TrakHoundMessageQueueMetrics>();
+        if (string.IsNullOrWhiteSpace(filter)) return items;
+
+        var value = filter.Trim();
+        return items.Where(o => o.Queue.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private void SelectQueue(string queue)
+    {
+        selectedQueue = queue;
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TrakHoundMessageQueueMetrics> args)
+    {
+        // Click the selected Queue again to return to All Queues
+        selectedQueue = args.Data?.Queue != selectedQueue ? args.Data?.Queue : null;
+    }
+
+    private void RowRender(RowRenderEventArgs<TrakHoundMessageQueueMetrics> args)
+    {
+        if (args.Data?.Queue == selectedQueue)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        filter = null;
+    }
+
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private static double GetSampleValue(QueueMetricsSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(QueueMetricsSample sample) => sample.Timestamp;
+
+    private void UpdateSeries()
+    {
+        // Each Series keeps its color slot across the tiles and charts
+        var colors = MetricsChartColors.Get(IsDark);
+        countSeries = new[]
+        {
+            new MetricsChartSeries("Ready", nameof(QueueMetricsSample.Ready), colors[0]),
+            new MetricsChartSeries("Unacknowledged", nameof(QueueMetricsSample.Unacknowledged), colors[1])
+        };
+        rateSeries = new[]
+        {
+            new MetricsChartSeries("Publish", nameof(QueueMetricsSample.Publish), colors[2]),
+            new MetricsChartSeries("Deliver", nameof(QueueMetricsSample.Deliver), colors[3]),
+            new MetricsChartSeries("Acknowledge", nameof(QueueMetricsSample.Acknowledge), colors[4])
+        };
+    }
+
+
+    private static string FormatCount(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        return value.ToString("0");
+    }
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatNullableRate(double? value) => value.HasValue ? FormatRate(value.Value) : "-";
+
+    private static string FormatTotal(long? total, string text) => total.HasValue ? $"{total.Value:N0} {text}" : "rate not reported";
+
+}

@@ -1,0 +1,486 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/http"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@inject IJSRuntime javascript
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Http
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="HTTP Metrics - Diagnostics" />
+
+<div class="http-metrics-page" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-globe"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">HTTP Metrics</span>
+                <span class="header-description">Request rate, errors, response time and data for every HTTP Request received by the Instance · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <a class="btn btn-light" href="@GetRequestsLink()"><span class="icon fa-solid fa-sharp fa-list"></span>Recent Requests</a>
+
+        <MetricsDisabledNotice Area="Http" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (metrics != null)
+            {
+                var samples = GetSamples();
+
+                @* Current values (also the text equivalent of each chart Series) *@
+                <div class="stat-tiles">
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-1"></span>Requests</span>
+                        <span class="stat-value">@FormatRate(metrics.RequestRate)<span class="stat-unit">req/s</span></span>
+                        <span class="stat-detail">@metrics.TotalRequestCount.ToString("N0") total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-2"></span>Errors</span>
+                        <span class="stat-value">@FormatRate(metrics.ErrorRate)<span class="stat-unit">err/s</span></span>
+                        <span class="stat-detail" title="Status ≥ 400 (@metrics.TotalServerErrorCount.ToString("N0") were ≥ 500)">@metrics.TotalErrorCount.ToString("N0") total (@GetErrorPercent()) · @metrics.TotalServerErrorCount.ToString("N0") server</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-3"></span>Avg Response</span>
+                        <span class="stat-value">@(metrics.RequestRate > 0 ? FormatDuration(metrics.AverageDuration) : "-")</span>
+                        <span class="stat-detail">last @_metricsWindowText</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-4"></span>Max Response</span>
+                        <span class="stat-value">@(metrics.RequestRate > 0 ? FormatDuration(metrics.MaxDuration) : "-")</span>
+                        <span class="stat-detail">last @_metricsWindowText</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-5"></span>Received</span>
+                        <span class="stat-value">@FormatBytes(metrics.RequestByteRate)<span class="stat-unit">/s</span></span>
+                        <span class="stat-detail">@FormatBytes(metrics.TotalRequestBytes) total · request bodies</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-6"></span>Sent</span>
+                        <span class="stat-value">@FormatBytes(metrics.ResponseByteRate)<span class="stat-unit">/s</span></span>
+                        <span class="stat-detail">@FormatBytes(metrics.TotalResponseBytes) total · response bodies</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label" title="Requests being processed now (including open WebSocket connections)">Active Requests</span>
+                        <span class="stat-value">@metrics.ActiveRequestCount.ToString("N0")</span>
+                        <span class="stat-detail">peak @metrics.PeakActiveRequestCount.ToString("N0")</span>
+                    </div>
+                </div>
+
+                <div class="chart-grid">
+                    <MetricsChart TItem="HttpSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Requests"
+                                  Subtitle="@($"per second · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@requestSeries"
+                                  ValueFormatter="@FormatRate" />
+
+                    <MetricsChart TItem="HttpSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Response Time"
+                                  Subtitle="@($"milliseconds · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@durationSeries"
+                                  ValueFormatter="@FormatDuration" />
+
+                    <MetricsChart TItem="HttpSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Data"
+                                  Subtitle="@($"bytes/s · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@dataSeries"
+                                  ValueFormatter="@FormatByteRate" />
+                </div>
+
+                @if (!metrics.StatusCodes.IsNullOrEmpty())
+                {
+                    <div class="section-title">Status Codes <span class="section-subtitle">since the Instance started</span></div>
+                    <div class="status-codes">
+                        @foreach (var statusCode in metrics.StatusCodes)
+                        {
+                            <span class="status-code @GetStatusClass(statusCode.StatusCode)"><span class="status-code-value">@statusCode.StatusCode</span>@statusCode.Count.ToString("N0")</span>
+                        }
+                    </div>
+                }
+
+                <div class="section-title">Areas <span class="section-subtitle">what the Requests were for · response times don't include upgraded (WebSocket) requests</span></div>
+                <div class="table-panel">
+                    @GroupTable(metrics.Areas, "Area", false)
+                </div>
+
+                <div class="section-title" id="endpoints">Endpoints <span class="section-subtitle">by Method and Route</span>
+                    @if (!string.IsNullOrEmpty(Route))
+                    {
+                        <a class="endpoint-filter" href="@GetMetricsLink()" title="Show all Endpoints"><span class="endpoint-filter-text">@Method @Route</span><span class="icon fa-solid fa-sharp fa-xmark"></span></a>
+                    }
+                </div>
+                <div class="table-panel endpoints-panel">
+                    @GroupTable(GetEndpoints(), "Route", true)
+                </div>
+
+                <div class="section-title">Clients</div>
+                <div class="table-panel">
+                    @GroupTable(metrics.Clients, "Client", false)
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-globe"></span>
+                    <span class="empty-title">No HTTP Metrics</span>
+                    <span class="empty-description">HTTP Metrics are not available for this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+
+    private readonly Queue<HttpSample> _history = new Queue<HttpSample>();
+    private readonly object _lock = new object();
+
+    private TrakHoundHttpMetrics metrics;
+    private string _metricsWindowText = "10 sec";
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private volatile bool disposed;
+
+    // Each Series has its own color slot across all charts on the page
+    private MetricsChartSeries[] requestSeries;
+    private MetricsChartSeries[] durationSeries;
+    private MetricsChartSeries[] dataSeries;
+
+    private string previousInstanceId;
+    private string scrolledRoute;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Only show this Endpoint's Method (with Route), ex. from a Request on the HTTP Requests page
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "method")]
+    public string Method { get; set; }
+
+    /// <summary>
+    /// Only show the Endpoints with this Route
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "route")]
+    public string Route { get; set; }
+
+
+    /// <summary>
+    /// A table of Request Groups (Areas, Endpoints or Clients)
+    /// </summary>
+    private RenderFragment GroupTable(IEnumerable<TrakHoundHttpRequestGroupMetrics> groups, string nameTitle, bool endpoints) =>
+        @<RadzenDataGrid Data="@groups"
+                        TItem="TrakHoundHttpRequestGroupMetrics"
+                        Density="Density.Compact"
+                        AllowSorting="true"
+                        AllowFiltering="@endpoints"
+                        FilterMode="FilterMode.Simple"
+                        FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                        AllowPaging="@endpoints"
+                        PageSize="20"
+                        AllowColumnResize="true">
+            <Columns>
+                @if (endpoints)
+                {
+                    <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="Area" Title="Area" Width="110px" />
+                    <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="Method" Title="Method" Width="90px" />
+                }
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="Name" Title="@nameTitle" MinWidth="160px">
+                    <Template Context="group">
+                        <span class="name" title="@group.Name">@group.Name</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="TotalRequestCount" Title="Requests" Width="100px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number">@group.TotalRequestCount.ToString("N0")</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="TotalErrorCount" Title="Errors" Width="85px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number @(group.TotalErrorCount > 0 ? "has-errors" : null)">@group.TotalErrorCount.ToString("N0")</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="AverageDuration" Title="Avg Time" Width="95px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number">@(group.AverageDuration > 0 ? FormatDuration(group.AverageDuration) : "-")</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="MaxDuration" Title="Max Time" Width="95px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number">@(group.MaxDuration > 0 ? FormatDuration(group.MaxDuration) : "-")</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="TotalRequestBytes" Title="Received" Width="95px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number">@FormatBytes(group.TotalRequestBytes)</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="TotalResponseBytes" Title="Sent" Width="95px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number">@FormatBytes(group.TotalResponseBytes)</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="LastStatusCode" Title="Last Status" Width="90px" TextAlign="TextAlign.Right" Filterable="false">
+                    <Template Context="group">
+                        <span class="number @GetStatusClass(group.LastStatusCode)">@(group.LastStatusCode > 0 ? group.LastStatusCode.ToString() : "-")</span>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="TrakHoundHttpRequestGroupMetrics" Property="LastRequested" Title="Last Request" Width="120px" Filterable="false">
+                    <Template Context="group">
+                        <span class="number">@FormatTime(group.LastRequested)</span>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>;
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Opened for one Endpoint (ex. from the HTTP Requests page): show it without scrolling past the charts
+        if (!string.IsNullOrEmpty(Route) && Route != scrolledRoute && metrics != null && !loading)
+        {
+            scrolledRoute = Route;
+            try { await javascript.InvokeVoidAsync("JsFunctions.scrollToElement", "endpoints"); } catch { }
+        }
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading HTTP Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            lock (_lock) _history.Clear();
+            metrics = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("HTTP", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var updatedMetrics = await client.HttpRequests.GetMetrics();
+        var now = DateTime.UtcNow;
+
+        if (updatedMetrics?.Window > 0) _metricsWindowText = $"{updatedMetrics.Window} sec";
+
+        lock (_lock)
+        {
+            _history.Enqueue(HttpSample.Create(updatedMetrics, now));
+            while (_history.Count > 0 && now - _history.Peek().Timestamp > _window) _history.Dequeue();
+        }
+
+        metrics = updatedMetrics;
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (disposed || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                if (!disposed) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private IEnumerable<HttpSample> GetSamples()
+    {
+        lock (_lock) return _history.ToArray();
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private IEnumerable<TrakHoundHttpRequestGroupMetrics> GetEndpoints()
+    {
+        var endpoints = metrics?.Endpoints;
+        if (endpoints == null || string.IsNullOrEmpty(Route)) return endpoints;
+
+        return endpoints.Where(o => o.Name == Route && (string.IsNullOrEmpty(Method) || string.Equals(o.Method, Method, StringComparison.OrdinalIgnoreCase))).ToList();
+    }
+
+    private string GetMetricsLink() => $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/http";
+
+    private string GetRequestsLink() => $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/connections/http/requests";
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        requestSeries = new[]
+        {
+            new MetricsChartSeries("Requests", nameof(HttpSample.RequestRate), colors[0]),
+            new MetricsChartSeries("Errors", nameof(HttpSample.ErrorRate), colors[1])
+        };
+        durationSeries = new[]
+        {
+            new MetricsChartSeries("Average", nameof(HttpSample.AverageDuration), colors[2]),
+            new MetricsChartSeries("Max", nameof(HttpSample.MaxDuration), colors[3])
+        };
+        dataSeries = new[]
+        {
+            new MetricsChartSeries("Received", nameof(HttpSample.RequestByteRate), colors[4]),
+            new MetricsChartSeries("Sent", nameof(HttpSample.ResponseByteRate), colors[5])
+        };
+    }
+
+    private static double GetSampleValue(HttpSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(HttpSample sample) => sample.Timestamp;
+
+
+    private string GetErrorPercent()
+    {
+        if (metrics == null || metrics.TotalRequestCount < 1) return "0%";
+        return $"{(double)metrics.TotalErrorCount / metrics.TotalRequestCount:0.#%}";
+    }
+
+    private static string GetStatusClass(int statusCode)
+    {
+        if (statusCode >= 500) return "status-server-error";
+        if (statusCode >= 400) return "status-error";
+        if (statusCode >= 300) return "status-redirect";
+        if (statusCode >= 100) return "status-success";
+        return null;
+    }
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.##} s";
+        if (milliseconds >= 100) return $"{milliseconds:0} ms";
+        if (milliseconds >= 1) return $"{milliseconds:0.#} ms";
+        return $"{milliseconds:0.##} ms";
+    }
+
+    private static string FormatBytes(double value)
+    {
+        if (value >= 1024 * 1024 * 1024) return $"{value / (1024 * 1024 * 1024):0.#} GB";
+        if (value >= 1024 * 1024) return $"{value / (1024 * 1024):0.#} MB";
+        if (value >= 1024) return $"{value / 1024:0.#} KB";
+        return value >= 10 ? $"{value:0} B" : $"{value:0.#} B";
+    }
+
+    private static string FormatByteRate(double value) => $"{FormatBytes(value)}/s";
+
+    private static string FormatTime(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

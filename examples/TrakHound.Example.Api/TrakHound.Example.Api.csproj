@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- The Reading model, shared with the other examples -->
+		<Compile Include="..\TrakHound.Example.Worker\SensorReading.cs" Link="SensorReading.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\debug\TrakHound.Debug.AspNetCore\TrakHound.Debug.AspNetCore.csproj" />
+	</ItemGroup>
+
+	<!-- Settings for the debug host (Program.cs). th packages dotnet removes this when it builds the package -->
+	<ItemGroup Label="files-trakhound-debug">
+		<Content Update="trakhound.debug.json" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Remove="trakhound.package.json" />
+	  <Content Remove="trakhound.package.publish.json" />
+	  <None Include="trakhound.package.json" />
+	  <None Include="trakhound.package.publish.json" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="README.md" CopyToOutputDirectory="Always" />
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,321 @@
+.metrics-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.metrics-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 10px;
+}
+
+.metrics-updated {
+    margin-left: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+/* Filter */
+.filter {
+    position: relative;
+    flex: 0 1 280px;
+    min-width: 180px;
+    margin-left: auto;
+}
+
+    .filter .filter-icon {
+        position: absolute;
+        left: 9px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        pointer-events: none;
+    }
+
+    .filter input {
+        width: 100%;
+        height: 30px;
+        padding: 2px 28px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        background: var(--inputBackground);
+        border: 1px solid var(--borderColorLight);
+        border-radius: 3px;
+        outline: none;
+    }
+
+        .filter input:focus {
+            border-color: var(--accent);
+        }
+
+    .filter .btn-clear-filter {
+        position: absolute;
+        right: 3px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        background: none;
+        border: none;
+        cursor: pointer;
+    }
+
+        .filter .btn-clear-filter:hover {
+            color: var(--textDark);
+        }
+
+.metrics-content {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 10px 20px;
+}
+
+/* Notes */
+.metrics-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+}
+
+    .metrics-note.error {
+        color: var(--colorRed);
+    }
+
+/* Selected Queue */
+.detail-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 12px;
+}
+
+.detail-name {
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeLg);
+    font-weight: bold;
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+.detail-type {
+    font-size: var(--fontSizeXs);
+    font-weight: bold;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.detail-state {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.detail-header .btn-sm {
+    padding: 2px 10px;
+    font-size: var(--fontSizeXs);
+    border-radius: 2px;
+}
+
+    .detail-header .btn-sm .icon {
+        margin-right: 6px;
+    }
+
+/* Stat Tiles */
+.stat-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.stat-tile {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 15px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+    min-width: 0;
+}
+
+.stat-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.stat-value {
+    font-size: var(--fontSize2xl);
+    font-weight: bold;
+    color: var(--textDark);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.stat-unit {
+    font-size: var(--fontSizeSm);
+    font-weight: normal;
+    color: var(--textMild);
+    margin-left: 5px;
+}
+
+.stat-detail {
+    font-size: var(--fontSizeXs);
+    color: var(--textLight);
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Series swatch : a short line in the Series color, matching the chart mark */
+.swatch {
+    display: inline-block;
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+    .swatch.series-1 {
+        background: var(--series-1);
+    }
+
+    .swatch.series-2 {
+        background: var(--series-2);
+    }
+
+    .swatch.series-3 {
+        background: var(--series-3);
+    }
+
+    .swatch.series-4 {
+        background: var(--series-4);
+    }
+
+    .swatch.series-5 {
+        background: var(--series-5);
+    }
+
+/* Charts */
+.chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+@media (max-width: 600px) {
+    .chart-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Queues Table */
+.table-header {
+    margin: 5px 0 8px;
+}
+
+.table-title {
+    font-size: var(--fontSizeMd, var(--fontSizeSm));
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.table-panel ::deep .rz-data-grid {
+    overflow: auto;
+    max-height: 420px;
+}
+
+    .table-panel ::deep .rz-data-grid td {
+        border-right: 1px solid var(--tableBorderColor);
+        padding: 3px 10px;
+        cursor: pointer;
+    }
+
+        .table-panel ::deep .rz-data-grid td:last-child {
+            border-right: none;
+        }
+
+    .table-panel ::deep .rz-data-grid tr.selected-row > td {
+        background: var(--tableRowSelectedBackground);
+    }
+
+.table-panel ::deep .rz-cell-data {
+    font-size: var(--fontSizeSm);
+}
+
+.table-panel ::deep td.actions-cell .rz-cell-data {
+    white-space: nowrap;
+}
+
+.table-panel .queue {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeXs);
+}
+
+.table-panel .number {
+    font-variant-numeric: tabular-nums;
+}
+
+.table-panel .btn-link .icon {
+    margin-right: 5px;
+}
+
+/* Empty State */
+.empty-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+    .empty-panel .icon {
+        font-size: var(--fontSize3xl);
+        color: var(--textVeryLight);
+        margin-bottom: 6px;
+    }
+
+    .empty-panel.error .icon {
+        color: var(--colorRed);
+    }
+
+    .empty-panel .empty-title {
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .empty-panel .empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+        word-break: break-word;
+    }

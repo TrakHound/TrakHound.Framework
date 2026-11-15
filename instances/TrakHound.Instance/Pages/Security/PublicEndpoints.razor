@@ -1,0 +1,310 @@
+@page "/_admin/security/public"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHoundInstanceConfiguration instanceConfiguration
+@inject Microsoft.AspNetCore.Routing.EndpointDataSource endpointDataSource
+@using TrakHound.Instance.Http
+@using TrakHound.Instances
+@using TrakHound.Security
+
+<TrakHoundPageTitle Text="What is Public?" />
+<AreaBreadcrumbs Items="@([new("What is Public?")])" />
+
+<div class="page">
+
+    @* The Security page grid has three rows (header, toolbar, content), so the summary is part of the header row *@
+    <div>
+        <div class="page-header">
+            <span class="page-icon fa-solid fa-sharp fa-globe"></span>
+            <div class="page-title">
+                <span class="title">What is Public?</span>
+                <span class="description">Every endpoint served over HTTP, and whether it can be used without signing in (using the current Settings, Profiles, and Assignments)</span>
+            </div>
+        </div>
+
+        <div class="summary">
+            <div class="summary-stats">
+                <button class="summary-stat danger @(statusFilter == Filter.Public ? "active" : "")" @onclick="() => SetFilter(Filter.Public)">
+                    <span class="stat-value">@PublicCount</span>
+                    <span class="stat-label">Public (protectable)</span>
+                </button>
+                <button class="summary-stat @(statusFilter == Filter.ByDesign ? "active" : "")" @onclick="() => SetFilter(Filter.ByDesign)">
+                    <span class="stat-value">@ByDesignCount</span>
+                    <span class="stat-label">Public by design</span>
+                </button>
+                @if (LocalOnlyCount > 0)
+                {
+                    <button class="summary-stat warning @(statusFilter == Filter.LocalOnly ? "active" : "")" @onclick="() => SetFilter(Filter.LocalOnly)" title="Not covered by a Profile, so only usable from the same machine as the Instance (Settings > Interfaces > Unprotected Remote Access)">
+                        <span class="stat-value">@LocalOnlyCount</span>
+                        <span class="stat-label">This machine only</span>
+                    </button>
+                }
+                <button class="summary-stat success @(statusFilter == Filter.SignIn ? "active" : "")" @onclick="() => SetFilter(Filter.SignIn)">
+                    <span class="stat-value">@SignInCount</span>
+                    <span class="stat-label">Sign in required</span>
+                </button>
+                <button class="summary-stat muted-stat @(statusFilter == Filter.NotServed ? "active" : "")" @onclick="() => SetFilter(Filter.NotServed)">
+                    <span class="stat-value">@NotServedCount</span>
+                    <span class="stat-label">Not served</span>
+                </button>
+            </div>
+            <div class="summary-network">
+                <span class="icon fa-solid fa-sharp @(string.IsNullOrEmpty(report.Configuration.HttpAddress) ? "fa-network-wired" : "fa-ethernet")"></span>
+                <span>
+                    Listening on <strong>@(string.IsNullOrEmpty(report.Configuration.HttpAddress) ? "all network addresses" : report.Configuration.HttpAddress)</strong>, port <strong>@report.Configuration.HttpPort</strong>@(!string.IsNullOrEmpty(report.Configuration.BasePath) ? $", base path {report.Configuration.BasePath}" : "").
+                    @if (TrakHoundAdminPort.IsEnabled)
+                    {
+                        <span class="admin-port">The Admin Interface and the System API are on port <strong>@TrakHoundAdminPort.Port</strong> (@(string.IsNullOrEmpty(report.Configuration.AdminHttpAddress) ? "the same address" : report.Configuration.AdminHttpAddress)).</span>
+                    }
+                    <span class="muted">Public endpoints can be used by anyone who can reach this address.</span>
+                    <a href="_admin/configuration/settings?section=interfaces">Interfaces</a>
+                </span>
+            </div>
+            @if (AdminPortPendingRestart)
+            {
+                <div class="callout warning">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>The saved Admin Port setting is different from the Ports the Instance is listening on. It is applied when the Instance is restarted (it isn't supported when the Instance is hosted by IIS or Docker). This page shows the current Ports.</div>
+                </div>
+            }
+            @if (report.Endpoints.Any(o => o.Warning && o.IsPublic))
+            {
+                <div class="callout warning">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>
+                        @foreach (var warning in report.Endpoints.Where(o => o.Warning && o.IsPublic).Select(o => o.Reason).Distinct())
+                        {
+                            <div>@warning</div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input class="form-control" placeholder="Search routes, names, and Resources" @bind="search" @bind:event="oninput" aria-label="Search" />
+        </div>
+        <select class="form-select dropdown-sm" @bind="statusFilter" aria-label="Status">
+            <option value="@Filter.All">All endpoints</option>
+            <option value="@Filter.Public">Public (protectable)</option>
+            <option value="@Filter.AllPublic">All public</option>
+            <option value="@Filter.ByDesign">Public by design</option>
+            <option value="@Filter.LocalOnly">This machine only</option>
+            <option value="@Filter.SignIn">Sign in required</option>
+            <option value="@Filter.NotServed">Not served</option>
+        </select>
+        <select class="form-select dropdown-sm" @bind="areaFilter" aria-label="Area">
+            <option value="">All areas</option>
+            @foreach (var area in PublicEndpointAreas.All)
+            {
+                <option value="@area">@area</option>
+            }
+        </select>
+        <div class="toolbar-buttons">
+            <button class="btn btn-light" @onclick="Load" title="Evaluate again (ex. after an Api or App finishes loading)"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+            <a class="btn btn-light" href="_admin/configuration/security-profiles"><span class="icon fa-solid fa-sharp fa-shield-halved"></span>Profiles</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        @{
+            var items = GetFilteredEndpoints().ToList();
+        }
+        @if (items.Count > 0)
+        {
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th class="col-narrow">Access</th>
+                        <th>Why</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var group in items.GroupBy(o => o.Area))
+                    {
+                        <tr class="group-row">
+                            <td colspan="3">
+                                <span class="group-icon @PublicEndpointAreas.GetIcon(group.Key)"></span>
+                                <span class="group-title">@group.Key</span>
+                                <span class="muted">@group.Count() @(group.Count() == 1 ? "endpoint" : "endpoints")</span>
+                            </td>
+                        </tr>
+                        @foreach (var item in group)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="route">
+                                        @if (item.Port.HasValue)
+                                        {
+                                            <span class="port" title="Only served on port @item.Port">:@item.Port</span>
+                                        }
+                                        <span class="methods">@item.Methods</span><code>@item.Route</code>
+                                    </span>
+                                    <span class="item-description">@item.Title@(!string.IsNullOrEmpty(item.Description) ? $" · {item.Description}" : "")</span>
+                                </td>
+                                <td class="col-narrow">
+                                    <span class="chip @GetStatusClass(item)"><span class="icon fa-solid fa-sharp @GetStatusIcon(item)"></span>@GetStatusText(item)</span>
+                                </td>
+                                <td>
+                                    <span class="reason">@item.Reason</span>
+                                    @if (!string.IsNullOrEmpty(item.ResourceId))
+                                    {
+                                        <code class="resource-id">@item.ResourceId</code>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="empty-state">
+                <span class="icon fa-solid fa-sharp fa-circle-check"></span>
+                <span>No endpoints match</span>
+            </div>
+        }
+    </div>
+
+</div>
+
+@code {
+
+    private enum Filter
+    {
+        All,
+        Public,
+        AllPublic,
+        ByDesign,
+        LocalOnly,
+        SignIn,
+        NotServed
+    }
+
+    private PublicEndpointsReport report;
+    private string search;
+    private Filter statusFilter = Filter.Public;
+    private string areaFilter = "";
+
+    private int PublicCount => report.Endpoints.Count(o => o.IsPublic && !o.ByDesign);
+    private int ByDesignCount => report.Endpoints.Count(o => o.IsPublic && o.ByDesign);
+    private int SignInCount => report.Endpoints.Count(o => o.Status == PublicEndpointStatus.SignIn);
+    private int LocalOnlyCount => report.Endpoints.Count(o => o.Status == PublicEndpointStatus.LocalOnly);
+    // The Admin Port is only changed when the Instance is restarted
+    private bool AdminPortPendingRestart => TrakHoundAdminPort.IsConfigured(report.Configuration)
+        ? TrakHoundAdminPort.Port != report.Configuration.AdminHttpPort
+        : TrakHoundAdminPort.IsEnabled;
+
+    private int NotServedCount => report.Endpoints.Count(o => o.Status == PublicEndpointStatus.NotServed);
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+        instance.ConfigurationProfile.ConfigurationAdded += ConfigurationChanged;
+        instance.ConfigurationProfile.ConfigurationRemoved += ConfigurationChanged;
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+        instance.ConfigurationProfile.ConfigurationAdded -= ConfigurationChanged;
+        instance.ConfigurationProfile.ConfigurationRemoved -= ConfigurationChanged;
+    }
+
+    private void SecurityChanged(object sender, EventArgs args) => Reload();
+
+    private void ConfigurationChanged(object sender, object args) => Reload();
+
+    private void Reload()
+    {
+        _ = InvokeAsync(() =>
+        {
+            Load();
+            StateHasChanged();
+        });
+    }
+
+    private void Load()
+    {
+        report = PublicEndpointsReport.Create(instance, instanceConfiguration, endpointDataSource);
+    }
+
+    private void SetFilter(Filter filter)
+    {
+        statusFilter = statusFilter == filter ? Filter.All : filter;
+    }
+
+    private IEnumerable<PublicEndpoint> GetFilteredEndpoints()
+    {
+        IEnumerable<PublicEndpoint> items = report.Endpoints;
+
+        switch (statusFilter)
+        {
+            case Filter.Public: items = items.Where(o => o.IsPublic && !o.ByDesign); break;
+            case Filter.AllPublic: items = items.Where(o => o.IsPublic); break;
+            case Filter.ByDesign: items = items.Where(o => o.IsPublic && o.ByDesign); break;
+            case Filter.LocalOnly: items = items.Where(o => o.Status == PublicEndpointStatus.LocalOnly); break;
+            case Filter.SignIn: items = items.Where(o => o.Status == PublicEndpointStatus.SignIn); break;
+            case Filter.NotServed: items = items.Where(o => o.Status == PublicEndpointStatus.NotServed); break;
+        }
+
+        if (!string.IsNullOrEmpty(areaFilter)) items = items.Where(o => o.Area == areaFilter);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            items = items.Where(o => Contains(o.Route, term) || Contains(o.Title, term) || Contains(o.Description, term) || Contains(o.ResourceId, term) || Contains(o.Reason, term));
+        }
+
+        return items;
+    }
+
+    private static bool Contains(string value, string term) => value != null && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static string GetStatusClass(PublicEndpoint item)
+    {
+        switch (item.Status)
+        {
+            case PublicEndpointStatus.Public: return item.ByDesign ? "" : "danger";
+            case PublicEndpointStatus.Partial: return "warning";
+            case PublicEndpointStatus.LocalOnly: return "warning";
+            case PublicEndpointStatus.SignIn: return "success";
+            default: return "muted-chip";
+        }
+    }
+
+    private static string GetStatusIcon(PublicEndpoint item)
+    {
+        switch (item.Status)
+        {
+            case PublicEndpointStatus.Public: return "fa-lock-open";
+            case PublicEndpointStatus.Partial: return "fa-unlock-keyhole";
+            case PublicEndpointStatus.LocalOnly: return "fa-computer";
+            case PublicEndpointStatus.SignIn: return "fa-lock";
+            default: return "fa-ban";
+        }
+    }
+
+    private static string GetStatusText(PublicEndpoint item)
+    {
+        switch (item.Status)
+        {
+            case PublicEndpointStatus.Public: return "Public";
+            case PublicEndpointStatus.Partial: return "Partly Public";
+            case PublicEndpointStatus.LocalOnly: return "This Machine";
+            case PublicEndpointStatus.SignIn: return "Sign In";
+            default: return "Not Served";
+        }
+    }
+
+}

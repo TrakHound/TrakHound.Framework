@@ -1,0 +1,87 @@
+﻿.log-view-page {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+
+.header-container {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    align-items: center;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-right: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-container .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-container .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+    .header-container .header-icon .header-type {
+        display: inline-block;
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 3px;
+        padding: 5px 8px;
+        vertical-align: top;
+    }
+
+.header-container .header-text {
+    grid-column: 2;
+    min-width: 0;
+}
+
+    .header-container .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-container .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+        .header-container .header-text .header-description.header-patterns {
+            display: block;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+        }
+
+/* Source (Instance, Api or Worker) and Log History status */
+.header-container .header-actions {
+    grid-column: 3;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding-left: 15px;
+}
+
+    .header-container .header-actions .btn-source {
+        white-space: nowrap;
+    }
+
+.content-container {
+    grid-row: 2;
+    height: 100%;
+    overflow: hidden;
+}

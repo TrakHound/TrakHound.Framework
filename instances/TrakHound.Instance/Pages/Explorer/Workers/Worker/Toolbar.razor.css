@@ -1,0 +1,121 @@
+.toolbar-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+}
+
+/* Joined buttons for related actions (like a Bootstrap btn-group) */
+.toolbar-group {
+    display: inline-flex;
+    flex-wrap: nowrap;
+}
+
+    .toolbar-group .btn {
+        position: relative;
+        white-space: nowrap;
+    }
+
+        /* Share the borders between buttons */
+        .toolbar-group .btn + .btn {
+            margin-left: -1px;
+        }
+
+        /* Keep the hovered button's whole border on top of its neighbors */
+        .toolbar-group .btn:hover,
+        .toolbar-group .btn:focus-visible {
+            z-index: 1;
+        }
+
+        .toolbar-group .btn:disabled {
+            color: var(--textLight);
+            opacity: 1;
+        }
+
+            .toolbar-group .btn:disabled .icon {
+                color: var(--textLight);
+            }
+
+    /* Wide enough for "Starting.." and "Stopping.." so the buttons don't resize while loading */
+    .toolbar-group .btn-start,
+    .toolbar-group .btn-stop {
+        width: 105px;
+        justify-content: center;
+    }
+
+    /* Solid colors while enabled (disabled falls back to the light button). The darker green keeps the white text readable */
+    .toolbar-group .btn-start:not(:disabled) {
+        color: #fff;
+        background: var(--buttonStartBackground);
+        border-color: var(--buttonStartBorder);
+        box-shadow: var(--buttonStartStopShadow);
+    }
+
+        /* Override the light button's icon color */
+        .toolbar-group .btn-start:not(:disabled) .icon,
+        .toolbar-group .btn-stop:not(:disabled) .icon {
+            color: #fff;
+        }
+
+        .toolbar-group .btn-start:not(:disabled):hover {
+            background: var(--buttonStartBackgroundHover);
+            border-color: var(--buttonStartBorder);
+        }
+
+        .toolbar-group .btn-start:not(:disabled):active {
+            background: var(--buttonStartBackgroundHighlight);
+            box-shadow: var(--buttonPrimaryShadowHighlight);
+        }
+
+    .toolbar-group .btn-stop:not(:disabled) {
+        color: #fff;
+        background: var(--buttonStopBackground);
+        border-color: var(--buttonStopBorder);
+        box-shadow: var(--buttonStartStopShadow);
+    }
+
+        .toolbar-group .btn-stop:not(:disabled):hover {
+            background: var(--buttonStopBackgroundHover);
+            border-color: var(--buttonStopBorder);
+        }
+
+        .toolbar-group .btn-stop:not(:disabled):active {
+            background: var(--buttonStopBackgroundHighlight);
+            box-shadow: var(--buttonPrimaryShadowHighlight);
+        }
+
+/* Status on the right, with a colored dot */
+.toolbar-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .toolbar-status .status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--textLight);
+    }
+
+    .toolbar-status .status-label {
+        font-weight: 600;
+        color: var(--textDark);
+    }
+
+    .toolbar-status.status-started .status-dot {
+        background: var(--colorGreen);
+    }
+
+    .toolbar-status.status-starting .status-dot,
+    .toolbar-status.status-stopping .status-dot {
+        background: var(--colorOrange);
+    }
+
+    .toolbar-status.status-error .status-dot {
+        background: var(--colorRed);
+    }

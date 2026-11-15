@@ -1,0 +1,11 @@
+@using TrakHound.Instances
+
+@* The Instance's own Log (see TrakHoundInstance : GetLoggerByName("instance")) *@
+<LoggerLog Pattern="instance" />
+
+@code {
+
+    [Parameter]
+    public TrakHoundInstanceInformation InstanceInformation { get; set; }
+
+}

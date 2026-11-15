@@ -1,0 +1,301 @@
+﻿﻿@using Microsoft.AspNetCore.Components.Routing
+@implements IDisposable
+@inject NavigationManager NavigationManager
+
+@if (Title != null || HeaderTemplate != null)
+{
+    var hasLink = Selected.HasDelegate ? "link" : "";
+    var isActive = Id == TreeView?.SelectedId;
+    var expanded = IsExpanded ? "expanded" : "collapsed";
+    var loading = IsLoading ? "loading" : "";
+    var noChildren = IsExpandable && ChildContent != null ? "" : "no-children";
+    var tabIndex = TreeView != null && TreeView.IsTabStop(this) ? "0" : "-1";
+
+    <div class="tree-item @CssClass @hasLink @noChildren @expanded @loading" @ref="_element"
+         role="treeitem" tabindex="@tabIndex" aria-labelledby="@_contentId" aria-level="@Level"
+         aria-expanded="@(IsExpandable ? (IsExpanded ? "true" : "false") : null)"
+         aria-selected="@(IsSelectedItem ? "true" : "false")"
+         aria-checked="@(ShowCheckBox ? (IsChecked ? "true" : "false") : null)"
+         aria-busy="@(IsLoading ? "true" : null)"
+         @onkeydown="OnKeyDown" @onkeydown:stopPropagation="true"
+         @onfocusin="OnFocusIn" @onfocusin:stopPropagation="true">
+
+        <div class="expand-border" aria-hidden="true"><div></div></div>
+
+        <div class="tree-item-content" id="@_contentId">
+
+            <div class="expand-border-tab" aria-hidden="true"></div>
+
+            @if (IsLoading)
+            {
+                <div class="loading-icon-container" aria-hidden="true">
+                    <svg class="loading-icon" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1M10.5 10.5l2.1 2.1M3.4 12.6l2.1-2.1M10.5 5.5l2.1-2.1" /></svg>
+                </div>
+            }
+            else if (IsExpandable)
+            {
+                @* The glyph is hidden from screen readers: the item's aria-expanded tells them it can be expanded *@
+                @if (IsExpanded)
+                {
+                    <span class="btn-expand btn" title="Collapse" aria-hidden="true" @onclick="() => Collapse()"><svg class="icon" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2" /><path d="M5 8h6" /></svg></span>
+                }
+                else
+                {
+                    <span class="btn-expand btn" title="Expand" aria-hidden="true" @onclick="() => Expand()"><svg class="icon" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2" /><path d="M5 8h6M8 5v6" /></svg></span>
+                }
+            }
+            else if (ShowCheckBox)
+            {
+                <span class="expand-placeholder" aria-hidden="true"></span>
+            }
+
+            @if (ShowCheckBox)
+            {
+                var checkClass = IsChecked ? "checked" : "unchecked";
+
+                <div class="tree-item-checkbox @checkClass" aria-hidden="true" @onclick="() => ToggleCheck()">
+                    <svg class="tree-item-checkbox-icon" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="2" y="2" width="12" height="12" rx="2" />
+                        @if (IsChecked)
+                        {
+                            <path d="M5 8l2 2 4-4" />
+                        }
+                    </svg>
+                </div>
+            }
+
+            <div class="tree-item-header-container">
+                <TreeItemHeader Title="@Title" Subtitle="@Subtitle" TitleLabel="@TitleLabel"
+                                Icon="@Icon" IconLabel="@IconLabel"
+                                Link="@Link" MatchLinkQueryParameters="@MatchLinkQueryParameters" IsActive="@isActive" IsCurrent="@IsCurrent" IsExpanded="@IsExpanded" Selected="@Select"
+                                HeaderTemplate="@HeaderTemplate" ContextMenu="@ContextMenu"
+                                Expanded="Expand" />
+            </div>
+
+        </div>
+
+        @if (IsExpandable && ChildContent != null)
+        {
+            <div class="tree-item-children">
+                <div class="children-container" role="group">
+                    <CascadingValue Value="this" IsFixed="true">
+                        @ChildContent
+                    </CascadingValue>
+                </div>
+            </div>
+        }
+
+    </div>
+}
+
+
+@code {
+
+    private readonly string _contentId = $"tree-item-{Guid.NewGuid():N}";
+    private ElementReference _element;
+    private bool _isExpanded;
+
+
+    [CascadingParameter]
+    private TreeView TreeView { get; set; }
+
+    /// <summary>
+    /// The item this item is a child of (null for an item at the top of the tree)
+    /// </summary>
+    [CascadingParameter]
+    internal TreeItem ParentItem { get; set; }
+
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    [Parameter]
+    public bool IsExpanded { get; set; } = false;
+
+    [Parameter]
+    public bool IsExpandable { get; set; } = true;
+
+    [Parameter]
+    public bool ShowCheckBox { get; set; } = false;
+
+    [Parameter]
+    public bool IsChecked { get; set; } = false;
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment HeaderTemplate { get; set; }
+
+    [Parameter]
+    public RenderFragment ContextMenu { get; set; }
+
+    [Parameter]
+    public string Id { get; set; }
+
+    [Parameter]
+    public string Title { get; set; }
+
+    [Parameter]
+    public string TitleLabel { get; set; }
+
+    [Parameter]
+    public string Subtitle { get; set; }
+
+    [Parameter]
+    public string Link { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string IconLabel { get; set; }
+
+    [Parameter]
+    public string CssClass { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Selected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Checked { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Unchecked { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Collapsed { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Expanded { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsExpandedChanged { get; set; }
+
+    [Parameter]
+    public bool MatchLinkQueryParameters { get; set; }
+
+    /// <summary>
+    /// Shows a linked item as active although the current URL isn't exactly its Link (ex. it has other query parameters)
+    /// </summary>
+    [Parameter]
+    public bool IsCurrent { get; set; }
+
+
+    internal List<TreeItem> ChildItems { get; } = new();
+
+    internal bool IsRendered => Title != null || HeaderTemplate != null;
+
+    /// <summary>
+    /// Whether the item's children are shown
+    /// </summary>
+    internal bool IsOpen => IsExpandable && IsExpanded && ChildContent != null;
+
+    internal bool IsSelectedItem => (Id != null && Id == TreeView?.SelectedId) || IsCurrent;
+
+    internal int Level => ParentItem != null ? ParentItem.Level + 1 : 1;
+
+
+    protected override void OnInitialized()
+    {
+        _isExpanded = IsExpanded;
+        TreeView?.Register(this);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // The App can expand or collapse the item, which changes which items are visible (and can take the Tab stop)
+        if (_isExpanded != IsExpanded)
+        {
+            _isExpanded = IsExpanded;
+            TreeView?.UpdateTabStop();
+        }
+    }
+
+    public void Dispose()
+    {
+        TreeView?.Unregister(this);
+    }
+
+
+    internal void Refresh()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    internal async Task FocusAsync()
+    {
+        TreeView?.SetFocused(this);
+
+        try
+        {
+            await _element.FocusAsync();
+        }
+        catch (Exception)
+        {
+            // The item may not be rendered yet (or the circuit may be gone)
+        }
+    }
+
+    private void OnFocusIn(FocusEventArgs args)
+    {
+        TreeView?.SetFocused(this);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (TreeView != null) await TreeView.HandleKeyDown(this, args);
+    }
+
+    internal async Task Expand()
+    {
+        IsExpanded = true;
+        _isExpanded = true;
+        await IsExpandedChanged.InvokeAsync(IsExpanded);
+        await Expanded.InvokeAsync(Id);
+        TreeView?.UpdateTabStop();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    internal async Task Collapse()
+    {
+        IsExpanded = false;
+        _isExpanded = false;
+        await IsExpandedChanged.InvokeAsync(IsExpanded);
+        await Collapsed.InvokeAsync(Id);
+        TreeView?.UpdateTabStop();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void Select()
+    {
+        await Selected.InvokeAsync(Id);
+    }
+
+    /// <summary>
+    /// Enter (or Space) on the item does what clicking it does: a linked item opens its Link, others are Selected
+    /// </summary>
+    internal async Task Activate()
+    {
+        if (!string.IsNullOrEmpty(Link))
+        {
+            NavigationManager.NavigateTo(Link);
+        }
+        else
+        {
+            await Selected.InvokeAsync(Id);
+        }
+    }
+
+    internal async Task ToggleCheck()
+    {
+        if (IsChecked)
+        {
+            await Unchecked.InvokeAsync(Id);
+        }
+        else
+        {
+            await Checked.InvokeAsync(Id);
+        }
+    }
+
+}

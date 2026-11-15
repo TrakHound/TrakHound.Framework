@@ -1,0 +1,9 @@
+﻿{
+  "id": "UserPackageId",
+  "category": "worker",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "{publisher}",
+    "description": "{description}"
+  }
+}

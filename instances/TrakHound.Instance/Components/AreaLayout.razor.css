@@ -1,0 +1,132 @@
+.area-layout {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.area-layout-header {
+    grid-row: 1;
+}
+
+/* Body : Sidebar and Page */
+
+.area-layout-body {
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Sidebar (the items are AreaNavGroup and AreaNavItem) */
+
+.area-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 12px 8px 40px;
+    overflow: auto;
+    background: var(--panelSidebarBackground);
+    border-right: 1px solid var(--borderColorLight);
+}
+
+    .area-nav ::deep .area-nav-group {
+        margin: 14px 12px 4px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--textMild);
+    }
+
+    .area-nav ::deep .area-nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        font-size: var(--fontSizeMd);
+        color: var(--textDark);
+        text-decoration: none;
+        border-left: 3px solid transparent;
+        border-radius: 0 4px 4px 0;
+    }
+
+        .area-nav ::deep .area-nav-item:hover {
+            background: var(--panelItemBackground);
+        }
+
+        .area-nav ::deep .area-nav-item.active {
+            background: var(--panelItemBackground);
+            border-left-color: var(--accent);
+        }
+
+        .area-nav ::deep .area-nav-item .icon {
+            width: 18px;
+            text-align: center;
+            color: var(--textMild);
+        }
+
+        .area-nav ::deep .area-nav-item.active .icon {
+            color: var(--accentLight);
+        }
+
+        .area-nav ::deep .area-nav-item .label {
+            flex: 1;
+        }
+
+        .area-nav ::deep .area-nav-item .count {
+            padding: 0 7px;
+            font-size: 11px;
+            line-height: 18px;
+            color: var(--textDark);
+            background: var(--panelItemBackgroundLight);
+            border-radius: 9px;
+        }
+
+            .area-nav ::deep .area-nav-item .count.highlight {
+                color: #fff;
+                background: var(--accent);
+            }
+
+            .area-nav ::deep .area-nav-item .count.issues {
+                color: #fff;
+                background: var(--bs-danger, #dc3545);
+            }
+
+.area-content {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* The sidebar becomes a row above the page on a narrow window */
+@media (max-width: 900px) {
+    .area-layout-body {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: max-content 1fr;
+    }
+
+    .area-nav {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding: 6px 8px;
+        border-right: none;
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+        .area-nav ::deep .area-nav-group {
+            display: none;
+        }
+
+        .area-nav ::deep .area-nav-item {
+            white-space: nowrap;
+            border-left: none;
+            border-bottom: 3px solid transparent;
+            border-radius: 4px 4px 0 0;
+        }
+
+            .area-nav ::deep .area-nav-item.active {
+                border-bottom-color: var(--accent);
+            }
+}

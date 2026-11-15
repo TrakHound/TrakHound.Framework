@@ -1,0 +1,219 @@
+@inject ExplorerService explorerService
+@inject IJSRuntime javascript
+
+<div class="hidden-input">
+    <InputFile @key="@fileInputKey" OnChange="FileChanged" id="@fileInputId" name="file" />
+</div>
+
+<div class="upload-panel">
+    <div class="upload-fields">
+
+        <div class="field">
+            <label>Collection<span class="required" title="Required">*</span></label>
+            <input type="text" placeholder="Collection" aria-label="Collection" @bind="@collection" @bind:event="oninput" disabled="@uploading" />
+        </div>
+
+        <div class="field">
+            <label>Key<span class="required" title="Required">*</span></label>
+            <input type="text" placeholder="@(file?.Name ?? "Key")" aria-label="Key" @bind="@key" @bind:event="oninput" disabled="@uploading" />
+        </div>
+
+        <div class="field field-file">
+            <label>File<span class="required" title="Required">*</span></label>
+            <div class="file-input">
+                <button class="btn btn-light btn-browse" @onclick="BrowseClicked" disabled="@uploading"><span class="icon fa-regular fa-sharp fa-folder-open"></span>Browse..</button>
+                @if (file != null)
+                {
+                    <span class="file-name" title="@file.Name">@file.Name</span>
+                    <span class="file-size">@file.Size.ToFileSize()</span>
+                }
+                else
+                {
+                    <span class="file-name placeholder">No File Selected</span>
+                }
+            </div>
+        </div>
+
+        <div class="field">
+            <label>Content Type</label>
+            <input type="text" placeholder="application/octet-stream" aria-label="Content Type" @bind="@contentType" @bind:event="oninput" disabled="@uploading" />
+        </div>
+
+    </div>
+
+    <div class="upload-buttons">
+        @if (!uploading)
+        {
+            <button class="admin-write btn btn-primary" @onclick="Upload" disabled="@(!CanUpload())"><span class="icon fa-solid fa-sharp fa-upload"></span>Upload</button>
+            <button class="btn btn-light" @onclick="Cancel">Cancel</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary btn-loading" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Uploading..</button>
+        }
+
+        <label class="upload-option" title="Replace the Blob if one already exists with the same Collection and Key">
+            <input type="checkbox" @bind="@overwrite" disabled="@uploading" />
+            Overwrite
+        </label>
+
+        @if (file == null)
+        {
+            <span class="upload-note">Select a File to upload. The Key defaults to the file name.</span>
+        }
+        else if (string.IsNullOrWhiteSpace(collection))
+        {
+            <span class="upload-note">Enter a Collection</span>
+        }
+    </div>
+</div>
+
+@code {
+
+    private readonly string fileInputId = Guid.NewGuid().ToString();
+
+    private string collection;
+    private string key;
+    private IBrowserFile file;
+    private string contentType;
+    private bool overwrite;
+    private bool uploading;
+    private int fileInputKey;
+    private string previousCollection;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    /// <summary>
+    /// The default Collection (ex. the Collection that is currently being viewed)
+    /// </summary>
+    [Parameter]
+    public string Collection { get; set; }
+
+    [Parameter]
+    public EventCallback<BlobUploadResult> Uploaded { get; set; }
+
+    [Parameter]
+    public EventCallback<BlobUploadResult> UploadFailed { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+
+    public class BlobUploadResult
+    {
+        public string Collection { get; set; }
+        public string Key { get; set; }
+        public long Size { get; set; }
+        public string Message { get; set; }
+    }
+
+
+    protected override void OnParametersSet()
+    {
+        // Only reset the Collection when the default changes (so a typed value is not overwritten on re-render)
+        if (Collection != previousCollection)
+        {
+            previousCollection = Collection;
+            collection = Collection;
+        }
+    }
+
+    private bool CanUpload()
+    {
+        return file != null && !string.IsNullOrWhiteSpace(collection);
+    }
+
+    private async Task Upload()
+    {
+        if (!CanUpload() || uploading) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null) return;
+
+        var result = new BlobUploadResult
+        {
+            Collection = collection.Trim(),
+            Key = !string.IsNullOrWhiteSpace(key) ? key.Trim() : file.Name,
+            Size = file.Size
+        };
+        var uploadContentType = !string.IsNullOrWhiteSpace(contentType) ? contentType.Trim() : "application/octet-stream";
+
+        uploading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            using (var stream = file.OpenReadStream(file.Size))
+            {
+                var response = await client.Services.Blobs.Upload(result.Collection, result.Key, stream, uploadContentType, overwrite: overwrite, routerId: ConfigurationId);
+                if (response.Success)
+                {
+                    // Keep the Collection so multiple files can be uploaded to the same Collection
+                    ClearFile();
+                    await Uploaded.InvokeAsync(result);
+                }
+                else if (response.StatusCode == 409)
+                {
+                    result.Message = "A Blob with this Key already exists. Check Overwrite to replace it";
+                    await UploadFailed.InvokeAsync(result);
+                }
+                else
+                {
+                    result.Message = !string.IsNullOrEmpty(response.Message) ? response.Message : $"Status Code {response.StatusCode}";
+                    await UploadFailed.InvokeAsync(result);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Message = ex.Message;
+            await UploadFailed.InvokeAsync(result);
+        }
+
+        uploading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Cancel()
+    {
+        ClearFile();
+        await Cancelled.InvokeAsync();
+    }
+
+    private void ClearFile()
+    {
+        file = null;
+        key = null;
+        contentType = null;
+
+        // Recreate the InputFile so the same file can be selected again
+        fileInputKey++;
+    }
+
+    private async Task BrowseClicked()
+    {
+        try
+        {
+            await javascript.InvokeVoidAsync("JsFunctions.clickElement", fileInputId);
+        }
+        catch { }
+    }
+
+    private void FileChanged(InputFileChangeEventArgs args)
+    {
+        file = args.File;
+
+        if (file?.Name != null)
+        {
+            // Prefer the extension's MIME type, then the type reported by the browser
+            var mimeType = MimeTypes.GetMimeType(file.Name);
+            contentType = !string.IsNullOrEmpty(mimeType) ? mimeType : file.ContentType;
+        }
+    }
+
+}

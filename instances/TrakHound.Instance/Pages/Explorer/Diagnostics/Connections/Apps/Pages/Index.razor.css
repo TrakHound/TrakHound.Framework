@@ -1,0 +1,455 @@
+﻿.app-page-connections-page {
+    --status-current: var(--colorGreen, #19b419);
+    --status-retired: var(--colorOrange, #ff8b00);
+    --activity-safe: var(--colorGreen, #19b419);
+    --activity-active: var(--colorBlue, #2f7de1);
+    --activity-unsaved: var(--colorOrange, #ff8b00);
+    display: grid;
+    grid-template-rows: max-content max-content max-content 1fr;
+    /* minmax(0, 1fr) so a wide table scrolls inside its panel instead of widening the page past the window */
+    grid-template-columns: minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-panel .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+    .header-panel .header-icon .header-type {
+        display: inline-block;
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 3px;
+        padding: 5px 8px;
+        vertical-align: top;
+    }
+
+.header-panel .header-text {
+    grid-column: 2;
+}
+
+    .header-panel .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+        color: var(--textDark);
+    }
+
+    .header-panel .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textLight);
+        color: var(--textMild);
+    }
+
+    .header-panel .header-text .header-package {
+        display: inline-block;
+        font-size: var(--fontSizeBase);
+        color: var(--textMild);
+    }
+
+        .header-panel .header-text .header-package .version {
+            margin-left: 10px;
+        }
+
+.toolbar-panel {
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+}
+
+.toolbar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    cursor: pointer;
+}
+
+.app-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 4px 0 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    background: var(--panelItemBackground);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 4px;
+}
+
+    .app-filter .icon {
+        color: var(--accentLight);
+    }
+
+.app-filter-name {
+    font-weight: 600;
+    color: var(--textDark);
+}
+
+.app-filter-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
+    color: var(--textMild);
+}
+
+    .app-filter-clear:hover {
+        color: var(--textDark);
+        background: var(--panelItemBackgroundHover);
+    }
+
+.action-message {
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .action-message .icon {
+        margin-right: 6px;
+        color: var(--status-current);
+    }
+
+.summary-panel {
+    grid-row: 3;
+    padding: 0 10px;
+}
+
+.remote-notice {
+    margin-bottom: 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .remote-notice .icon {
+        margin-right: 6px;
+        color: var(--accent);
+    }
+
+/* Summary Tiles (Connections, Current and Retired filter the table) */
+.summary-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    max-width: 900px;
+    margin: 0 0 10px;
+}
+
+.summary-tile {
+    --statusColor: var(--borderColorLight);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 14px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 4px solid var(--statusColor);
+    border-radius: 3px;
+    color: var(--textDark);
+    text-align: left;
+}
+
+button.summary-tile {
+    cursor: pointer;
+}
+
+    button.summary-tile:hover,
+    .summary-tile.selected {
+        border-color: var(--accent);
+        border-left-color: var(--statusColor);
+    }
+
+    .summary-tile.selected {
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .summary-tile.connections { --statusColor: var(--accent); }
+    .summary-tile.current { --statusColor: var(--status-current); }
+    .summary-tile.retired { --statusColor: var(--status-retired); }
+    .summary-tile.safe { --statusColor: var(--activity-safe); }
+    .summary-tile.zero { --statusColor: var(--borderColorLight); }
+
+    .summary-tile .tile-label {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+        .summary-tile .tile-label .icon {
+            margin-right: 7px;
+            color: var(--statusColor);
+        }
+
+    .summary-tile.static .tile-label .icon,
+    .summary-tile.zero .tile-label .icon {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-value {
+        font-size: var(--fontSize2xl);
+        font-weight: bold;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .summary-tile.zero .tile-value {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-detail {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+/* Retired Versions in use */
+.retired-panel {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--status-retired);
+    border-radius: 2px;
+}
+
+    .retired-panel .btn-link {
+        padding: 0 4px;
+        font-size: var(--fontSizeSm);
+    }
+
+.retired-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-bottom: 6px;
+}
+
+    .retired-header .icon {
+        color: var(--status-retired);
+    }
+
+.retired-title {
+    font-size: var(--fontSizeSm);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.retired-description {
+    font-size: var(--fontSizeXs, 11px);
+    color: var(--textMild);
+}
+
+.retired-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 24px;
+}
+
+.retired-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+.retired-name {
+    font-weight: 600;
+}
+
+.retired-arrow {
+    font-size: 10px;
+    color: var(--textLight);
+}
+
+.retired-count {
+    color: var(--textMild);
+}
+
+/* Status (dot + text) */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--textDark);
+}
+
+.status-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--textLight);
+}
+
+.status-badge.current .status-dot {
+    background: var(--status-current);
+}
+
+.status-badge.retired {
+    font-weight: bold;
+}
+
+    .status-badge.retired .status-dot {
+        background: var(--status-retired);
+    }
+
+/* Activity (whether it is safe to reload the page) */
+.status-badge.activity.idle .status-dot,
+.status-badge.activity.background .status-dot {
+    background: var(--activity-safe);
+}
+
+.status-badge.activity.active .status-dot {
+    background: var(--activity-active);
+}
+
+.status-badge.activity.editing,
+.status-badge.activity.unsaved {
+    font-weight: bold;
+}
+
+    .status-badge.activity.editing .status-dot,
+    .status-badge.activity.unsaved .status-dot {
+        background: var(--activity-unsaved);
+    }
+
+.status-badge.activity.unknown {
+    color: var(--textMild);
+}
+
+.table-panel {
+    grid-row: 4;
+    min-width: 0;
+    padding: 0 10px 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .table-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: hidden;
+    }
+
+        .table-panel ::deep .rz-data-grid td {
+            border-right: 1px solid var(--tableBorderColor);
+            padding: 3px 10px;
+        }
+
+            .table-panel ::deep .rz-data-grid td:last-child {
+                border-right: none;
+            }
+
+    .table-panel ::deep .rz-cell-data {
+        font-size: var(--fontSizeSm);
+    }
+
+    .table-panel .btn-link {
+        padding: 0 6px 0 0;
+    }
+
+/* Second click confirms a Reload (it loses unsaved changes on the page) */
+.btn-link.btn-confirm {
+    font-weight: bold;
+    color: var(--status-retired);
+}
+
+/* Row Actions (icon buttons) */
+.actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--accent);
+    font-size: var(--fontSizeSm);
+    cursor: pointer;
+}
+
+    .btn-action:hover {
+        border-color: var(--borderColorLight);
+        background: var(--panelBackgroundMedium);
+    }
+
+    /* Second click confirms a Reload (same size, so nothing shifts) */
+    .btn-action.btn-confirm {
+        color: #fff;
+        background: var(--status-retired);
+        border-color: var(--status-retired);
+    }
+
+.action-message.prompt {
+    font-weight: bold;
+}
+
+    .action-message.prompt .icon {
+        color: var(--status-retired);
+    }
+
+/* Connection Code (shown on the page by Identify) */
+.connection-code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+/* Frozen Actions column : match Radzen's frozen cell colors and border to the theme's table */
+.table-panel ::deep .rz-data-grid {
+    --rz-grid-frozen-cell-background-color: var(--tableBackground, var(--panelBackground));
+    --rz-grid-frozen-stripe-background-color: var(--tableRowAltBackground, var(--panelBackground));
+    --rz-grid-frozen-stripe-odd-background-color: var(--tableBackground, var(--panelBackground));
+    --rz-grid-frozen-cell-border: 1px solid var(--tableBorderColor, var(--borderColorLight));
+}
+
+    .table-panel ::deep .rz-data-grid thead th {
+        --rz-grid-frozen-cell-border: 1px solid var(--tableHeaderBorderColor, var(--tableBorderColor, var(--borderColorLight)));
+    }
+
+.empty-message {
+    padding: 20px 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}

@@ -1,0 +1,181 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject ConfigurationsService configurationsService
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@using TrakHound.Instance.Pages.Packages
+@using TrakHound.Instance.Security
+@using TrakHound.Configurations
+@using TrakHound.Services
+
+<div class="configuration-page">
+
+    <AreaLayout Icon="fa-regular fa-sharp fa-sliders" Title="Configuration" Subtitle="Manage the Applications, Services, Access and Instance configurations" Link="@configurationsService.GetLink("_admin/configuration")">
+        <Tools>
+            <PackageSourcePicker Context="configurationsService.Packages" />
+        </Tools>
+        <Nav>
+            @* The items read the target : not shown for a missing Workspace *@
+            @if (!workspaceMissing)
+            {
+                <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration")" Icon="fa-solid fa-sharp fa-grid-2" Label="Overview" Match="NavLinkMatch.All" />
+
+                @foreach (var group in ConfigurationCategories.All.GroupBy(o => o.Group))
+                {
+                    @* Only what the signed in Admin's Roles let them view *@
+                    var categories = group.Where(o => CanView(TrakHoundAdminSecurity.GetConfigurationResource(o.ConfigurationCategory))).ToList();
+                    var canViewGroups = group.Key == "Applications" && CanView(TrakHoundAdminSecurity.GroupConfigurations);
+                    var canViewRouters = group.Key == "Services" && CanView(TrakHoundAdminSecurity.RouterConfigurations);
+                    var canViewProfiles = group.Key == "Access" && configurationsService.WorkspaceId == null && adminAccess.CanRead(TrakHoundAdminSecurity.SecurityProfiles);
+                    var canViewZones = group.Key == "Access" && CanView(TrakHoundAdminSecurity.Zones);
+                    if (categories.Count == 0 && !canViewGroups && !canViewRouters && !canViewProfiles && !canViewZones) continue;
+
+                    <AreaNavGroup Title="@group.Key" />
+
+                    @foreach (var category in categories)
+                    {
+                        var issues = GetIssueCount(category);
+
+                        <AreaNavItem Href="@configurationsService.GetLink($"_admin/configuration/{category.Key}")" Icon="@category.Icon" Label="@category.Title" Count="@GetCount(category)" Issues="@issues" IssuesTitle="@($"{issues} configuration(s) with a missing Package")" />
+                    }
+
+                    @* Groups organize the Applications *@
+                    @if (canViewGroups)
+                    {
+                        <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration/groups")" Icon="fa-solid fa-sharp fa-layer-group" Label="Groups" Count="@GetGroupCount()" />
+                    }
+
+                    @* Routers belong with Services *@
+                    @if (canViewRouters)
+                    {
+                        <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration/routing")" Icon="fa-regular fa-chart-network" Label="Routers" Count="@GetRouterCount()" />
+                    }
+
+                    @* Who can call what, and what Modules can reach (Identity Providers are above) *@
+                    @if (canViewProfiles)
+                    {
+                        @* Edited through the running Instance's Security Manager (not in a Workspace yet) *@
+                        <AreaNavItem Href="_admin/configuration/security-profiles" Icon="fa-solid fa-sharp fa-shield-halved" Label="Security Profiles" Count="@GetSecurityProfileCount()" />
+                    }
+                    @if (canViewZones)
+                    {
+                        var denied = GetZoneDeniedCount();
+
+                        <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration/zones")" Icon="fa-solid fa-sharp fa-object-group" Label="Zones" Count="@GetZoneCount()" Issues="@denied" IssuesTitle="@($"{denied} call(s) denied by a Zone")" />
+                        <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration/zone-map")" Icon="fa-solid fa-sharp fa-diagram-project" Label="Zone Map" />
+                    }
+                }
+
+                @if (CanView(TrakHoundAdminSecurity.Settings) || CanView(TrakHoundAdminSecurity.Variables))
+                {
+                    <AreaNavGroup Title="Instance" />
+                }
+                @if (CanView(TrakHoundAdminSecurity.Settings))
+                {
+                    <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration/settings")" Icon="fa-solid fa-sharp fa-wrench" Label="Settings" />
+                }
+                @if (CanView(TrakHoundAdminSecurity.Variables))
+                {
+                    <AreaNavItem Href="@configurationsService.GetLink("_admin/configuration/variables")" Icon="fa-solid fa-sharp fa-brackets-curly" Label="Variables" Count="@GetVariableCount()" />
+                }
+            }
+        </Nav>
+        <ChildContent>
+            <TrakHoundPageTitleSuffix Text="Configuration">
+                <WorkspaceGuard>
+                    @Body
+                </WorkspaceGuard>
+            </TrakHoundPageTitleSuffix>
+        </ChildContent>
+    </AreaLayout>
+
+    <PackageNotifications Context="configurationsService.Packages" />
+
+</div>
+
+@code {
+
+    // The Profile subscribed to (kept, since the URL has already changed when the page is disposed)
+    private ITrakHoundConfigurationProfile _subscribedProfile;
+    private ITrakHoundConfigurationProfile subscribedProfile => _subscribedProfile ??= configurationsService.ConfigurationProfile;
+
+    // The URL is for a Workspace that doesn't exist (WorkspaceGuard shows that instead of the page)
+    private bool workspaceMissing;
+
+    protected override void OnInitialized()
+    {
+        workspaceMissing = configurationsService.IsWorkspaceMissing;
+
+        configurationsService.Packages.Changed += PackagesChanged;
+        TrakHoundConfigurationVariables.Loaded += VariablesLoaded;
+
+        if (!workspaceMissing)
+        {
+            subscribedProfile.ConfigurationAdded += ConfigurationChanged;
+            subscribedProfile.ConfigurationRemoved += ConfigurationChanged;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Load the Package Source after the first render (so a slow Source doesn't hold up the page)
+        if (firstRender) await configurationsService.InitializeSource();
+    }
+
+    public void Dispose()
+    {
+        configurationsService.Packages.Changed -= PackagesChanged;
+        TrakHoundConfigurationVariables.Loaded -= VariablesLoaded;
+
+        if (_subscribedProfile != null)
+        {
+            _subscribedProfile.ConfigurationAdded -= ConfigurationChanged;
+            _subscribedProfile.ConfigurationRemoved -= ConfigurationChanged;
+        }
+    }
+
+
+    // A Workspace's pages are part of Deployments (the Admin got here with that), so all of them are shown
+    private bool CanView(string resourceId) => configurationsService.WorkspaceId != null || adminAccess.CanRead(resourceId);
+
+    private void PackagesChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void ConfigurationChanged(object sender, object args) => _ = InvokeAsync(StateHasChanged);
+
+    private void VariablesLoaded(object sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    private int GetCount(ConfigurationCategoryDefinition category)
+    {
+        return category.Load(configurationsService.ConfigurationProfile)?.Count() ?? 0;
+    }
+
+    private int GetIssueCount(ConfigurationCategoryDefinition category)
+    {
+        return category.Load(configurationsService.ConfigurationProfile)?.Count(o => configurationsService.ResolvePackage(o) == null) ?? 0;
+    }
+
+    // The running Instance counts the Variables it was started with (a saved change applies when it restarts)
+    private int GetVariableCount()
+    {
+        return configurationsService.Target.IsLive
+            ? TrakHoundConfigurationVariables.Variables.Count
+            : TrakHoundConfigurationVariables.Read(configurationsService.ConfigurationProfile?.Path).Count;
+    }
+
+    private int GetSecurityProfileCount() => configurationsService.Instance.SecurityManager?.GetProfiles()?.Count() ?? 0;
+
+    private int GetZoneCount() => configurationsService.Target.ZoneManager?.GetZones()?.Count() ?? 0;
+
+    // Calls denied by a Zone on the running Instance (a Workspace has none)
+    private int GetZoneDeniedCount() => configurationsService.Target.ZoneManager?.GetActivity()?.Count(o => o.Enforced) ?? 0;
+
+    private int GetRouterCount()
+    {
+        return configurationsService.ConfigurationProfile.Get<TrakHoundServiceRouterConfiguration>(TrakHoundServiceRouterConfiguration.ConfigurationCategory)?.Count() ?? 0;
+    }
+
+    private int GetGroupCount()
+    {
+        return configurationsService.ConfigurationProfile.Get<TrakHound.Groups.TrakHoundGroupConfiguration>(TrakHound.Groups.TrakHoundGroupConfiguration.ConfigurationCategory)?.Count() ?? 0;
+    }
+
+}

@@ -1,0 +1,256 @@
+@page "/_admin/security/access-check"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles)]
+@layout SecurityLayout
+@inject ITrakHoundInstance instance
+@using TrakHound.Instance.Security
+@using TrakHound.Instances
+@using TrakHound.Security
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="Access Check" />
+<AreaBreadcrumbs Items="@([new("Access Check")])" />
+
+<div class="access-page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-user-shield"></span>
+        <div class="page-title">
+            <span class="title">Access Check</span>
+            <span class="description">Check whether an Identity can access a Resource using the current Profiles and Assignments (nothing is signed in or called)</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="card">
+
+            <div class="card-section">
+                <span class="card-section-title">Identity</span>
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="check-provider">Identity Provider</label>
+                        <select id="check-provider" class="form-select" @bind="providerId" @bind:after="Clear">
+                            <option value="">Anonymous (not signed in)</option>
+                            @foreach (var provider in state.Providers)
+                            {
+                                <option value="@provider.Id">@provider.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    @if (!string.IsNullOrEmpty(providerId))
+                    {
+                        <div class="form-field">
+                            <label for="check-user">User ID</label>
+                            <input id="check-user" class="form-control" @bind="userId" @bind:event="oninput" @bind:after="Clear" placeholder="Optional (shown in the result)" />
+                        </div>
+                        <div class="form-field">
+                            <label for="check-roles">Roles</label>
+                            <input id="check-roles" class="form-control" @bind="roles" @bind:event="oninput" @bind:after="Clear" placeholder="ex. operators, engineers" spellcheck="false" />
+                            @if (providerId == TrakHoundApiKeyIdentityProvider.ProviderId && state.Keys.Count > 0)
+                            {
+                                <select class="form-select key-select" value="" @onchange="KeySelected" aria-label="Use the Roles of an API Key">
+                                    <option value="">Use the Roles of an API Key..</option>
+                                    @foreach (var key in state.Keys)
+                                    {
+                                        <option value="@key.Id">@key.Name</option>
+                                    }
+                                </select>
+                            }
+                            @if (providerId == TrakHoundUserIdentityProvider.ProviderId && state.Users.Count > 0)
+                            {
+                                <select class="form-select key-select" value="" @onchange="UserSelected" aria-label="Use the Roles of a User">
+                                    <option value="">Use the Roles of a User..</option>
+                                    @foreach (var user in state.Users)
+                                    {
+                                        <option value="@user.Id">@user.Username</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card-section">
+                <span class="card-section-title">Resource</span>
+                <ResourcePicker Id="check-resource" Resources="resources" RequireSpecific="true" Value="@resourceId" ValueChanged="ResourceChanged" />
+                @if (IsServiceResource)
+                {
+                    <span class="hint">Requires the <strong>@GetServicePermission()</strong> Permission</span>
+                }
+                else if (IsSystemResource)
+                {
+                    <div class="form-field">
+                        <label for="check-system-permission">Request</label>
+                        <select id="check-system-permission" class="form-select" @bind="systemWrite" @bind:after="Clear">
+                            <option value="false">Read (requires the read Permission)</option>
+                            <option value="true">Change, ex. start a Worker (requires the write Permission)</option>
+                        </select>
+                    </div>
+                }
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary" disabled="@string.IsNullOrEmpty(resourceId)" @onclick="Check"><span class="icon fa-solid fa-sharp fa-play"></span>Check Access</button>
+            </div>
+        </div>
+    </div>
+
+    @if (result.HasValue)
+    {
+        var value = result.Value;
+        var description = resources.Describe(checkedResourceId);
+
+        <div class="section">
+            <div class="result-card @GetResultClass(value)">
+                <span class="result-icon fa-solid fa-sharp @GetResultIcon(value)"></span>
+                <div class="result-text">
+                    <span class="result-title">@GetResultTitle(value)</span>
+                    <span class="result-subject">@checkedSubject · @description.Title@(description.Subtitle != null ? $" · {description.Subtitle}" : "")</span>
+                    @if (!string.IsNullOrEmpty(value.Message))
+                    {
+                        <span class="result-message">@value.Message</span>
+                    }
+                    @if (value.IsAllowed)
+                    {
+                        <div class="chips">
+                            <span class="muted">Permissions</span>
+                            @foreach (var permission in value.Permissions)
+                            {
+                                <span class="chip">@(permission == "*" ? "Full access" : permission)</span>
+                            }
+                            @if (value.Permissions.Count == 0)
+                            {
+                                <span class="muted">None (signed in only)</span>
+                            }
+                        </div>
+                    }
+                    else if (value.Status == TrakHoundAuthorizationStatus.AuthenticationRequired && value.ProviderIds.Count > 0)
+                    {
+                        <div class="chips">
+                            <span class="muted">Sign in with</span>
+                            @foreach (var id in value.ProviderIds)
+                            {
+                                <span class="chip">@(state.GetProvider(id)?.DisplayName ?? id)</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private SecurityState state;
+    private SecurityResources resources;
+
+    private string providerId;
+    private string userId;
+    private string roles;
+    private string resourceId;
+    private bool systemWrite;
+
+    private TrakHoundAuthorizationResult? result;
+    private string checkedResourceId;
+    private string checkedSubject;
+
+    private bool IsSystemResource => resourceId != null && resourceId.StartsWith($"{TrakHoundSystemSecurity.ResourcePrefix}:");
+
+    private bool IsServiceResource => resourceId != null && resourceId.StartsWith($"{TrakHoundServiceSecurity.ResourcePrefix}:");
+
+
+    protected override void OnInitialized()
+    {
+        state = SecurityState.Load(instance);
+        resources = new SecurityResources(instance);
+    }
+
+    private void Clear() => result = null;
+
+    private void ResourceChanged(string value)
+    {
+        resourceId = value;
+        Clear();
+    }
+
+    private void KeySelected(ChangeEventArgs args)
+    {
+        var key = state.Keys.FirstOrDefault(o => o.Id == args.Value?.ToString());
+        if (key != null)
+        {
+            userId = key.Name;
+            roles = key.Roles != null ? string.Join(", ", key.Roles) : null;
+            Clear();
+        }
+    }
+
+    private void UserSelected(ChangeEventArgs args)
+    {
+        var user = state.Users.FirstOrDefault(o => o.Id == args.Value?.ToString());
+        if (user != null)
+        {
+            userId = user.Username;
+            roles = user.Roles != null ? string.Join(", ", user.Roles) : null;
+            Clear();
+        }
+    }
+
+    private string GetServicePermission()
+    {
+        var operation = resourceId?.Split(':').LastOrDefault();
+        return TrakHoundServiceSecurity.GetPermission(operation);
+    }
+
+    private void Check()
+    {
+        TrakHoundIdentity identity = null;
+        if (!string.IsNullOrEmpty(providerId))
+        {
+            identity = new TrakHoundIdentity();
+            identity.ProviderId = providerId;
+            identity.UserId = string.IsNullOrWhiteSpace(userId) ? "(user)" : userId.Trim();
+            identity.Roles = roles?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
+        }
+
+        // Service operations require their read / write Permission (as they do when called)
+        // System API requests require read, or write for changes (as they do when called)
+        var permission = IsServiceResource ? GetServicePermission() : IsSystemResource ? TrakHoundSystemSecurity.GetPermission(systemWrite) : null;
+
+        result = instance.SecurityManager.Authorize(identity, resourceId, permission);
+        checkedResourceId = resourceId;
+        checkedSubject = identity != null ? $"{identity.UserId} ({state.GetProvider(providerId)?.DisplayName ?? providerId})" : "Anonymous";
+    }
+
+    private static string GetResultClass(TrakHoundAuthorizationResult value)
+    {
+        switch (value.Status)
+        {
+            case TrakHoundAuthorizationStatus.Allowed: return "allowed";
+            case TrakHoundAuthorizationStatus.AuthenticationRequired: return "sign-in";
+            default: return "denied";
+        }
+    }
+
+    private static string GetResultIcon(TrakHoundAuthorizationResult value)
+    {
+        switch (value.Status)
+        {
+            case TrakHoundAuthorizationStatus.Allowed: return "fa-circle-check";
+            case TrakHoundAuthorizationStatus.AuthenticationRequired: return "fa-right-to-bracket";
+            default: return "fa-circle-xmark";
+        }
+    }
+
+    private static string GetResultTitle(TrakHoundAuthorizationResult value)
+    {
+        switch (value.Status)
+        {
+            case TrakHoundAuthorizationStatus.Allowed: return "Allowed";
+            case TrakHoundAuthorizationStatus.AuthenticationRequired: return "Sign In Required";
+            default: return "Denied";
+        }
+    }
+
+}

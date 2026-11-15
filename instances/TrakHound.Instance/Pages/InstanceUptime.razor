@@ -1,0 +1,59 @@
+﻿@implements IDisposable
+@inject ITrakHoundInstance instance
+@using TrakHound.Instances
+
+@text
+
+@code {
+
+    // Owns the 1 second timer so only this text re-renders (not the whole InstanceHeader)
+    private readonly System.Timers.Timer updateTimer = new System.Timers.Timer();
+    private string text;
+    private bool disposed;
+
+
+    protected override void OnInitialized()
+    {
+        text = GetText();
+
+        updateTimer.Interval = 1000;
+        updateTimer.Elapsed += UpdateTimerElapsed;
+        updateTimer.Start();
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+
+        updateTimer.Elapsed -= UpdateTimerElapsed;
+        updateTimer.Dispose();
+    }
+
+    private string GetText()
+    {
+        var timerTimestamp = instance.LastUpdated.ToLocalTime();
+        var timerDuration = DateTime.Now - timerTimestamp;
+        return $"{timerTimestamp} ({timerDuration.ToSimpleFormattedString()})";
+    }
+
+    private async void UpdateTimerElapsed(object sender, System.Timers.ElapsedEventArgs args)
+    {
+        if (disposed) return;
+
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                // Skip the render when the formatted text hasn't changed
+                var updated = GetText();
+                if (updated != text)
+                {
+                    text = updated;
+                    StateHasChanged();
+                }
+            });
+        }
+        catch (ObjectDisposedException) { } // Component or Circuit disposed during the update
+    }
+
+}

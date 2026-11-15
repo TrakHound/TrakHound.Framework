@@ -1,0 +1,46 @@
+@* A section in an area's sidebar (AreaLayout). Styled by AreaLayout, since a NavLink can't be given this component's CSS scope *@
+
+<NavLink class="area-nav-item" href="@Href" Match="@Match">
+    <span class="icon @Icon"></span>
+    <span class="label">@Label</span>
+    @if (Issues > 0)
+    {
+        <span class="count issues" title="@IssuesTitle">@Issues</span>
+    }
+    @if (Count.HasValue)
+    {
+        <span class="count @(Highlight ? "highlight" : null)">@Count</span>
+    }
+</NavLink>
+
+@code {
+
+    [Parameter]
+    public string Href { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string Label { get; set; }
+
+    // The number of items in the section
+    [Parameter]
+    public int? Count { get; set; }
+
+    // The number of items that need attention (shown in red when there are any)
+    [Parameter]
+    public int Issues { get; set; }
+
+    [Parameter]
+    public string IssuesTitle { get; set; }
+
+    // Shows the count in the accent color (ex. the Package updates that are available)
+    [Parameter]
+    public bool Highlight { get; set; }
+
+    // An area's first page uses All, so it isn't shown as active on every page
+    [Parameter]
+    public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
+
+}

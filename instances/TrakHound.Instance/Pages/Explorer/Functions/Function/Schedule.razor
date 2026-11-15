@@ -1,0 +1,679 @@
+﻿@implements IDisposable
+@inject ExplorerService explorerService
+@using System.Text.Json.Serialization
+@using TrakHound.Api
+@using TrakHound.Blazor.Components
+@using TrakHound.Clients
+@using TrakHound.Functions
+
+<div class="information-panel">
+
+	<div class="header-panel">
+		<span class="icon fa-regular fa-sharp fa-calendar-clock"></span>
+		<span class="title">Scheduled Tasks</span>
+		<span class="subtitle">Designate Functions to run at a specified schedule</span>
+	</div>
+
+	<div class="toolbar-panel">
+
+		@if (!_loading)
+		{
+			if (!addLoading)
+			{
+				<button class="admin-write btn btn-primary btn-add" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Task</button>
+			}
+			else
+			{
+				<button class="admin-write btn btn-primary btn-add disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Add Task</button>
+			}
+		}
+		else
+		{
+			<button class="admin-write btn btn-primary btn-add disabled" disabled><span class="icon fa-solid fa-sharp fa-plus"></span>Add Task</button>
+		}
+
+		@if (!_loading)
+		{
+			<button class="btn btn-light btn-refresh" title="Refresh" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span></button>
+		}
+		else
+		{
+			<button class="btn btn-light btn-refresh disabled" disabled title="Refreshing"><span class="icon fa-solid fa-sharp fa-rotate spin"></span></button>
+		}
+
+		<button class="btn btn-light btn-transfer" @onclick="() => schedulesTransfer.Export()" disabled="@_loading" title="Download this Function's Jobs and Scheduled Tasks (to import on another Instance)"><span class="icon fa-solid fa-sharp fa-file-export"></span>Export</button>
+		<button class="admin-write btn btn-light btn-transfer" @onclick="() => schedulesTransfer.ShowImport()" disabled="@_loading" title="Import Jobs and Scheduled Tasks from an Export"><span class="icon fa-solid fa-sharp fa-file-import"></span>Import</button>
+
+	</div>
+
+	@if (!_loading)
+	{
+		<div class="table-panel">
+			<RadzenDataGrid Data="@_tasks" TItem="ScheduledTask" Density="Density.Default" AllowSorting="true" AllowColumnResize="true">
+				<Columns>
+					<RadzenDataGridColumn TItem="ScheduledTask" CssClass="buttons" Width="100px" Sortable="false">
+						<Template Context="context">
+							<RadzenSwitch @bind-Value=@context.Enabled Change=@(args => ToggleEnabled(context, args)) />
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Property="Schedule" Title="Schedule" CssClass="schedule" Width="200px">
+						<Template Context="context">
+							<span class="schedule-expression">@context.Schedule</span>
+							@if (!string.IsNullOrEmpty(context.TimeZone))
+							{
+								<span class="schedule-timezone" title="Time Zone">@context.TimeZone</span>
+							}
+							@if (context.RunMissed)
+							{
+								<span class="schedule-run-missed fa-solid fa-sharp fa-clock-rotate-left" title="Runs a missed occurrence when the Scheduled Tasks Worker starts"></span>
+							}
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Property="Description" Title="Description" CssClass="description" MinWidth="160px">
+						<Template Context="context">
+							@if (!string.IsNullOrEmpty(context.Description))
+							{
+								<span title="@context.Id">@context.Description</span>
+							}
+							else
+							{
+								@* No Description : a short ID so the Task can still be told apart (the full ID on hover) *@
+								<span class="task-id" title="@context.Id">@(context.Id?.Length > 8 ? context.Id.Substring(0, 8) : context.Id)</span>
+							}
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Title="Job" Width="180px" Sortable="false">
+						<Template Context="context">
+							@if (string.IsNullOrEmpty(context.JobId))
+							{
+								<span class="metric muted" title="Runs the Function without Parameters">No Job</span>
+							}
+							else
+							{
+								var job = GetJob(context.JobId);
+								if (job != null)
+								{
+									<span class="job-name" title="@job.ParametersText">@job.Name</span>
+								}
+								else
+								{
+									<span class="metric error" title="@context.JobId">Job Not Found</span>
+								}
+							}
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Title="Next Run" Width="110px" Sortable="false">
+						<Template Context="context">
+							@{ var summary = GetTaskSummary(context); }
+							<span class="metric" title="@FormatTimestamp(summary?.NextRun)">@FormatRelative(summary?.NextRun)</span>
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Title="Last Run" Width="150px" Sortable="false">
+						<Template Context="context">
+							@{ var summary = GetTaskSummary(context); }
+							@if (summary?.LastRun != null)
+							{
+								<span class="metric">@FormatTimestamp(summary.LastRun)</span>
+								<span class="metric result @GetResultClass(summary.LastStatusCode)">@summary.LastStatusCode</span>
+							}
+							else
+							{
+								<span class="metric muted">-</span>
+							}
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Title="Runs (24h)" Width="95px" TextAlign="TextAlign.Right" Sortable="false">
+						<Template Context="context">
+							@{ var summary = GetTaskSummary(context); }
+							<span class="metric">@(summary != null ? summary.RunCount.ToString("N0") : "-")</span>
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Title="Success" Width="85px" TextAlign="TextAlign.Right" Sortable="false">
+						<Template Context="context">
+							@{ var summary = GetTaskSummary(context); }
+							<span class="metric @(summary?.ErrorCount > 0 ? "error" : null)" title="@(summary != null ? $"{summary.ErrorCount:N0} errors" : null)">@(summary?.RunCount > 0 ? $"{summary.SuccessRate:0.#}%" : "-")</span>
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" Title="Missed" Width="80px" TextAlign="TextAlign.Right" Sortable="false">
+						<Template Context="context">
+							@{ var summary = GetTaskSummary(context); }
+							<span class="metric @(summary?.MissedRunCount > 0 ? "warning" : null)" title="Scheduled occurrences without a Run (since the first Run in the last 24 hours)">@(summary?.MissedRunCount != null ? summary.MissedRunCount.Value.ToString("N0") : "-")</span>
+						</Template>
+					</RadzenDataGridColumn>
+					<RadzenDataGridColumn TItem="ScheduledTask" CssClass="buttons" Width="130px" Sortable="false">
+						<Template Context="context">
+							<button class="admin-write btn btn-sm btn-link" @onclick="() => EditClicked(context)">Edit</button>
+							<button class="admin-write btn btn-sm btn-link" @onclick="() => DeleteClicked(context)">Delete</button>
+						</Template>
+					</RadzenDataGridColumn>
+				</Columns>
+			</RadzenDataGrid>
+		</div>
+	}
+	else
+	{
+		<div class="loading-panel">
+			<Loading Message="@_loadingMessage" />
+		</div>
+	}
+
+	<Modal Class="add-function-modal" Visible="@addModalVisible">
+		<HeaderContent>
+			<span class="modal-header-icon fa-solid fa-sharp @(editTaskId == null ? "fa-square-plus" : "fa-pen-to-square")"></span>
+			<span class="modal-header-title">@(editTaskId == null ? "Create New Scheduled Task" : "Edit Scheduled Task")</span>
+		</HeaderContent>
+		<BodyContent>
+			<div class="configuration-panel">
+				<div class="form-field">
+					<label>Description</label>
+					<RadzenTextArea @bind-Value=@addDescription />
+				</div>
+				<div class="form-field">
+					<label>Job</label>
+					<RadzenDropDown TValue="string" @bind-Value=@addJobId Data="@_jobs" TextProperty="Name" ValueProperty="Id" AllowClear="true" Placeholder="No Job (runs the Function without Parameters)" />
+					<span class="instructions">The Job's Parameters are passed to the Function on each Run. Add Jobs on the Jobs tab</span>
+				</div>
+				<div class="form-field">
+					<label>Schedule</label>
+					<RadzenTextBox @bind-Value=@addSchedule />
+					<div class="template-buttons">
+						<button class="btn btn-sm btn-secondary" @onclick="Every30SecondsClicked">Every 30s</button>
+						<button class="btn btn-sm btn-secondary" @onclick="Every5MinutesClicked">Every 5m</button>
+						<button class="btn btn-sm btn-secondary" @onclick="Every1HourClicked">Every 1hr</button>
+						<button class="btn btn-sm btn-secondary" @onclick="FirstOfMonthClicked">1st of Month</button>
+					</div>
+					<span class="instructions">Supports CRON expressions : See <a href="https://crontab.cronhub.io/" target="_blank">Here</a> for more examples</span>
+				</div>
+				<div class="form-field">
+					<label>Time Zone</label>
+					<RadzenDropDown TValue="string" @bind-Value=@addTimeZone Data="@timeZones" TextProperty="Name" ValueProperty="Id" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="@($"Server Time Zone : {TimeZoneInfo.Local.DisplayName}")" />
+				</div>
+				<div class="form-field form-field-check">
+					<RadzenCheckBox TValue="bool" @bind-Value=@addRunMissed Name="addRunMissed" />
+					<RadzenLabel Text="Run a missed occurrence when the Scheduled Tasks Worker starts" Component="addRunMissed" />
+				</div>
+			</div>
+		</BodyContent>
+		<FooterContent>
+
+			@if (!addLoading)
+			{
+				<button class="btn btn-secondary" @onclick="ModalCancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+				<button class="admin-write btn btn-primary" @onclick="ModalAddClicked"><span class="icon fa-solid fa-sharp @(editTaskId == null ? "fa-plus" : "fa-check")"></span>@(editTaskId == null ? "Add" : "Save")</button>
+			}
+			else
+			{
+				<button class="btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>@(editTaskId == null ? "Adding.." : "Saving..")</button>
+			}
+
+		</FooterContent>
+	</Modal>
+
+	<Modal Class="delete-function-modal" Visible="@deleteModalVisible">
+		<HeaderContent>
+			<span class="modal-header-icon fa-solid fa-sharp fa-memo"><span class="icon fa-solid fa-sharp fa-delete-right"></span></span>
+			<span class="modal-header-title">Confirm Delete</span>
+		</HeaderContent>
+		<BodyContent>
+
+			<span class="delete-modal-message">Delete this Scheduled Task? It will stop running and can't be restored.</span>
+
+			<div class="delete-modal-items">
+				@if (!string.IsNullOrEmpty(deleteName))
+				{
+					<span class="delete-item-name">@deleteName</span>
+				}
+				@if (!string.IsNullOrEmpty(deleteSchedule))
+				{
+					<span class="delete-item-schedule"><span class="icon fa-regular fa-sharp fa-calendar-clock"></span>@deleteSchedule</span>
+				}
+				<span class="delete-item-id">@deleteId</span>
+			</div>
+
+		</BodyContent>
+		<FooterContent>
+
+			@if (!deleteLoading)
+			{
+				<button class="btn btn-secondary" @onclick="ModalCancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+				<button class="admin-write btn btn-danger" @onclick="ModalDeleteClicked"><span class="icon fa-solid fa-sharp fa-trash"></span>Delete</button>
+			}
+			else
+			{
+				<button class="admin-write btn btn-danger disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Deleting..</button>
+			}
+
+		</FooterContent>
+	</Modal>
+
+	<SchedulesTransfer @ref="schedulesTransfer" FunctionId="@FunctionInformation?.FunctionId" Notifications="@notificationService" Imported="@(() => Load(true))" />
+
+</div>
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+
+@code {
+
+	private SchedulesTransfer schedulesTransfer;
+
+	private string _previousConfigurationId;
+
+	private IEnumerable<ScheduledTask> _tasks;
+	private Dictionary<string, FunctionTaskSummary> _taskSummaries;
+
+	private bool _loading;
+	private string _loadingMessage;
+
+	private bool addModalVisible;
+	private string addDescription;
+	private string addSchedule;
+	private string addTimeZone;
+	private string addJobId;
+	private List<FunctionJob> _jobs;
+	private bool addRunMissed;
+	private bool addLoading;
+	private string editTaskId; // Set when the Modal edits a Task (instead of adding one)
+
+	private static readonly IEnumerable<TimeZoneOption> timeZones = TimeZoneInfo.GetSystemTimeZones().Select(o => new TimeZoneOption(o.Id, o.DisplayName)).ToList();
+
+	private record TimeZoneOption(string Id, string Name);
+
+	private bool deleteModalVisible;
+	private string deleteName;
+	private string deleteSchedule;
+	private string deleteId;
+	private bool deleteLoading;
+
+	private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+
+	public class ScheduledTask
+	{
+		[JsonPropertyName("id")]
+		public string Id { get; set; }
+
+		[JsonPropertyName("enabled")]
+		public bool Enabled { get; set; }
+
+		[JsonPropertyName("description")]
+		public string Description { get; set; }
+
+		[JsonPropertyName("schedule")]
+		public string Schedule { get; set; }
+
+		[JsonPropertyName("timeZone")]
+		public string TimeZone { get; set; }
+
+		[JsonPropertyName("jobId")]
+		public string JobId { get; set; }
+
+		[JsonPropertyName("runMissed")]
+		public bool RunMissed { get; set; }
+
+		[JsonPropertyName("parameters")]
+		public Dictionary<string, string> Parameters { get; set; }
+	}
+
+
+	[Parameter]
+	public string ServerId { get; set; }
+
+	[Parameter]
+	public TrakHoundFunctionInformation FunctionInformation { get; set; }
+
+
+	protected override void OnInitialized()
+	{
+		notificationService.Updated += NotificationsUpdated;
+	}
+
+	protected async override Task OnParametersSetAsync()
+	{
+		await Load();
+	}
+
+	void IDisposable.Dispose()
+	{
+		notificationService.Updated -= NotificationsUpdated;
+		notificationService.Dispose();
+	}
+
+	private async void NotificationsUpdated(object sender, EventArgs args)
+	{
+		try
+		{
+			await InvokeAsync(StateHasChanged);
+		}
+		catch { }
+	}
+
+	private async Task Load(bool forceLoad = false)
+	{
+		var configurationId = FunctionInformation?.ConfigurationId;
+
+		if (forceLoad || configurationId != _previousConfigurationId)
+		{
+			_previousConfigurationId = configurationId;
+
+			if (FunctionInformation != null)
+			{
+				var functionId = FunctionInformation.FunctionId;
+
+				_tasks = null;
+				_loading = true;
+				_loadingMessage = "Loading Scheduled Tasks..";
+				await InvokeAsync(StateHasChanged);
+
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+						if (client != null)
+						{
+							await LoadTasks(client, functionId);
+						}
+					}
+					catch (Exception ex)
+					{
+						notificationService.AddNotification(NotificationType.Error, "Error Loading Scheduled Tasks", ex.Message);
+					}
+					finally
+					{
+						_loading = false;
+						_loadingMessage = null;
+						await InvokeAsync(StateHasChanged);
+					}
+				});
+			}
+			else
+			{
+				_tasks = null;
+				await InvokeAsync(StateHasChanged);
+			}
+		}
+	}
+
+	private async Task LoadTasks(ITrakHoundClient client, string functionId)
+	{
+		var route = Url.Combine("functions", functionId, "tasks");
+		_tasks = await client.Api.GetJson<IEnumerable<ScheduledTask>>(route);
+		_jobs = (await client.Api.GetJson<IEnumerable<FunctionJob>>(Url.Combine("functions", functionId, "jobs")))?.ToList();
+
+		await LoadTaskSummaries(client, functionId);
+	}
+
+	/// <summary>
+	/// Runs of each Task in the last 24 hours (and the Next Run) from the Functions Summary
+	/// </summary>
+	private async Task LoadTaskSummaries(ITrakHoundClient client, string functionId)
+	{
+		try
+		{
+			var now = DateTime.UtcNow;
+			var queryParameters = new Dictionary<string, string>();
+			queryParameters.Add("functionId", functionId);
+			queryParameters.Add("start", now.AddDays(-1).ToUnixTime().ToString());
+			queryParameters.Add("stop", now.ToUnixTime().ToString());
+			queryParameters.Add("bucketCount", "1");
+
+			var summaries = await client.Api.GetJson<IEnumerable<FunctionSummary>>("functions/summary", queryParameters: queryParameters);
+			_taskSummaries = summaries?
+				.SelectMany(o => o.Tasks ?? Enumerable.Empty<FunctionTaskSummary>())
+				.Where(o => !string.IsNullOrEmpty(o.Id))
+				.GroupBy(o => o.Id)
+				.ToDictionary(o => o.Key, o => o.First());
+		}
+		catch
+		{
+			_taskSummaries = null; // Metrics are optional
+		}
+	}
+
+	private FunctionJob GetJob(string jobId) => jobId != null ? _jobs?.FirstOrDefault(o => o.Id == jobId) : null;
+
+	private FunctionTaskSummary GetTaskSummary(ScheduledTask task)
+	{
+		return task?.Id != null ? _taskSummaries?.GetValueOrDefault(task.Id) : null;
+	}
+
+	private static string GetResultClass(int? statusCode)
+	{
+		if (statusCode >= 200 && statusCode < 400) return "success";
+		if (statusCode == TrakHoundFunctionMetricsCollector.CancelledStatusCode) return "cancelled";
+		return "error";
+	}
+
+	private static string FormatTimestamp(DateTime? timestamp)
+	{
+		if (timestamp == null) return null;
+
+		var local = timestamp.Value.ToLocalTime();
+		return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+	}
+
+	private static string FormatRelative(DateTime? timestamp)
+	{
+		if (timestamp == null) return "-";
+
+		var remaining = timestamp.Value.ToUniversalTime() - DateTime.UtcNow;
+		if (remaining <= TimeSpan.Zero) return "now";
+		if (remaining.TotalDays >= 1) return $"in {(int)remaining.TotalDays}d {remaining.Hours}h";
+		if (remaining.TotalHours >= 1) return $"in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+		if (remaining.TotalMinutes >= 1) return $"in {(int)remaining.TotalMinutes}m";
+		return $"in {Math.Max(1, (int)remaining.TotalSeconds)}s";
+	}
+
+
+	private async void RefreshClicked()
+	{
+		await Load(true);
+	}
+
+	private void AddClicked()
+	{
+		editTaskId = null;
+		addDescription = null;
+		addSchedule = "*/5 * * * *";
+		addTimeZone = null;
+		addRunMissed = false;
+		addJobId = null;
+		addModalVisible = true;
+	}
+
+	private void EditClicked(ScheduledTask task)
+	{
+		editTaskId = task.Id;
+		addDescription = task.Description;
+		addSchedule = task.Schedule;
+		addTimeZone = task.TimeZone;
+		addRunMissed = task.RunMissed;
+		addJobId = task.JobId;
+		addModalVisible = true;
+	}
+
+	private async void ModalAddClicked()
+	{
+		if (FunctionInformation != null && !string.IsNullOrEmpty(addSchedule))
+		{
+			var functionId = FunctionInformation.FunctionId;
+			var taskId = editTaskId;
+			var description = addDescription;
+			var schedule = addSchedule;
+			var timeZone = addTimeZone;
+			var runMissed = addRunMissed;
+			var jobId = addJobId;
+
+			addLoading = true;
+			await InvokeAsync(StateHasChanged);
+
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+					if (client != null)
+					{
+						TrakHoundApiResponse response;
+						if (taskId == null)
+						{
+							var queryParameters = new Dictionary<string, string>();
+							queryParameters.Add("description", description);
+							queryParameters.Add("schedule", schedule);
+							queryParameters.Add("enabled", "true");
+							if (!string.IsNullOrEmpty(timeZone)) queryParameters.Add("timeZone", timeZone);
+							if (runMissed) queryParameters.Add("runMissed", "true");
+							if (!string.IsNullOrEmpty(jobId)) queryParameters.Add("jobId", jobId);
+
+							response = await client.Api.Post(Url.Combine("functions", functionId, "tasks"), queryParameters);
+						}
+						else
+						{
+							// Replaces the Task's settings (its Enabled state is kept)
+							var edit = new ScheduledTask { Id = taskId, Description = description, Schedule = schedule, TimeZone = timeZone, RunMissed = runMissed, JobId = jobId };
+							response = await client.Api.Post(Url.Combine("functions", functionId, "tasks", taskId), edit);
+						}
+
+						if (response.Success)
+						{
+							addModalVisible = false;
+							editTaskId = null;
+							await LoadTasks(client, functionId);
+						}
+						else
+						{
+							// Keep the modal open so the Schedule can be corrected
+							notificationService.AddNotification(NotificationType.Error, taskId == null ? "Error Adding Scheduled Task" : "Error Saving Scheduled Task", GetErrorMessage(response));
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					notificationService.AddNotification(NotificationType.Error, taskId == null ? "Error Adding Scheduled Task" : "Error Saving Scheduled Task", ex.Message);
+				}
+				finally
+				{
+					addLoading = false;
+					await InvokeAsync(StateHasChanged);
+				}
+			});
+		}
+	}
+
+	private void DeleteClicked(ScheduledTask task)
+	{
+		deleteName = task.Description;
+		deleteSchedule = task.Schedule;
+		deleteId = task.Id;
+		deleteModalVisible = true;
+	}
+
+	private async void ModalDeleteClicked()
+	{
+		if (FunctionInformation != null && !string.IsNullOrEmpty(deleteId))
+		{
+			var functionId = FunctionInformation.FunctionId;
+			var taskId = deleteId;
+
+			deleteLoading = true;
+			await InvokeAsync(StateHasChanged);
+
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+					if (client != null)
+					{
+						var route = Url.Combine("functions", functionId, "tasks", taskId);
+
+						var response = await client.Api.Delete(route);
+						if (response.Success)
+						{
+							await LoadTasks(client, functionId);
+						}
+						else
+						{
+							notificationService.AddNotification(NotificationType.Error, "Error Deleting Scheduled Task", GetErrorMessage(response));
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					notificationService.AddNotification(NotificationType.Error, "Error Deleting Scheduled Task", ex.Message);
+				}
+				finally
+				{
+					deleteId = null;
+					deleteName = null;
+					deleteSchedule = null;
+					deleteLoading = false;
+					deleteModalVisible = false;
+					await InvokeAsync(StateHasChanged);
+				}
+			});
+		}
+	}
+
+	private void ModalCancelClicked()
+	{
+		addModalVisible = false;
+		deleteModalVisible = false;
+	}
+
+
+	private async Task ToggleEnabled(ScheduledTask task, bool enabled)
+	{
+		if (FunctionInformation == null) return;
+
+		var success = false;
+		string errorMessage = null;
+
+		try
+		{
+			var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+			if (client != null)
+			{
+				// Routes are case sensitive ("enable" / "disable")
+				var action = enabled ? "enable" : "disable";
+				var route = Url.Combine("functions", FunctionInformation.FunctionId, "tasks", task.Id, action);
+
+				var response = await client.Api.Put(route);
+				success = response.Success;
+				if (!success) errorMessage = GetErrorMessage(response);
+			}
+			else
+			{
+				errorMessage = "Client Not Found";
+			}
+		}
+		catch (Exception ex)
+		{
+			errorMessage = ex.Message;
+		}
+
+		if (!success)
+		{
+			// Revert the Switch
+			task.Enabled = !enabled;
+			notificationService.AddNotification(NotificationType.Error, $"Error {(enabled ? "Enabling" : "Disabling")} Scheduled Task", errorMessage);
+		}
+	}
+
+	private static string GetErrorMessage(TrakHoundApiResponse response)
+	{
+		var message = response.GetContentUtf8String();
+		return !string.IsNullOrEmpty(message) ? message : $"Status Code {response.StatusCode}";
+	}
+
+
+	private void Every30SecondsClicked() => addSchedule = "*/30 * * * * *";
+
+	private void Every5MinutesClicked() => addSchedule = "*/5 * * * *";
+
+	private void Every1HourClicked() => addSchedule = "0 */1 * * *";
+
+	private void FirstOfMonthClicked() => addSchedule = "0 0 1 * *";
+
+}

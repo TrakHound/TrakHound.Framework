@@ -1,0 +1,50 @@
+@* Status of a Package Upload or Copy *@
+
+<span class="transfer-state @Status.ToString().ToLower()">
+    <span class="fa-solid fa-sharp @GetIcon()"></span>
+    <span>@(Text ?? GetText())</span>
+</span>
+
+@code {
+
+    [Parameter]
+    public TransferStatus Status { get; set; }
+
+    /// <summary>
+    /// Overrides the text shown for the Status
+    /// </summary>
+    [Parameter]
+    public string Text { get; set; }
+
+
+    private string GetIcon()
+    {
+        switch (Status)
+        {
+            case TransferStatus.Checking:
+            case TransferStatus.Downloading:
+            case TransferStatus.Uploading: return "fa-loader spin";
+            case TransferStatus.Waiting: return "fa-circle-question";
+            case TransferStatus.Completed: return "fa-circle-check";
+            case TransferStatus.Skipped: return "fa-forward";
+            case TransferStatus.Failed: return "fa-circle-exclamation";
+            default: return "fa-clock";
+        }
+    }
+
+    private string GetText()
+    {
+        switch (Status)
+        {
+            case TransferStatus.Checking: return "Checking..";
+            case TransferStatus.Waiting: return "Waiting for answer";
+            case TransferStatus.Downloading: return "Downloading..";
+            case TransferStatus.Uploading: return "Uploading..";
+            case TransferStatus.Completed: return "Done";
+            case TransferStatus.Skipped: return "Skipped";
+            case TransferStatus.Failed: return "Failed";
+            default: return "Pending";
+        }
+    }
+
+}

@@ -1,0 +1,21 @@
+﻿@using TrakHound.Blazor.Apps
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+
+    @* The Stylesheets the Instance loads for App pages, the Theme ("theme" in trakhound.debug.json) and UserPackageId.styles.css *@
+    <TrakHoundDebugHead />
+    <HeadOutlet />
+</head>
+
+<body>
+    <DebugRoutes />
+    <TrakHoundDebugScripts />
+</body>
+
+</html>

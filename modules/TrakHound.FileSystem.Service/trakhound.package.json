@@ -1,0 +1,15 @@
+﻿{
+  "id": "TrakHound.FileSystem.Service",
+  "category": "service",
+  "version": "0.5",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "FileSystem Service for Blobs in the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.FileSystem.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".name": "filesystem-local",
+    ".configurationParameters": "directory",
+    ".bufferEnabled": false
+  }
+}

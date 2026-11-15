@@ -1,0 +1,75 @@
+﻿@* Notifications (bottom right of the page) : the toasts for the result of an action, used by every Admin interface page *@
+
+@{
+    // Enumerate Items once (NotificationService.Notifications returns a new copy each time)
+    var items = Items?.OrderByDescending(o => o.Timestamp).Take(MaxItems).ToList();
+}
+
+@if (!items.IsNullOrEmpty())
+{
+    <div class="notifications-panel" role="status" aria-live="polite">
+        @foreach (var item in items)
+        {
+            var type = item.Type.ToString().ToLower();
+            var icon = item.Type switch
+            {
+                NotificationType.Success => "fa-circle-check",
+                NotificationType.Warning => "fa-triangle-exclamation",
+                NotificationType.Error => "fa-circle-exclamation",
+                _ => "fa-circle-info"
+            };
+
+            <div @key="item.Id" class="notification @type">
+                <span class="notification-icon fa-solid fa-sharp @icon"></span>
+                <div class="notification-text">
+                    <span class="notification-title">@item.Message</span>
+                    @if (!string.IsNullOrEmpty(item.Details))
+                    {
+                        <span class="notification-message">@item.Details</span>
+                    }
+                </div>
+                @if (OnDismiss.HasDelegate)
+                {
+                    <button class="btn btn-link notification-close" title="Close" @onclick="() => OnDismiss.InvokeAsync(item.Id)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+
+    public struct NotificationItem
+    {
+        public string Id { get; init; }
+
+        public NotificationType Type { get; set; }
+
+        public string Message { get; set; }
+
+        public string Details { get; set; }
+
+        public DateTime Timestamp { get; set; }
+
+        public TimeSpan TTL { get; set; }
+
+
+        public NotificationItem()
+        {
+            Id = Guid.NewGuid().ToString();
+        }
+    }
+
+    [Parameter]
+    public IEnumerable<NotificationItem> Items { get; set; }
+
+    [Parameter]
+    public int MaxItems { get; set; } = 3;
+
+    /// <summary>
+    /// Shows a Close button on each Notification
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnDismiss { get; set; }
+
+}

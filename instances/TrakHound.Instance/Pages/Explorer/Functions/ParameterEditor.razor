@@ -1,0 +1,224 @@
+@* Edits a list of Name / Value Parameters as one table (styled like the Api Run tab's Request Parameters). Parameters the Function describes
+   (Definitions) come first with fixed Names; any others follow with editable Names *@
+@using TrakHound.Functions
+
+<div class="parameter-editor">
+
+    @{
+        var otherItems = Items.Where(o => !o.Defined).ToList();
+        var errors = new List<string>();
+    }
+
+    @if (!Definitions.IsNullOrEmpty() || otherItems.Count > 0)
+    {
+        <div class="parameter-table">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Value</th>
+                        <th class="buttons-cell"></th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    @if (!Definitions.IsNullOrEmpty())
+                    {
+                        foreach (var definition in Definitions)
+                        {
+                            var item = GetDefinedItem(definition.Name);
+                            if (item == null) continue;
+
+                            var error = TrakHoundFunctionParameterInformation.ValidateValue(definition, item.Value);
+                            var missing = HighlightMissing && definition.Required && string.IsNullOrEmpty(item.Value) && string.IsNullOrEmpty(definition.DefaultValue);
+                            var isJson = definition.Type == TrakHoundFunctionParameterType.Json && definition.Options.IsNullOrEmpty();
+                            if (error != null) errors.Add(error);
+
+                            <tr class="@(error != null || missing ? "missing" : null) @(isJson ? "continued" : null)" @key="definition.Name">
+                                <td class="name-cell" title="@definition.Description">
+                                    <span class="parameter-name">@definition.Name</span>
+                                    @if (definition.Required)
+                                    {
+                                        <span class="required" title="Required">*</span>
+                                    }
+                                </td>
+                                <td class="type-cell">@GetTypeText(definition)</td>
+                                <td class="value-cell" title="@error">
+                                    @if (!definition.Options.IsNullOrEmpty())
+                                    {
+                                        <RadzenDropDown class="dropdown-sm" TValue="string" @bind-Value="item.Value" Data="@definition.Options" AllowClear="true" Placeholder="@GetPlaceholder(definition)" />
+                                    }
+                                    else if (definition.Type == TrakHoundFunctionParameterType.Boolean)
+                                    {
+                                        <RadzenDropDown class="dropdown-sm" TValue="string" @bind-Value="item.Value" Data="@booleanOptions" AllowClear="true" Placeholder="@GetPlaceholder(definition)" />
+                                    }
+                                    else if (!isJson)
+                                    {
+                                        <TextBox Value="@item.Value" ValueChanged="(o) => item.Value = o" Submitted="SubmitAsync" SpellCheck="false" PlaceHolder="@GetPlaceholder(definition)" InputType="@(definition.Secret ? "password" : "text")" />
+                                    }
+                                </td>
+                                <td class="buttons-cell"></td>
+                            </tr>
+
+                            @* A JSON value gets the table's full width, under its Parameter's row *@
+                            @if (isJson)
+                            {
+                                <tr class="editor-row @(error != null || missing ? "missing" : null)">
+                                    <td class="value-cell" colspan="4" title="@error">
+                                        <RadzenTextArea @bind-Value="item.Value" Immediate="true" Placeholder="@GetPlaceholder(definition)" spellcheck="false" />
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+
+                    @foreach (var item in otherItems)
+                    {
+                        <tr @key="item">
+                            <td class="name-cell editable">
+                                <TextBox Value="@item.Name" ValueChanged="(o) => item.Name = o" SpellCheck="false" PlaceHolder="Name" InputType="text" />
+                            </td>
+                            <td class="type-cell"></td>
+                            <td class="value-cell">
+                                <TextBox Value="@item.Value" ValueChanged="(o) => item.Value = o" Submitted="SubmitAsync" SpellCheck="false" PlaceHolder="Value" InputType="text" />
+                            </td>
+                            <td class="buttons-cell">
+                                <button class="admin-write btn-remove" title="Remove Parameter" @onclick="() => Items.Remove(item)"><span class="fa-regular fa-sharp fa-trash"></span></button>
+                            </td>
+                        </tr>
+                    }
+
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <span class="parameter-empty">No Parameters</span>
+    }
+
+    <button class="admin-write btn btn-link btn-add-parameter" @onclick="() => Items.Add(new ParameterItem())" title="Add a Parameter the Function doesn't describe"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Parameter</button>
+
+    @foreach (var error in errors)
+    {
+        <span class="parameter-warning error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</span>
+    }
+
+    @if (HasDuplicateNames)
+    {
+        <span class="parameter-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Parameter names must be unique (the last value is used)</span>
+    }
+</div>
+
+@code {
+
+    private static readonly string[] booleanOptions = { "true", "false" };
+
+
+    public class ParameterItem
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+
+        /// <summary>
+        /// The Parameter is described by the Function (shown with a fixed Name, and left out when empty)
+        /// </summary>
+        public bool Defined { get; set; }
+    }
+
+
+    [Parameter]
+    public List<ParameterItem> Items { get; set; } = new List<ParameterItem>();
+
+    /// <summary>
+    /// The Parameters the Function describes (FunctionParameter attributes)
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<TrakHoundFunctionParameterInformation> Definitions { get; set; }
+
+    /// <summary>
+    /// Mark Required Parameters without a value (ex. after a Run was refused)
+    /// </summary>
+    [Parameter]
+    public bool HighlightMissing { get; set; }
+
+    /// <summary>
+    /// Enter was pressed in a value (ex. to Run)
+    /// </summary>
+    [Parameter]
+    public EventCallback Submitted { get; set; }
+
+
+    private bool HasDuplicateNames => Items.Where(o => !string.IsNullOrWhiteSpace(o.Name)).GroupBy(o => o.Name.Trim(), StringComparer.OrdinalIgnoreCase).Any(o => o.Count() > 1);
+
+
+    protected override void OnParametersSet()
+    {
+        // The parent may replace the Items (ex. a Job's Parameters), so each described Parameter is matched (or added) on every render
+        if (Items == null || Definitions.IsNullOrEmpty()) return;
+
+        foreach (var item in Items) item.Defined = false;
+
+        foreach (var definition in Definitions)
+        {
+            var item = Items.FirstOrDefault(o => o.Name != null && o.Name.Trim() == definition.Name && !o.Defined);
+            if (item == null)
+            {
+                item = new ParameterItem { Name = definition.Name };
+                Items.Add(item);
+            }
+
+            item.Name = definition.Name;
+            item.Defined = true;
+        }
+    }
+
+    private Task SubmitAsync(string value) => Submitted.InvokeAsync();
+
+    private ParameterItem GetDefinedItem(string name) => Items?.FirstOrDefault(o => o.Defined && o.Name == name);
+
+    private static string GetPlaceholder(TrakHoundFunctionParameterInformation definition)
+    {
+        if (!string.IsNullOrEmpty(definition.DefaultValue)) return $"Default: {definition.DefaultValue}";
+
+        switch (definition.Type)
+        {
+            case TrakHoundFunctionParameterType.DateTime: return "ex. 2026-10-28T08:00:00Z";
+            case TrakHoundFunctionParameterType.Json: return "JSON";
+            default: return null;
+        }
+    }
+
+    private static string GetTypeText(TrakHoundFunctionParameterInformation definition)
+    {
+        if (definition.Secret) return "Secret";
+        if (!definition.Options.IsNullOrEmpty()) return "Choice";
+        return definition.Type.ToString();
+    }
+
+
+    public static List<ParameterItem> FromDictionary(Dictionary<string, string> parameters)
+    {
+        return parameters?.Select(o => new ParameterItem { Name = o.Key, Value = o.Value }).ToList() ?? new List<ParameterItem>();
+    }
+
+    /// <summary>
+    /// The Parameters with a Name (the last value wins for duplicate Names). Described Parameters that are left empty are left out (so their Default is used)
+    /// </summary>
+    public static Dictionary<string, string> ToDictionary(IEnumerable<ParameterItem> items)
+    {
+        var parameters = new Dictionary<string, string>();
+        if (items != null)
+        {
+            foreach (var item in items)
+            {
+                if (string.IsNullOrWhiteSpace(item.Name)) continue;
+                if (item.Defined && string.IsNullOrEmpty(item.Value)) continue;
+
+                parameters[item.Name.Trim()] = item.Value ?? "";
+            }
+        }
+        return parameters;
+    }
+}

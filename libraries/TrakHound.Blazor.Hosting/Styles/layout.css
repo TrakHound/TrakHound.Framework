@@ -1,0 +1,54 @@
+.sidebar {
+    background: var(--panelBackground);
+    border-right: 1px solid var(--borderColorLight);
+    overflow-y: auto;
+    padding: 0;
+    margin: 0;
+}
+
+
+/* The scrollbar is styled by scrollbar-color on body (trakhound.scss), which is inherited */
+.scroll-panel {
+    overflow-y: auto;
+    height: 100%;
+}
+
+/* A handle on a sidebar's edge that changes its width (JsFunctions.attachResizeHandle). It's placed on the edge by
+   the page, wider than the border it sits on so it's easy to grab, and shows the accent color while hovered or dragged */
+.resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    z-index: 5;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+    .resize-handle::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 3px;
+        width: 3px;
+        background: transparent;
+        transition: background-color 0.15s;
+    }
+
+    .resize-handle:hover::after,
+    .resize-handle:focus-visible::after,
+    body.resizing-col .resize-handle::after {
+        background: var(--accent);
+    }
+
+    .resize-handle:focus-visible {
+        outline: none;
+    }
+
+/* While a handle is dragged, the cursor stays the same over the whole page and text isn't selected */
+body.resizing-col,
+body.resizing-col * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}

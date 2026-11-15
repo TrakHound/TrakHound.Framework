@@ -1,0 +1,202 @@
+﻿@page "/_admin/login"
+@attribute [TrakHound.Instance.Security.AdminResourcePublic]
+@inherits TrakHoundComponentBase
+@inject NavigationManager navigationManager
+@inject ITrakHoundInstance instance
+@inject TrakHound.Instance.Security.AdminAuthenticationService authenticationService
+@inject TrakHound.Blazor.Services.JavascriptService javascript
+@using TrakHound.Instances
+@using TrakHound.Instance.Services
+@using TrakHound.Blazor.Components
+
+<TrakHoundPageTitle Text="Sign In" />
+
+<div class="login-container">
+
+    <main class="login-main">
+
+        @* Nothing is shown until the Session is checked, so a signed in browser doesn't see the form before it is redirected *@
+        @if (ready)
+        {
+            var adminUserExists = authenticationService.AdminUserExists();
+
+            @* The logo is on the page, in the Theme's logo color (the mark is a mask, so it can take any color), and the panel only holds the form *@
+            <div class="login-header">
+                <span class="trakhound-logo logo-image" aria-hidden="true"></span>
+                <span class="logo-title">TrakHound<span class="logo-subtitle">Instance</span></span>
+            </div>
+
+            <div class="login-panel">
+                <div class="login-body">
+                    @if (adminUserExists)
+                    {
+                        <div class="heading-container">
+                            <h1 class="heading">Sign in as Admin</h1>
+                            <p class="description">Enter your Admin Account's credentials to continue.</p>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(message))
+                        {
+                            <div class="login-message" role="alert">
+                                <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                                <span class="text">@message</span>
+                            </div>
+                        }
+
+                        @* A form, so Enter submits it and password managers recognize it. It stays in place while signing in (focus and what was typed are kept) *@
+                        <form class="input-container" @onsubmit="Submit">
+
+                            <TextBox InputElementId="@usernameInputId" Class="username-input" @bind-Value="@username" Title="Username" InputType="text" InputName="trakhound-instance-admin-username" SpellCheck="false" AutoComplete="username" Size="Size.Large" />
+
+                            <div class="password-field">
+                                <TextBox RootClass="password-box" InputElementId="@passwordInputId" Class="password-input" @bind-Value="@password" Title="Password" InputType="@(showPassword ? "text" : "password")" InputName="trakhound-instance-admin-password" SpellCheck="false" AutoComplete="current-password" Size="Size.Large" />
+                                <button type="button" class="btn-show-password" @onclick="ToggleShowPassword" title="@(showPassword ? "Hide Password" : "Show Password")" aria-label="Show Password" aria-pressed="@(showPassword ? "true" : "false")"><span class="icon fa-solid fa-sharp @(showPassword ? "fa-eye-slash" : "fa-eye")" aria-hidden="true"></span></button>
+                            </div>
+
+                            <button type="submit" class="btn-login btn btn-primary @(loading ? "loading" : "")" aria-busy="@(loading ? "true" : "false")">
+                                @if (loading)
+                                {
+                                    <span class="spinner" aria-hidden="true"></span>
+                                    <span>Signing In</span>
+                                }
+                                else
+                                {
+                                    <span>Sign In</span>
+                                    <span class="icon fa-solid fa-sharp fa-right-to-bracket" aria-hidden="true"></span>
+                                }
+                            </button>
+
+                        </form>
+                    }
+                    else
+                    {
+                        // The first Admin Account can only be created on the machine the Instance runs on (so whoever reaches a new Instance first can't claim it)
+                        <div class="heading-container">
+                            <h1 class="heading">No Admin Account</h1>
+                            <p class="description">This Instance has no Admin Account yet. Create the first one (an Owner) on the machine the Instance runs on, then reload this page. An Owner can add more Accounts in Security &gt; Admin Accounts.</p>
+                        </div>
+
+                        <div class="setup-instructions">
+                            <div class="setup-step">
+                                <span class="setup-label">Run the command</span>
+                                <code class="setup-command">TrakHound.Instance set-admin &lt;username&gt;</code>
+                                <span class="setup-note">from the Instance's program folder. It asks for the password. For a Windows Service or Linux install, add <code>--configurationPath</code> with the Instance's configuration folder (ex. <code>C:\ProgramData\TrakHound\Instance\config</code>).</span>
+                            </div>
+                            <div class="setup-step">
+                                <span class="setup-label">Or, in a container</span>
+                                <span class="setup-note">set <code>@TrakHoundStartupAdminUser.UsernameEnvironmentVariable</code> and <code>@TrakHoundStartupAdminUser.PasswordFileEnvironmentVariable</code> (a file with the password), then restart the Instance.</span>
+                            </div>
+                            <div class="setup-step">
+                                <span class="setup-note">The Windows installer creates the account during setup. See the Installation Guide, section 6.</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <span class="version">v@(instance.Version)</span>
+        }
+
+    </main>
+
+    <footer class="footer-container">
+        <span class="copyright">Copyright (c) 2026 TrakHound Inc., All Rights Reserved.</span>
+    </footer>
+
+</div>
+
+@code {
+
+    private readonly string usernameInputId = Guid.NewGuid().ToString();
+    private readonly string passwordInputId = Guid.NewGuid().ToString();
+    private string username;
+    private string password;
+    private bool ready;
+    private bool loading;
+    private bool showPassword;
+    private string message;
+    private string focusInputId; // Focused after the next render
+
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string LinkId { get; set; }
+
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Already signed in (ex. in another Browser Tab, which shares the Session Cookie)
+            if (authenticationService.AdminUserExists() && await authenticationService.IsAuthenticated())
+            {
+                navigationManager.NavigateTo(GetLink());
+                return;
+            }
+
+            ready = true;
+            focusInputId = usernameInputId;
+            StateHasChanged();
+            return;
+        }
+
+        if (focusInputId != null)
+        {
+            var inputId = focusInputId;
+            focusInputId = null;
+            await javascript.FocusElement(inputId);
+        }
+    }
+
+
+    private void ToggleShowPassword()
+    {
+        showPassword = !showPassword;
+        focusInputId = passwordInputId;
+    }
+
+    private async Task Submit()
+    {
+        if (loading) return;
+
+        // A missing field is focused instead of reported as a failed sign in
+        if (string.IsNullOrEmpty(username))
+        {
+            focusInputId = usernameInputId;
+            return;
+        }
+
+        if (string.IsNullOrEmpty(password))
+        {
+            focusInputId = passwordInputId;
+            return;
+        }
+
+        message = null;
+        showPassword = false;
+        loading = true;
+
+        var result = await authenticationService.Login(username, password);
+        if (result.Success)
+        {
+            // The Session Cookie is set by an HTTP Request (a Circuit can't set an HttpOnly Cookie), which then opens the requested page
+            var signInUrl = Url.AddQueryParameter("_admin/session/signin", "code", result.Code);
+            if (!string.IsNullOrEmpty(LinkId)) signInUrl = Url.AddQueryParameter(signInUrl, "linkId", LinkId);
+            navigationManager.NavigateTo(signInUrl, forceLoad: true);
+        }
+        else
+        {
+            // Show the error and return to the Password, which is what is usually retyped
+            message = result.Message;
+            loading = false;
+            focusInputId = passwordInputId;
+        }
+    }
+
+    private string GetLink()
+    {
+        var link = !string.IsNullOrEmpty(LinkId) ? LinkStore.Get(LinkId) : null;
+        return !string.IsNullOrEmpty(link) ? link : "_admin/explorer";
+    }
+
+}

@@ -1,0 +1,53 @@
+@* The layout every Admin interface area shares : the header (AreaHeader), a sidebar that lists the area's sections, and the page *@
+
+<div class="area-layout">
+
+    <div class="area-layout-header">
+        <AreaHeader Icon="@Icon" Title="@Title" Subtitle="@Subtitle" Link="@Link">
+            @Tools
+        </AreaHeader>
+    </div>
+
+    <div class="area-layout-body">
+
+        <nav class="area-nav" aria-label="@($"{Title} Sections")">
+            @Nav
+        </nav>
+
+        <div class="area-content">
+            @ChildContent
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string Title { get; set; }
+
+    // Shown on the area's first page (a page that sets no Breadcrumbs)
+    [Parameter]
+    public string Subtitle { get; set; }
+
+    // The area's first page
+    [Parameter]
+    public string Link { get; set; }
+
+    // The area's tools (shown on the right of the header)
+    [Parameter]
+    public RenderFragment Tools { get; set; }
+
+    // The area's sections (AreaNavGroup and AreaNavItem)
+    [Parameter]
+    public RenderFragment Nav { get; set; }
+
+    // The page
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+}

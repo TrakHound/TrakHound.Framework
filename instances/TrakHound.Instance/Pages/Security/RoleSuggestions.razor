@@ -1,0 +1,84 @@
+@* The Roles that Security Profiles for an Identity Provider give Permissions to, to pick from when giving a User or API Key its Roles
+   (a comma separated list). A Role that reaches the System API or Services is marked, and can't be picked by an Admin who can't give it *@
+@inject TrakHound.Instances.ITrakHoundInstance instance
+@using TrakHound.Security
+@using TrakHound.Instance.Security
+
+@if (roles.Count > 0)
+{
+    <div class="role-suggestions">
+        <span class="hint">Roles that Profiles use :</span>
+        @foreach (var role in roles)
+        {
+            var selected = IsSelected(role.Role);
+            var cantGive = !CanGive(role.Role);
+            var disabled = cantGive || (role.ReachesInstance && !canGiveInstanceRoles);
+            var title = cantGive ? "Your Admin Account can't give this Role"
+                : disabled ? "Gives access to the System API or Services, which your Admin Account can't give"
+                : role.ReachesInstance ? "Gives access to the System API or Services"
+                : selected ? "Remove this Role" : "Add this Role";
+
+            <button type="button" class="role-chip @(selected ? "selected" : "") @(role.ReachesInstance ? "instance" : "")" disabled="@disabled" title="@title" aria-pressed="@(selected ? "true" : "false")" @onclick="() => Toggle(role.Role)">
+                @if (role.ReachesInstance)
+                {
+                    <span class="icon fa-solid fa-sharp fa-shield-halved" aria-hidden="true"></span>
+                }
+                @role.Role
+            </button>
+        }
+    </div>
+}
+
+@code {
+
+    private IReadOnlyList<(string Role, bool ReachesInstance)> roles = Array.Empty<(string, bool)>();
+    private bool canGiveInstanceRoles;
+
+
+    /// <summary>
+    /// The ID of the Identity Provider the Roles are for (ex. "users")
+    /// </summary>
+    [Parameter]
+    public string ProviderId { get; set; }
+
+    /// <summary>
+    /// The comma separated Roles being edited
+    /// </summary>
+    [Parameter]
+    public string Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    [Inject]
+    private AdminAccess AdminAccess { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        roles = (instance.SecurityManager as TrakHoundSecurityManager)?.GetProfileRoles(ProviderId) ?? Array.Empty<(string, bool)>();
+        canGiveInstanceRoles = AdminAccess.CanWrite(TrakHoundAdminSecurity.InstanceSecurityProfiles);
+    }
+
+    // The signed in Admin's own Roles can limit which Roles they give
+    private bool CanGive(string role)
+    {
+        if (!AdminAccess.IsAuthenticationEnabled) return true;
+
+        var resourceId = ProviderId == TrakHoundApiKeyIdentityProvider.ProviderId ? TrakHoundAdminSecurity.ApiKeys : TrakHoundAdminSecurity.Users;
+        return new TrakHoundAdminContext(AdminAccess.Account).CanGiveRole(resourceId, role);
+    }
+
+    private List<string> Split() => Value?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
+
+    private bool IsSelected(string role) => Split().Contains(role, StringComparer.Ordinal);
+
+    private Task Toggle(string role)
+    {
+        var selected = Split();
+        if (!selected.Remove(role)) selected.Add(role);
+
+        return ValueChanged.InvokeAsync(selected.Count > 0 ? string.Join(", ", selected) : null);
+    }
+
+}

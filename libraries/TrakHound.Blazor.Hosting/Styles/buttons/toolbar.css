@@ -1,0 +1,92 @@
+﻿.btn-toolbar {
+    display: inline-block !important;
+    text-align: center !important;
+    background: var(--buttonToolbarBackground);
+    border: 1px solid var(--buttonToolbarBorder);
+    border-left: none;
+    border-radius: 0 !important;
+    min-width: 70px;
+    font-size: 14px;
+    margin: 0;
+    color: var(--buttonToolbarText);
+    transition: none;
+    /* Toolbar buttons keep their own size, not the shared .btn size */
+    height: auto;
+    padding: .375rem .75rem;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+    .btn-toolbar.btn-sm {
+        padding: .25rem .5rem;
+    }
+
+    .btn-toolbar:hover {
+        background: var(--buttonToolbarBackgroundHover);
+        border: 1px solid var(--buttonToolbarBorderHover);
+        color: var(--buttonToolbarTextHover);
+    }
+
+    .btn-toolbar:focus {
+        box-shadow: none !important;
+        outline: none;
+        background: var(--buttonToolbarBackgroundHighlight);
+        border: 1px solid var(--buttonToolbarBorderHighlight);
+        color: var(--buttonToolbarTextHighlight);
+    }
+
+    .btn-toolbar.disabled {
+        box-shadow: none !important;
+        outline: none;
+        background: var(--buttonToolbarBackgroundDisabled);
+        border: 1px solid var(--buttonToolbarBorderDisabled);
+        color: var(--buttonToolbarTextDisabled);
+    }
+
+    .btn-toolbar:first-child {
+        border-left: 1px solid var(--buttonToolbarBorder);
+    }
+
+    .btn-toolbar:hover:first-child {
+        border-left: 1px solid var(--buttonToolbarBorderHover);
+    }
+
+    .btn-toolbar:focus:first-child {
+        border-left: 1px solid var(--buttonToolbarBorderHighlight);
+    }
+
+    .btn-toolbar.disabled:first-child {
+        border-left: 1px solid var(--buttonToolbarBorderDisabled);
+    }
+
+    .btn-toolbar .icon {
+        margin: 0 !important;
+        margin-right: 10px !important;
+        font-size: 10px !important;
+        text-align: center;
+        line-height: inherit;
+        color: var(--buttonToolbarIcon);
+    }
+
+    .btn-toolbar:hover .icon {
+        margin-left: -1px !important;
+        color: var(--buttonToolbarIconHover);
+        transition: none;
+    }
+
+    .btn-toolbar:hover:first-child .icon {
+        margin-left: 0px !important;
+    }
+
+    .btn-toolbar:focus .icon {
+        color: var(--buttonToolbarIconHighlight);
+        transition: none;
+    }
+
+    .btn-toolbar.disabled .icon {
+        color: var(--buttonToolbarIconDisabled);
+    }
+
+    .btn-toolbar .icon:first-child {
+        font-size: 16px !important;
+    }

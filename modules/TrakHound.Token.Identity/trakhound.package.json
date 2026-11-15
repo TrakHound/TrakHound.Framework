@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Token.Identity",
+  "category": "identity",
+  "version": "0.3",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Provide Authentication through a configurable static Token",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Token.Identity",
+    ".configurationParameters": "userId,token,roles"
+  }
+}

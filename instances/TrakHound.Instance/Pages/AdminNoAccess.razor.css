@@ -1,0 +1,29 @@
+.admin-no-access {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: 100%;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.admin-no-access .icon {
+    font-size: 32px;
+    color: var(--textLight);
+}
+
+.admin-no-access .title {
+    margin: 0;
+    font-size: var(--fontSizeLg);
+    font-weight: 600;
+    color: var(--textDark);
+}
+
+.admin-no-access .description {
+    margin: 0;
+    max-width: 460px;
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}

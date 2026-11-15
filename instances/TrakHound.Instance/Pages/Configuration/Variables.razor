@@ -1,0 +1,430 @@
+@page "/_admin/configuration/variables"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/variables"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Variables)]
+@layout ConfigurationLayout
+@inject ConfigurationsService configurationsService
+@inject NavigationManager navigationManager
+@using System.Text.RegularExpressions
+@using TrakHound.Configurations
+@using TrakHound.Instances
+@using TrakHound.Instance.Pages.Settings
+
+<TrakHoundPageTitle Text="Variables" />
+<AreaBreadcrumbs Items="@([new("Variables")])" />
+
+<NavigationLock OnBeforeInternalNavigation="BeforeNavigation" ConfirmExternalNavigation="@IsDirty" />
+
+<div class="variables-page">
+
+    @* Header : Title and Actions *@
+    <div class="variables-header">
+        <div class="variables-title">
+            <span class="title">Variables</span>
+            <span class="description">Values shared by every configuration. Reference one in a Parameter as <code>${name}</code>.</span>
+        </div>
+        <div class="variables-actions">
+            @if (IsDirty && !saving)
+            {
+                <span class="save-status"><span class="status-dot"></span>Unsaved changes</span>
+            }
+            <button class="btn btn-light" @onclick="Load" disabled="@(saving || restarting || !IsDirty)"><span class="icon fa-solid fa-sharp fa-xmark"></span>Discard</button>
+            <button class="admin-write btn btn-primary" @onclick="Save" disabled="@(saving || restarting || !IsDirty)"><span class="icon fa-solid fa-sharp @(saving ? "fa-loader spin" : "fa-floppy-disk")"></span>Save</button>
+        </div>
+    </div>
+
+    <div class="variables-content">
+        <div class="form-content">
+
+            @if (errors.Count > 0)
+            {
+                <div class="form-errors">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>
+                        <span class="errors-title">The variables can't be saved</span>
+                        <ul>
+                            @foreach (var error in errors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+
+            @if (restartRequired)
+            {
+                <div class="restart-notice">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    <span class="notice-text">The saved variables are different from the ones the Instance is running with. They are applied when the Instance restarts.</span>
+                    <button class="admin-write btn btn-light" @onclick="() => restartModalVisible = true" disabled="@(restarting || IsDirty)" title="@(IsDirty ? "Save or discard the changes first" : "Stop and Start the Instance")">
+                        <span class="icon fa-solid fa-sharp @(restarting ? "fa-loader spin" : "fa-rotate")"></span>@(restarting ? "Restarting.." : "Restart Instance")
+                    </button>
+                </div>
+            }
+
+            <SettingsSection Title="Variables" Description="@($"Stored in '{TrakHoundConfigurationVariables.Filename}' in the Profile directory (included in Deployments)")" Icon="fa-solid fa-sharp fa-brackets-curly">
+                @if (rows.Count == 0)
+                {
+                    <p class="muted no-variables">No variables are defined. Add one below.</p>
+                }
+                else
+                {
+                    <table class="variables-table">
+                        <tbody>
+                            @foreach (var row in rows)
+                            {
+                                var isSecret = TrakHoundSecrets.IsSecretKey(row.Name);
+                                var shown = shownSecrets.Contains(row.Name);
+                                var isEncrypted = TrakHoundSecrets.IsEncrypted(row.Value);
+                                var usages = GetUsages(row.Name);
+
+                                <tr>
+                                    <td class="variable-name">
+                                        <code>@row.Name</code>
+                                        @if (usages.Count > 0)
+                                        {
+                                            <span class="variable-badge" title="@string.Join("\n", usages)">Used by @usages.Count</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="variable-badge unused" title="No configuration references ${@row.Name}">Unused</span>
+                                        }
+                                    </td>
+                                    <td class="variable-value">
+                                        <div class="value-input">
+                                            @* Saved secrets are encrypted and never shown : a new value replaces it *@
+                                            <input class="form-control" type="@(isSecret && (isEncrypted || !shown) ? "password" : "text")" value="@(isEncrypted ? "" : row.Value)" placeholder="@(isEncrypted ? GetEncryptedPlaceholder(row.Value) : null)" @oninput="e => SetValue(row, e.Value?.ToString())" autocomplete="@(isSecret ? "new-password" : "off")" spellcheck="false" />
+                                            @if (isEncrypted)
+                                            {
+                                                <button class="admin-write btn btn-link" type="button" title="Clear the saved value" @onclick="() => ClearSecret(row)"><span class="fa-solid fa-sharp fa-eraser"></span></button>
+                                            }
+                                            else if (isSecret)
+                                            {
+                                                <button class="btn btn-link" type="button" title="@(shown ? "Hide" : "Show")" @onclick="() => ToggleSecret(row.Name)"><span class="fa-solid fa-sharp @(shown ? "fa-eye-slash" : "fa-eye")"></span></button>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td class="variable-actions">
+                                        <button class="admin-write btn btn-sm btn-command btn-remove" title="Remove @row.Name" @onclick="() => rows.Remove(row)"><span class="fa-regular fa-sharp fa-trash-can"></span></button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+                <div class="variable-add">
+                    <input class="form-control" placeholder="Name" @bind="newName" @bind:event="oninput" spellcheck="false" />
+                    <input class="form-control" type="@(TrakHoundSecrets.IsSecretKey(newName) ? "password" : "text")" placeholder="Value" @bind="newValue" @bind:event="oninput" autocomplete="@(TrakHoundSecrets.IsSecretKey(newName) ? "new-password" : "off")" spellcheck="false" />
+                    <button class="admin-write btn btn-light" @onclick="Add" disabled="@string.IsNullOrWhiteSpace(newName)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add</button>
+                </div>
+                @if (!string.IsNullOrEmpty(addError))
+                {
+                    <p class="add-error">@addError</p>
+                }
+            </SettingsSection>
+
+            @if (undefinedReferences.Count > 0)
+            {
+                <SettingsSection Title="Undefined References" Description="Parameters that reference a variable that isn't defined (the text is used as it is)" Icon="fa-solid fa-sharp fa-triangle-exclamation">
+                    <table class="variables-table">
+                        <tbody>
+                            @foreach (var reference in undefinedReferences.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase))
+                            {
+                                <tr>
+                                    <td class="variable-name"><code>${@reference.Key}</code></td>
+                                    <td class="variable-usages">@string.Join(", ", reference.Value)</td>
+                                    <td class="variable-actions">
+                                        <button class="admin-write btn btn-sm btn-light" title="Add a variable named @reference.Key" @onclick="() => { newName = reference.Key; newValue = null; }"><span class="fa-solid fa-sharp fa-plus"></span></button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </SettingsSection>
+            }
+
+            <SettingsSection Title="Usage" Icon="fa-solid fa-sharp fa-circle-info">
+                <ul class="usage-list">
+                    <li><code>${name}</code> is replaced with the variable's value when a module reads the Parameter (ex. <code>directory: ${dataPath}/files</code>).</li>
+                    <li><code>${env:NAME}</code> is replaced with an Environment Variable of the Instance process. It can also be used in a variable's value, so the value can be different on each host.</li>
+                    <li><code>$${name}</code> is written as the text <code>${name}</code>.</li>
+                    <li>Variables named like a secret (ex. <code>dbPassword</code>, <code>apiToken</code>) are encrypted and aren't included in Deployments (the target's value is kept).</li>
+                </ul>
+            </SettingsSection>
+
+        </div>
+    </div>
+
+</div>
+
+@* Restart *@
+<Modal Class="packages-modal" Visible="@restartModalVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-rotate"></span>
+        <span class="modal-header-title">Restart Instance</span>
+    </HeaderContent>
+    <BodyContent>
+        <p class="modal-description">The Instance is stopped and started again so the modules use the saved variables. While it restarts, API requests return 503 (Service Unavailable).</p>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="() => restartModalVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+        <button class="admin-write btn btn-primary" @onclick="Restart"><span class="icon fa-solid fa-sharp fa-rotate"></span>Restart Instance</button>
+    </FooterContent>
+</Modal>
+
+@* Unsaved changes *@
+<Modal Class="packages-modal" Visible="@(leaveTarget != null)">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+        <span class="modal-header-title">Discard unsaved changes?</span>
+    </HeaderContent>
+    <BodyContent>
+        <p class="modal-description">The variables have changes that haven't been saved. Leave and discard them?</p>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="() => leaveTarget = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Keep Editing</button>
+        <button class="btn btn-danger" @onclick="ConfirmLeave"><span class="icon fa-solid fa-sharp fa-right-from-bracket"></span>Discard Changes</button>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    private class VariableRow
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+    }
+
+    // ${name} (Environment Variables and escaped references aren't Configuration Variables)
+    private static readonly Regex _referenceRegex = new Regex(@"(?<!\$)\$\{([A-Za-z0-9_.\-]+)\}", RegexOptions.Compiled);
+
+    private readonly List<VariableRow> rows = new List<VariableRow>();
+    private readonly Dictionary<string, string> savedSecrets = new Dictionary<string, string>();
+    private readonly HashSet<string> shownSecrets = new HashSet<string>();
+    private readonly Dictionary<string, List<string>> usages = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<string>> undefinedReferences = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+    private readonly List<string> errors = new List<string>();
+    private string savedSnapshot;
+    private string newName;
+    private string newValue;
+    private string addError;
+    private bool saving;
+    private bool restarting;
+    private bool restartRequired;
+    private bool restartModalVisible;
+    private string leaveTarget;
+    private bool leaveConfirmed;
+
+
+    private string ProfileDirectory => configurationsService.ConfigurationProfile?.Path;
+
+    private bool IsDirty => !leaveConfirmed && GetSnapshot() != savedSnapshot;
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+    }
+
+    private void Load()
+    {
+        errors.Clear();
+        addError = null;
+        rows.Clear();
+        savedSecrets.Clear();
+
+        var saved = TrakHoundConfigurationVariables.Read(ProfileDirectory);
+        foreach (var variable in saved.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            rows.Add(new VariableRow { Name = variable.Key, Value = variable.Value });
+            if (TrakHoundSecrets.IsEncrypted(variable.Value)) savedSecrets[variable.Key] = variable.Value;
+        }
+
+        savedSnapshot = GetSnapshot();
+        // Only the running Instance has Variables it was started with
+        restartRequired = configurationsService.Target.IsLive && !IsSame(saved, TrakHoundConfigurationVariables.Variables);
+        LoadUsages(saved);
+    }
+
+    private string GetSnapshot()
+    {
+        return string.Join('\u001e', rows.OrderBy(o => o.Name, StringComparer.Ordinal).Select(o => $"{o.Name}={o.Value}"));
+    }
+
+    private static bool IsSame(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b)
+    {
+        if (a.Count != b.Count) return false;
+        return a.All(o => b.TryGetValue(o.Key, out var value) && value == o.Value);
+    }
+
+
+    #region "Usages"
+
+    private void LoadUsages(IReadOnlyDictionary<string, string> defined)
+    {
+        usages.Clear();
+        undefinedReferences.Clear();
+
+        var profile = configurationsService.ConfigurationProfile;
+        if (profile == null) return;
+
+        foreach (var category in ConfigurationCategories.All)
+        {
+            var configurations = category.Load(profile);
+            if (configurations == null) continue;
+
+            foreach (var configuration in configurations)
+            {
+                var displayName = $"{category.SingularTitle} : {category.GetDisplayName(configuration)}";
+                var names = configuration.Parameters?.Values.OfType<object>()
+                    .SelectMany(o => _referenceRegex.Matches(o.ToString() ?? "").Select(m => m.Groups[1].Value))
+                    .Distinct() ?? Enumerable.Empty<string>();
+
+                foreach (var name in names)
+                {
+                    var target = defined.ContainsKey(name) ? usages : undefinedReferences;
+                    if (!target.TryGetValue(name, out var list)) target[name] = list = new List<string>();
+                    list.Add(displayName);
+                }
+            }
+        }
+    }
+
+    private List<string> GetUsages(string name)
+    {
+        return usages.GetValueOrDefault(name) ?? new List<string>();
+    }
+
+    #endregion
+
+    #region "Values"
+
+    private void SetValue(VariableRow row, string value)
+    {
+        // Erasing a new value for a saved secret keeps the saved value (use Clear to remove it)
+        if (string.IsNullOrEmpty(value) && savedSecrets.TryGetValue(row.Name, out var saved)) row.Value = saved;
+        else row.Value = value ?? "";
+    }
+
+    private void ClearSecret(VariableRow row)
+    {
+        savedSecrets.Remove(row.Name);
+        row.Value = "";
+    }
+
+    private void ToggleSecret(string name)
+    {
+        if (!shownSecrets.Remove(name)) shownSecrets.Add(name);
+    }
+
+    private static string GetEncryptedPlaceholder(string value)
+    {
+        return TrakHoundSecrets.Decrypt(value) != null
+            ? "Saved (encrypted). Type to replace it."
+            : "Saved by a different Instance and can't be decrypted. Enter it again.";
+    }
+
+    private void Add()
+    {
+        addError = null;
+
+        var name = newName?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+
+        if (!TrakHoundConfigurationVariables.IsValidName(name))
+        {
+            addError = $"'{name}' can't be used as a name : use letters, numbers, '_', '.' and '-' (and it can't start with '{TrakHoundConfigurationVariables.EnvironmentPrefix}')";
+            return;
+        }
+
+        if (rows.Any(o => o.Name == name))
+        {
+            addError = $"A variable named '{name}' already exists";
+            return;
+        }
+
+        rows.Add(new VariableRow { Name = name, Value = newValue ?? "" });
+        rows.Sort((x, y) => string.Compare(x.Name, y.Name, StringComparison.OrdinalIgnoreCase));
+        newName = null;
+        newValue = null;
+    }
+
+    #endregion
+
+    #region "Save"
+
+    private async Task Save()
+    {
+        errors.Clear();
+        saving = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            configurationsService.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Variables);
+
+            var variables = rows.ToDictionary(o => o.Name, o => o.Value ?? "");
+            await Task.Run(() => TrakHoundConfigurationVariables.Save(ProfileDirectory, variables));
+            Load();
+        }
+        catch (Exception ex)
+        {
+            errors.Add(ex.Message);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task Restart()
+    {
+        restartModalVisible = false;
+        restarting = true;
+        errors.Clear();
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Instance);
+
+            var instance = configurationsService.Instance;
+            await instance.Stop();
+            await instance.Start();
+
+            if (instance.Status != TrakHoundInstanceStatus.Started) errors.Add($"The Instance did not start (status : {instance.Status}). Check the Instance log.");
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"The Instance could not be restarted : {ex.Message}");
+        }
+        finally
+        {
+            restarting = false;
+            Load();
+        }
+    }
+
+    private void BeforeNavigation(LocationChangingContext context)
+    {
+        if (!IsDirty) return;
+
+        leaveTarget = context.TargetLocation;
+        context.PreventNavigation();
+    }
+
+    private void ConfirmLeave()
+    {
+        var target = leaveTarget;
+        leaveTarget = null;
+        leaveConfirmed = true;
+        navigationManager.NavigateTo(target);
+    }
+
+    #endregion
+
+}

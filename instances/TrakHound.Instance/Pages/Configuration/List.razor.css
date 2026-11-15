@@ -1,0 +1,326 @@
+.list-page {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+.muted {
+    color: var(--textMild);
+}
+
+/* Header */
+
+.list-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px 25px 6px;
+}
+
+.list-icon {
+    width: 26px;
+    margin-top: 2px;
+    font-size: 20px;
+    text-align: center;
+    color: var(--accentLight);
+}
+
+.list-title .title {
+    display: block;
+    font-size: var(--fontSizeMd, 15px);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.list-title .description {
+    display: block;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+/* Toolbar */
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 15px;
+    padding: 12px 25px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.toolbar-search {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 420px;
+}
+
+    .toolbar-search .search-icon {
+        position: absolute;
+        left: 11px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        color: var(--textMild);
+        pointer-events: none;
+    }
+
+    .toolbar-search input {
+        height: 32px;
+        padding-left: 32px;
+        font-size: var(--fontSizeBase);
+        color: var(--inputText);
+        background: var(--inputBackground);
+        border: 1px solid var(--inputBorder);
+        border-radius: 3px;
+    }
+
+.toolbar-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+    .toolbar-buttons .btn {
+        white-space: nowrap;
+    }
+
+/* Table */
+
+.table-container {
+    height: 100%;
+    overflow: auto;
+}
+
+.config-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fontSizeBase);
+}
+
+    .config-table > thead > tr > th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 9px 12px;
+        font-size: var(--fontSizeSm);
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--textMild);
+        background: var(--panelBackground);
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+    .config-table > tbody > tr > td {
+        padding: 10px 12px;
+        vertical-align: middle;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .config-table > tbody > tr:hover {
+        background: var(--panelItemBackground);
+    }
+
+    .config-table > thead > tr > th:first-child,
+    .config-table > tbody > tr > td:first-child {
+        padding-left: 25px;
+    }
+
+.col-name {
+    min-width: 200px;
+}
+
+.config-name {
+    display: block;
+    font-weight: 600;
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+    .config-name:hover {
+        color: var(--accentLight);
+    }
+
+.config-description {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.col-route code {
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+.col-package {
+    min-width: 200px;
+}
+
+.package-id {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.package-version {
+    display: block;
+    font-size: var(--fontSizeSm);
+}
+
+.btn-update {
+    padding: 0;
+    color: var(--accentLight);
+}
+
+.updating {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .updating .icon {
+        margin-right: 5px;
+    }
+
+.col-status {
+    width: 150px;
+    white-space: nowrap;
+}
+
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fontSizeSm);
+}
+
+    .status .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .status.running .status-dot {
+        background: var(--bs-success, #198754);
+    }
+
+    .status.not-loaded .status-dot {
+        background: var(--bs-warning, #ffc107);
+    }
+
+    .status.missing .status-dot {
+        background: var(--bs-danger, #dc3545);
+    }
+
+    .status.unknown {
+        color: var(--textMild);
+    }
+
+.log-link {
+    margin-left: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .log-link:hover {
+        color: var(--accentLight);
+    }
+
+.col-router {
+    width: 110px;
+    font-size: var(--fontSizeSm);
+}
+
+.col-actions {
+    width: 190px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+    .col-actions .btn {
+        margin-left: 4px;
+    }
+
+/* Empty states */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 100%;
+    min-height: 240px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .empty-state .empty-icon {
+        margin-bottom: 6px;
+        font-size: 40px;
+        color: var(--textLight);
+    }
+
+    .empty-state .empty-title {
+        font-size: var(--fontSizeMd, 15px);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .empty-state .empty-description {
+        max-width: 480px;
+        font-size: var(--fontSizeSm);
+    }
+
+    .empty-state .btn {
+        margin-top: 8px;
+    }
+
+/* Remove dialog */
+
+.remove-summary {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px 20px;
+    margin-bottom: 15px;
+    overflow-wrap: anywhere;
+}
+
+    .remove-summary .label {
+        color: var(--textMild);
+    }
+
+.remove-package {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    color: var(--textDark);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 4px;
+}
+
+    .remove-package input {
+        margin-top: 3px;
+    }
+
+@media (max-width: 1100px) {
+    .col-router {
+        display: none;
+    }
+}
+
+@media (max-width: 800px) {
+    .col-route {
+        display: none;
+    }
+}

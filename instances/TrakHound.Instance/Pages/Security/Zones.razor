@@ -1,0 +1,293 @@
+@page "/_admin/configuration/zones"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/zones"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Zones)]
+@layout TrakHound.Instance.Pages.Configuration.ConfigurationLayout
+@implements IDisposable
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject NavigationManager navigationManager
+@using TrakHound.Instances
+@using TrakHound.Zones
+
+<TrakHound.Instance.Pages.Security.SecurityPageStyles>
+    <TrakHoundPageTitle Text="Zones" />
+    <AreaBreadcrumbs Items="@([new("Zones")])" />
+
+    <div class="page">
+
+        <div class="page-header">
+            <span class="page-icon fa-solid fa-sharp fa-object-group"></span>
+            <div class="page-title">
+                <span class="title">Zones</span>
+                <span class="description">A Zone limits what its Modules can reach through their Client. Use one to give a Module in development (or one written with an AI coding tool) a safe place to run</span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-search">
+                <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                <input class="form-control" type="search" placeholder="Search zones.." value="@search" @oninput="e => search = e.Value?.ToString()" spellcheck="false" />
+            </div>
+            <div class="toolbar-buttons">
+                <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Zone</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            @if (zones.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-solid fa-sharp fa-object-group"></span>
+                    <span class="empty-title">No Zones</span>
+                    <span class="empty-description">Every Module can call any Api, Function, Worker or Service. Add a Zone to limit what a set of Modules can reach. Start it in Audit Mode to see what the Modules use before Enforcing.</span>
+                    <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Zone</button>
+                </div>
+            }
+            else
+            {
+                var rows = GetRows();
+                @if (rows.Count == 0)
+                {
+                    <div class="empty-state">
+                        <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                        <span class="empty-title">No Zones match "@search"</span>
+                        <button class="btn btn-light" @onclick="() => search = null">Clear Search</button>
+                    </div>
+                }
+                else
+                {
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Zone</th>
+                                <th>Mode</th>
+                                <th class="col-narrow">Members</th>
+                                <th class="col-narrow hide-narrow">Rules</th>
+                                <th class="col-narrow hide-narrow">Router</th>
+                                <th class="col-narrow">Activity</th>
+                                <th class="col-actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var zone in rows)
+                            {
+                                var link = GetLink(zone);
+                                var activityCount = GetActivityCount(zone);
+
+                                <tr>
+                                    <td>
+                                        <a class="item-name" href="@link">@(string.IsNullOrEmpty(zone.Name) ? zone.Id : zone.Name)</a>
+                                        @if (!string.IsNullOrEmpty(zone.Name))
+                                        {
+                                            <code class="resource-id">@zone.Id</code>
+                                        }
+                                        @if (!string.IsNullOrEmpty(zone.Description))
+                                        {
+                                            <span class="item-description">@zone.Description</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (zone.Mode == TrakHoundZoneMode.Audit)
+                                        {
+                                            <span class="status warning" title="Calls that are not allowed are recorded, but still made"><span class="status-dot"></span>Audit</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="status ok" title="Calls that are not allowed are denied"><span class="status-dot"></span>Enforce</span>
+                                        }
+                                    </td>
+                                    <td class="col-narrow">@(zone.Members?.Count() ?? 0)</td>
+                                    <td class="col-narrow hide-narrow">@(zone.Rules?.Count() ?? 0)</td>
+                                    <td class="col-narrow hide-narrow">@(string.IsNullOrEmpty(zone.RouterId) ? "-" : zone.RouterId)</td>
+                                    <td class="col-narrow">
+                                        @if (activityCount > 0)
+                                        {
+                                            <a class="chip @(zone.Mode == TrakHoundZoneMode.Audit ? "warning" : "danger")" href="@($"{link}#activity")" title="Calls that were denied (or would be denied)">@activityCount</a>
+                                        }
+                                        else
+                                        {
+                                            <span class="muted">-</span>
+                                        }
+                                    </td>
+                                    <td class="col-actions">
+                                        <a class="btn btn-sm btn-command" href="@link"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</a>
+                                        <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removeZone = zone"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            }
+        </div>
+
+        <Modal Class="security-modal" Visible="@addVisible">
+            <HeaderContent>
+                <span class="modal-header-icon fa-solid fa-sharp fa-object-group"></span>
+                <span class="modal-header-title">Add Zone</span>
+            </HeaderContent>
+            <BodyContent>
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="zone-id">ID</label>
+                        <input id="zone-id" class="form-control" @bind="addId" @bind:event="oninput" placeholder="ex. sandbox" spellcheck="false" />
+                        <span class="hint">Letters, numbers, '-', '_', and '.'</span>
+                    </div>
+                    <div class="form-field">
+                        <label for="zone-name">Name</label>
+                        <input id="zone-name" class="form-control" @bind="addName" @bind:event="oninput" placeholder="Optional" />
+                    </div>
+                    <div class="form-field wide">
+                        <label for="zone-description">Description</label>
+                        <input id="zone-description" class="form-control" @bind="addDescription" placeholder="Optional" />
+                    </div>
+                    <div class="form-field">
+                        <label for="zone-mode">Mode</label>
+                        <select id="zone-mode" class="form-select" @bind="addMode">
+                            <option value="@TrakHoundZoneMode.Audit">Audit (record, don't deny)</option>
+                            <option value="@TrakHoundZoneMode.Enforce">Enforce (deny)</option>
+                        </select>
+                        <span class="hint">Audit first to see what the Members use, then grant it and switch to Enforce</span>
+                    </div>
+                </div>
+                @if (addError != null)
+                {
+                    <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@addError</div>
+                }
+            </BodyContent>
+            <FooterContent>
+                <button class="btn btn-secondary" @onclick="() => addVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(addId)" @onclick="AddConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Zone</button>
+            </FooterContent>
+        </Modal>
+
+        <Modal Class="security-modal" Visible="@(removeZone != null)">
+            <HeaderContent>
+                <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+                <span class="modal-header-title">Remove Zone</span>
+            </HeaderContent>
+            <BodyContent>
+                @if (removeZone != null)
+                {
+                    <p>Remove the Zone <strong>@removeZone.Id</strong>?</p>
+                    <p class="muted">Its @(removeZone.Members?.Count() ?? 0) Member(s) will no longer be restricted.</p>
+                }
+            </BodyContent>
+            <FooterContent>
+                <button class="btn btn-secondary" @onclick="() => removeZone = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="admin-write btn btn-danger" @onclick="RemoveConfirmClicked"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Remove</button>
+            </FooterContent>
+        </Modal>
+
+    </div>
+</TrakHound.Instance.Pages.Security.SecurityPageStyles>
+
+@code {
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    // The Zone Manager subscribed to (kept, since the URL has already changed when the page is disposed)
+    private TrakHoundZoneManager _zoneManager;
+    private TrakHoundZoneManager zoneManager => _zoneManager ??= configurationsService.Target.ZoneManager;
+
+    private List<TrakHoundZoneConfiguration> zones = new List<TrakHoundZoneConfiguration>();
+    private string search;
+
+    private bool addVisible;
+    private string addId;
+    private string addName;
+    private string addDescription;
+    private TrakHoundZoneMode addMode = TrakHoundZoneMode.Audit;
+    private string addError;
+
+    private TrakHoundZoneConfiguration removeZone;
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+
+        if (zoneManager != null)
+        {
+            zoneManager.ZonesUpdated += ZonesUpdated;
+            zoneManager.ActivityRecorded += ActivityRecorded;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (zoneManager != null)
+        {
+            zoneManager.ZonesUpdated -= ZonesUpdated;
+            zoneManager.ActivityRecorded -= ActivityRecorded;
+        }
+    }
+
+    private void ZonesUpdated(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void ActivityRecorded(object sender, TrakHoundZoneActivity activity) => _ = InvokeAsync(StateHasChanged);
+
+    private void Load()
+    {
+        zones = zoneManager?.GetZones()?.ToList() ?? new List<TrakHoundZoneConfiguration>();
+    }
+
+    private int GetActivityCount(TrakHoundZoneConfiguration zone) => zoneManager?.GetActivity(zone.Id)?.Count() ?? 0;
+
+    private List<TrakHoundZoneConfiguration> GetRows()
+    {
+        if (string.IsNullOrWhiteSpace(search)) return zones;
+
+        var query = search.Trim();
+        return zones.Where(o =>
+            Contains(o.Id, query) ||
+            Contains(o.Name, query) ||
+            Contains(o.Description, query) ||
+            (o.Members?.Any(m => Contains(m, query)) ?? false)).ToList();
+    }
+
+    private static bool Contains(string value, string query) => value != null && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private string GetLink(TrakHoundZoneConfiguration zone) => configurationsService.GetLink($"_admin/configuration/zones/{Uri.EscapeDataString(zone.Id)}");
+
+    private void AddClicked()
+    {
+        addId = null;
+        addName = null;
+        addDescription = null;
+        addMode = TrakHoundZoneMode.Audit;
+        addError = null;
+        addVisible = true;
+    }
+
+    private void AddConfirmClicked()
+    {
+        var id = addId?.Trim();
+
+        addError = SecurityProfileValidation.ValidateId(id);
+        if (addError == null && zoneManager?.GetZone(id) != null) addError = $"A Zone with the ID \"{id}\" already exists.";
+        if (addError != null) return;
+
+        var zone = new TrakHoundZoneConfiguration();
+        zone.Id = id;
+        zone.Name = string.IsNullOrWhiteSpace(addName) ? null : addName.Trim();
+        zone.Description = string.IsNullOrWhiteSpace(addDescription) ? null : addDescription.Trim();
+        zone.Mode = addMode;
+        zone.Members = new List<string>();
+        zone.Rules = new List<TrakHoundZoneRule>();
+        zone.AllowedCallers = new List<string>();
+
+        zoneManager?.Save(zone);
+        addVisible = false;
+
+        navigationManager.NavigateTo(GetLink(zone));
+    }
+
+    private void RemoveConfirmClicked()
+    {
+        if (removeZone != null) zoneManager?.Remove(removeZone.Id);
+        removeZone = null;
+    }
+
+}

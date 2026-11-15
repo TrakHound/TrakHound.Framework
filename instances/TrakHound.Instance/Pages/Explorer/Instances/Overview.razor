@@ -1,0 +1,451 @@
+@* At a glance : Health, the running Components, Resource usage and key Runtime details *@
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject ITrakHoundInstance localInstance
+@inject TrakHoundProcessMonitor processMonitor
+@using System.Runtime.InteropServices
+@using TrakHound.Clients
+@using TrakHound.Instances
+@using TrakHound.Workers
+
+<div class="overview-panel">
+
+    @* Health *@
+    @if (Health != null)
+    {
+        var problems = Health.Checks?.Where(o => o.Status > TrakHoundHealthStatus.Healthy && !o.Ignored).OrderByDescending(o => o.Status).ToList() ?? new List<TrakHoundHealthCheckResult>();
+
+        <a class="health-strip status-@Health.Status.ToString().ToLower()" href="@GetLink("diagnostics/health")">
+            <span class="health-icon @GetHealthIcon(Health.Status)"></span>
+            <span class="health-text">
+                <span class="health-status">@Health.Status</span>
+                @if (Health.StatusChanged != null && Health.Status != TrakHoundHealthStatus.Unknown)
+                {
+                    <span class="health-since">since @FormatTimestamp(Health.StatusChanged)</span>
+                }
+                @if (problems.Count > 0)
+                {
+                    <span class="health-reasons">@string.Join(" · ", problems.Take(3).Select(o => $"{o.Title}: {o.Description}"))@(problems.Count > 3 ? $" · {problems.Count - 3} more" : "")</span>
+                }
+                else if (Health.Status == TrakHoundHealthStatus.Healthy)
+                {
+                    <span class="health-reasons">All @(Health.Checks?.Count(o => !o.Ignored && o.Status != TrakHoundHealthStatus.Unknown) ?? 0) Health Checks passing</span>
+                }
+                else
+                {
+                    <span class="health-reasons">The Health Checks have not been evaluated yet</span>
+                }
+            </span>
+            <span class="health-link">View Health<span class="icon fa-solid fa-sharp fa-chevron-right"></span></span>
+        </a>
+    }
+
+    @* Components *@
+    <div class="section-title">Components</div>
+    <div class="component-tiles">
+        @foreach (var tile in components)
+        {
+            <a class="component-tile @(tile.Problem ? "problem" : null)" href="@GetLink(tile.Link)">
+                <span class="tile-label"><span class="icon @tile.Icon"></span>@tile.Title</span>
+                <span class="tile-value">@tile.Value@if (!string.IsNullOrEmpty(tile.Unit)) {<span class="tile-unit">@tile.Unit</span>}</span>
+                <span class="tile-detail">@tile.Detail</span>
+            </a>
+        }
+    </div>
+
+    @* Resources (this process) *@
+    @if (IsLocal)
+    {
+        var current = processMonitor.Current;
+        var totalMemory = processMonitor.TotalAvailableMemory;
+
+        <div class="section-title">Resources</div>
+        <div class="resource-tiles">
+            <a class="resource-tile" href="@GetLink("")" @onclick="ShowMonitor" @onclick:preventDefault="true">
+                <span class="tile-label">CPU</span>
+                <span class="tile-value">@(current != null ? $"{current.CpuUsage:0.0}%" : "--")</span>
+                <svg class="sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><polyline points="@cpuPoints" /></svg>
+                <span class="tile-detail">of @processMonitor.ProcessorCount logical processors</span>
+            </a>
+            <a class="resource-tile" href="@GetLink("")" @onclick="ShowMonitor" @onclick:preventDefault="true">
+                <span class="tile-label">Memory</span>
+                <span class="tile-value">@(current != null ? current.WorkingSet.ToFileSize() : "--")</span>
+                <svg class="sparkline" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><polyline points="@memoryPoints" /></svg>
+                <span class="tile-detail">@(current != null && totalMemory > 0 ? $"{current.WorkingSet / (double)totalMemory * 100:0.0}% of {totalMemory.ToFileSize()}" : "")</span>
+            </a>
+            <div class="resource-tile">
+                <span class="tile-label">Disk @diskName</span>
+                <span class="tile-value">@(diskTotal > 0 ? $"{FormatBytes(diskFree)} free" : "--")</span>
+                <div class="disk-bar" title="@($"{diskUsedPercent:0.#}% used")"><div class="disk-bar-used @(diskUsedPercent >= 90 ? "high" : null)" style="width:@($"{diskUsedPercent:0.#}")%"></div></div>
+                <span class="tile-detail">@(diskTotal > 0 ? $"{diskUsedPercent:0.#}% used of {FormatBytes(diskTotal)}" : "")</span>
+            </div>
+        </div>
+
+        @* Details *@
+        var previousRun = TrakHound.Instance.TrakHoundInstanceLifetimeMonitor.PreviousRun;
+        var instanceStatus = localInstance.Status;
+
+        <div class="section-title">Details</div>
+        <div class="details-grid">
+            <div class="detail"><span class="detail-label">Configuration Profile</span><span class="detail-value">@GetConfigurationProfile()</span></div>
+            <div class="detail"><span class="detail-label">Process</span><span class="detail-value">PID @Environment.ProcessId · @RuntimeInformation.FrameworkDescription</span></div>
+            <div class="detail">
+                <span class="detail-label">@(instanceStatus == TrakHoundInstanceStatus.Started ? "Runtime Started" : "Runtime")</span>
+                <span class="detail-value">@(instanceStatus == TrakHoundInstanceStatus.Started ? $"{FormatTimestamp(localInstance.LastUpdated)} ({(DateTime.UtcNow - localInstance.LastUpdated).ToSimpleFormattedString()})" : instanceStatus.ToString())</span>
+            </div>
+            <div class="detail"><span class="detail-label">Process Started</span><span class="detail-value">@FormatTimestamp(processMonitor.StartTime) (@((DateTime.UtcNow - processMonitor.StartTime).ToSimpleFormattedString()))</span></div>
+            <div class="detail"><span class="detail-label">Boot Time</span><span class="detail-value">@GetBootTime()</span></div>
+            <div class="detail"><span class="detail-label">System API</span><span class="detail-value">@(localInstance.Configuration?.SystemApiEnabled == true ? "Enabled" : "Disabled")</span></div>
+            <div class="detail">
+                <span class="detail-label">Last Shutdown</span>
+                @if (previousRun != null)
+                {
+                    <span class="detail-value warning" title="@($"PID {previousRun.ProcessId} stopped unexpectedly around {previousRun.LastModified:yyyy-MM-dd HH:mm:ss} : {previousRun.Reason}")">Not clean (PID @previousRun.ProcessId)</span>
+                }
+                else
+                {
+                    <span class="detail-value">Clean</span>
+                }
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private static readonly TimeSpan _updateInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan _informationInterval = TimeSpan.FromSeconds(60);
+    private const int _sparklinePoints = 60;
+
+    private List<ComponentTile> components = new List<ComponentTile>();
+    private TrakHoundInstanceHealth componentsHealth; // The Health the tiles were built with
+
+    // Configured counts (refreshed every _informationInterval)
+    private DateTime informationUpdated = DateTime.MinValue;
+    private int apiCount;
+    private int appCount;
+    private int functionCount;
+    private int serviceCount;
+
+    // Live values (refreshed every _updateInterval)
+    private double requestRate;
+    private int viewing;
+    private IEnumerable<TrakHoundWorkerInformation> workers;
+    private long runs;
+    private int running;
+
+    private string cpuPoints = "";
+    private string memoryPoints = "";
+    private string diskName;
+    private long diskFree;
+    private long diskTotal;
+    private double diskUsedPercent;
+
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private bool disposed;
+
+
+    private class ComponentTile
+    {
+        public string Title { get; init; }
+        public string Icon { get; init; }
+        public string Value { get; init; }
+        public string Unit { get; init; }
+        public string Detail { get; init; }
+        public string Link { get; init; }
+        public bool Problem { get; init; }
+    }
+
+
+    /// <summary>
+    /// Raised when a Resource tile is clicked (to show the Monitor tab)
+    /// </summary>
+    [Parameter]
+    public EventCallback MonitorRequested { get; set; }
+
+    /// <summary>
+    /// The Instance Health (polled by the Instance page, so it isn't requested twice)
+    /// </summary>
+    [Parameter]
+    public TrakHoundInstanceHealth Health { get; set; }
+
+
+    // Process Resources and Runtime details are only known for this Instance
+    private bool IsLocal => localInstance != null && explorerService.SelectedInstanceId == localInstance.Id;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Update();
+        updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Some tiles show Health problems, so rebuild them when the Instance page passes a new Health
+        if (informationUpdated > DateTime.MinValue && !ReferenceEquals(Health, componentsHealth)) BuildComponents();
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        updateTimer?.Dispose();
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        if (disposed || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            await Update();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { } // The component or circuit may have been disposed
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private async Task Update()
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client == null) return;
+
+        if (DateTime.UtcNow - informationUpdated >= _informationInterval)
+        {
+            await UpdateInformation(client);
+            informationUpdated = DateTime.UtcNow;
+        }
+
+        var apiMetrics = await Try(() => client.Api.GetMetrics());
+        requestRate = apiMetrics?.Sum(o => o.RequestRate) ?? 0;
+
+        var appMetrics = await Try(() => client.Apps.GetMetrics());
+        viewing = appMetrics?.Sum(o => o.ActivePageViews) ?? 0;
+
+        // Polled with the metrics for the live Worker Status
+        workers = await Try(() => client.Workers.GetInformation());
+
+        var functionMetrics = await Try(() => client.Functions.GetMetrics());
+        runs = functionMetrics?.Sum(o => o.TotalRunCount) ?? 0;
+        running = functionMetrics?.Sum(o => o.ActiveRunCount) ?? 0;
+
+        BuildComponents();
+
+        if (IsLocal)
+        {
+            UpdateSparklines();
+            UpdateDisk();
+        }
+    }
+
+    // The configured APIs (with every endpoint), Apps, Functions and Services are only counted here
+    // and rarely change, so they're loaded less often than the metrics
+    private async Task UpdateInformation(ITrakHoundClient client)
+    {
+        apiCount = (await Try(() => client.Api.GetRouteInformation()))?.Count() ?? 0;
+        appCount = (await Try(() => client.Apps.GetInformation()))?.Count() ?? 0;
+        functionCount = (await Try(() => client.Functions.GetInformation()))?.Count() ?? 0;
+
+        var services = client.Services?.Drivers != null ? await Try(() => client.Services.Drivers.GetDrivers()) : null;
+        serviceCount = services?.Count() ?? 0;
+    }
+
+    private void BuildComponents()
+    {
+        var health = Health;
+        var tiles = new List<ComponentTile>();
+
+        // APIs
+        var apiCheck = GetCheck(health, "api");
+        tiles.Add(new ComponentTile
+        {
+            Title = "APIs",
+            Icon = "fa-solid fa-sharp fa-circle-location-arrow",
+            Value = apiCount.ToString(),
+            Detail = (requestRate > 0 ? $"{requestRate:0.#} requests/s" : "No recent requests") + (IsLocal && localInstance.Configuration?.ApiHttpEnabled == false ? " · not served over HTTP" : ""),
+            Link = "diagnostics/api",
+            Problem = IsProblem(apiCheck)
+        });
+
+        // Apps
+        tiles.Add(new ComponentTile
+        {
+            Title = "Apps",
+            Icon = "fa-solid fa-sharp fa-browsers",
+            Value = appCount.ToString(),
+            Detail = IsLocal && localInstance.Configuration?.AppsHttpEnabled == false ? "Not served over HTTP" : viewing > 0 ? $"{viewing} viewing now" : "No one viewing",
+            Link = "diagnostics/apps"
+        });
+
+        // Workers
+        var workers = this.workers;
+        var workerCount = workers?.Count() ?? 0;
+        var started = workers?.Count(o => o.Status == TrakHoundWorkerStatusType.Started) ?? 0;
+        var errors = workers?.Count(o => o.Status == TrakHoundWorkerStatusType.Error) ?? 0;
+        tiles.Add(new ComponentTile
+        {
+            Title = "Workers",
+            Icon = "fa-solid fa-sharp fa-gears",
+            Value = started.ToString(),
+            Unit = $"/ {workerCount} running",
+            Detail = errors > 0 ? $"{errors} in Error" : "None in Error",
+            Link = "diagnostics/workers",
+            Problem = errors > 0 || IsProblem(GetCheck(health, "workers"))
+        });
+
+        // Functions
+        var functionCheck = GetCheck(health, "functions");
+        var failing = CountProblemItems(functionCheck);
+        tiles.Add(new ComponentTile
+        {
+            Title = "Functions",
+            Icon = "fa-solid fa-sharp fa-code",
+            Value = functionCount.ToString(),
+            Detail = failing > 0 ? $"{failing} failing" : running > 0 ? $"{running} running · {runs:N0} runs" : $"{runs:N0} runs since started",
+            Link = "diagnostics/functions",
+            Problem = IsProblem(functionCheck)
+        });
+
+        // Services
+        var serviceCheck = GetCheck(health, "services");
+        var unavailable = CountProblemItems(serviceCheck);
+        tiles.Add(new ComponentTile
+        {
+            Title = "Services",
+            Icon = "fa-solid fa-sharp fa-server",
+            Value = (serviceCount - unavailable).ToString(),
+            Unit = $"/ {serviceCount} available",
+            Detail = unavailable > 0 ? $"{unavailable} not available" : serviceCheck?.Status == TrakHoundHealthStatus.Unknown ? "Checking.." : "All available",
+            Link = "diagnostics/services",
+            Problem = IsProblem(serviceCheck)
+        });
+
+        componentsHealth = health;
+        components = tiles;
+    }
+
+    private void UpdateSparklines()
+    {
+        var history = processMonitor.GetHistory().ToList();
+        if (history.Count < 2)
+        {
+            cpuPoints = memoryPoints = "";
+            return;
+        }
+
+        // Downsample to a fixed number of points
+        var step = Math.Max(1, history.Count / _sparklinePoints);
+        var samples = history.Where((o, i) => i % step == 0).ToList();
+
+        var maxCpu = Math.Max(5, samples.Max(o => o.CpuUsage));
+        var maxMemory = samples.Max(o => o.WorkingSetMB);
+        var minMemory = samples.Min(o => o.WorkingSetMB);
+        var memoryRange = Math.Max(1, maxMemory - minMemory);
+
+        cpuPoints = ToPoints(samples, o => o.CpuUsage / maxCpu);
+        memoryPoints = ToPoints(samples, o => 0.15 + (o.WorkingSetMB - minMemory) / memoryRange * 0.7);
+    }
+
+    private static string ToPoints(List<TrakHoundProcessSample> samples, Func<TrakHoundProcessSample, double> getRatio)
+    {
+        var points = new System.Text.StringBuilder();
+        for (var i = 0; i < samples.Count; i++)
+        {
+            var x = samples.Count > 1 ? (double)i / (samples.Count - 1) * 100 : 0;
+            var y = 22 - Math.Clamp(getRatio(samples[i]), 0, 1) * 20;
+            points.Append(FormattableString.Invariant($"{x:0.##},{y:0.##} "));
+        }
+        return points.ToString();
+    }
+
+    private void UpdateDisk()
+    {
+        try
+        {
+            var path = Path.GetFullPath(AppContext.BaseDirectory);
+            var drive = DriveInfo.GetDrives()
+                .Where(o => o.IsReady && path.StartsWith(o.RootDirectory.FullName, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                .OrderByDescending(o => o.RootDirectory.FullName.Length)
+                .FirstOrDefault();
+
+            if (drive != null)
+            {
+                diskName = $"({drive.Name.TrimEnd('\\', '/')})";
+                diskFree = drive.AvailableFreeSpace;
+                diskTotal = drive.TotalSize;
+                diskUsedPercent = diskTotal > 0 ? (double)(diskTotal - diskFree) / diskTotal * 100 : 0;
+            }
+        }
+        catch { }
+    }
+
+    private async Task ShowMonitor()
+    {
+        await MonitorRequested.InvokeAsync();
+    }
+
+
+    private string GetConfigurationProfile()
+    {
+        var path = localInstance.ConfigurationPath;
+        return !string.IsNullOrEmpty(path) ? Path.GetFileName(path.TrimEnd('\\', '/')) : "-";
+    }
+
+    // How long this process took to be Ready (see the Boots tab)
+    private static string GetBootTime()
+    {
+        var history = TrakHound.Instance.TrakHoundInstanceLifetimeMonitor.BootHistory;
+        var duration = history?.GetBoot(TrakHound.Instance.TrakHoundInstanceLifetimeMonitor.BootId)?.BootDuration;
+        return duration != null ? Boots.FormatDuration(duration.Value.TotalMilliseconds) : "-";
+    }
+
+    private string GetLink(string path)
+    {
+        var instanceId = explorerService.SelectedInstanceId;
+        return string.IsNullOrEmpty(path) ? $"_admin/explorer/{instanceId}" : $"_admin/explorer/{instanceId}/{path}";
+    }
+
+    private static TrakHoundHealthCheckResult GetCheck(TrakHoundInstanceHealth health, string id) => health?.Checks?.FirstOrDefault(o => o.Id == id);
+
+    private static bool IsProblem(TrakHoundHealthCheckResult check) => check != null && !check.Ignored && check.Status > TrakHoundHealthStatus.Healthy;
+
+    private static int CountProblemItems(TrakHoundHealthCheckResult check) => check?.Items?.Count(o => !o.Ignored && o.Status > TrakHoundHealthStatus.Healthy) ?? 0;
+
+    private static async Task<T> Try<T>(Func<Task<T>> get) where T : class
+    {
+        try { return await get(); }
+        catch { return null; }
+    }
+
+    private static string GetHealthIcon(TrakHoundHealthStatus status)
+    {
+        switch (status)
+        {
+            case TrakHoundHealthStatus.Healthy: return "fa-solid fa-sharp fa-circle-check";
+            case TrakHoundHealthStatus.Degraded: return "fa-solid fa-sharp fa-triangle-exclamation";
+            case TrakHoundHealthStatus.Unhealthy: return "fa-solid fa-sharp fa-circle-xmark";
+            default: return "fa-solid fa-sharp fa-circle-question";
+        }
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private static string FormatBytes(double value)
+    {
+        if (value >= 1024L * 1024 * 1024 * 1024) return $"{value / (1024L * 1024 * 1024 * 1024):0.#} TB";
+        if (value >= 1024 * 1024 * 1024) return $"{value / (1024 * 1024 * 1024):0.#} GB";
+        return $"{value / (1024 * 1024):0} MB";
+    }
+
+}

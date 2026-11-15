@@ -1,0 +1,508 @@
+@page "/_admin/security/admins"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Admins)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHound.Instance.Security.TrakHoundAdminAccountStore store
+@inject TrakHound.Instance.Security.TrakHoundAdminRoleStore roleStore
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@using TrakHound.Instances
+@using TrakHound.Instance.Components
+@using TrakHound.Instance.Security
+
+<TrakHoundPageTitle Text="Admin Accounts" />
+<AreaBreadcrumbs Items="@([new("Admin Accounts")])" />
+
+<Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-user-gear"></span>
+        <div class="page-title">
+            <span class="title">Admin Accounts</span>
+            <span class="description">The accounts that sign in to this Admin interface. Each Account's Roles decide what it can view and change</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input class="form-control" type="search" placeholder="Search accounts.." value="@search" @oninput="e => search = e.Value?.ToString()" spellcheck="false" />
+        </div>
+        <div class="toolbar-buttons">
+            <a class="btn btn-sm btn-command" href="_admin/security/admin-roles" title="What each Role can view and change, and the Roles you add"><span class="icon fa-solid fa-sharp fa-list-check"></span>Roles</a>
+            @if (canWrite)
+            {
+                <button class="admin-write btn btn-primary" @onclick="CreateClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Account</button>
+            }
+        </div>
+    </div>
+
+    <div class="table-container">
+
+        <div class="section callout-section">
+            @if (!adminAccess.IsAuthenticationEnabled)
+            {
+                <div class="callout warning">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>Admin Authentication is disabled (<code>adminAuthenticationEnabled</code> in the Instance Settings file), so nobody signs in and everyone who can reach the Admin interface is an Owner. These Accounts apply when it is enabled.</div>
+                </div>
+            }
+            else
+            {
+                <div class="callout">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    <div>These Accounts are only for this Admin interface. Roles limit what an Account does here by accident or without being asked : they aren't a barrier against someone who can install Packages, since a Package is code that runs in the Instance. To get back in when no Owner can sign in, run <code>set-admin</code> on the machine the Instance runs on.</div>
+                </div>
+            }
+        </div>
+
+        @{
+            var rows = GetRows();
+        }
+        @if (rows.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                @if (accounts.Count == 0)
+                {
+                    <span class="empty-title">No Admin Accounts</span>
+                    <span class="empty-description">Create the first one with <code>set-admin</code> on the machine the Instance runs on.</span>
+                }
+                else
+                {
+                    <span class="empty-title">No Accounts match "@search"</span>
+                    <button class="btn btn-light" @onclick="() => search = null">Clear Search</button>
+                }
+            </div>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Roles</th>
+                        <th class="col-narrow">Status</th>
+                        <th class="col-narrow hide-narrow">Password Changed</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var account in rows)
+                    {
+                        var passwordChanged = account.PasswordChanged ?? account.Created;
+
+                        <tr>
+                            <td>
+                                <span class="item-name">@account.DisplayName</span>
+                                @if (!string.IsNullOrEmpty(account.Name))
+                                {
+                                    <code class="resource-id">@account.Username</code>
+                                }
+                                @if (account.Id == currentAccountId)
+                                {
+                                    <span class="chip">You</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="chips">
+                                    @foreach (var roleId in account.RoleIds)
+                                    {
+                                        var role = TrakHoundAdminSecurity.GetRole(roleId);
+                                        var zones = account.Assignments?.FirstOrDefault(o => o.RoleId == roleId)?.Zones;
+                                        <span class="chip" title="@(role?.Description ?? "This Role no longer exists, so it gives no Permissions")">@(role?.Name ?? roleId)@(zones.IsNullOrEmpty() ? "" : $" · {string.Join(", ", zones)}")</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="col-narrow">
+                                @if (account.Enabled)
+                                {
+                                    <span class="status ok"><span class="status-dot"></span>Enabled</span>
+                                }
+                                else
+                                {
+                                    <span class="status warning"><span class="status-dot"></span>Disabled</span>
+                                }
+                            </td>
+                            <td class="col-narrow hide-narrow" title="@passwordChanged.ToLocalTime().ToString("g")">@passwordChanged.ToLocalTime().ToString("d")</td>
+                            <td class="col-actions">
+                                @if (canWrite)
+                                {
+                                    <button class="admin-write btn btn-sm btn-command" @onclick="() => EditClicked(account)"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</button>
+                                    <button class="admin-write btn btn-sm btn-command" title="End the Account's Sessions, so it signs in again" @onclick="() => SignOut(account)"><span class="icon fa-regular fa-sharp fa-right-from-bracket"></span>Sign Out</button>
+                                    <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => deleteAccount = account"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <Modal Class="security-modal" Visible="@createVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-user-plus"></span>
+            <span class="modal-header-title">Add Admin Account</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="admin-username">Username</label>
+                    <input id="admin-username" class="form-control" @bind="createUsername" @bind:event="oninput" placeholder="ex. jsmith" spellcheck="false" autocomplete="off" />
+                    <span class="hint">At least @TrakHoundAdminAccountStore.UsernameMinLength characters</span>
+                </div>
+                <div class="form-field">
+                    <label for="admin-name">Name</label>
+                    <input id="admin-name" class="form-control" @bind="createName" placeholder="Optional (ex. Jane Smith)" autocomplete="off" />
+                </div>
+                <div class="form-field">
+                    <label for="admin-password">Password</label>
+                    <input id="admin-password" class="form-control" type="password" @bind="createPassword" @bind:event="oninput" autocomplete="new-password" />
+                    <span class="hint">At least @TrakHoundAdminAccountStore.PasswordMinLength characters</span>
+                </div>
+                <div class="form-field">
+                    <label for="admin-password-confirm">Confirm Password</label>
+                    <input id="admin-password-confirm" class="form-control" type="password" @bind="createPasswordConfirm" @bind:event="oninput" autocomplete="new-password" />
+                </div>
+                <div class="form-field wide">
+                    <label>Roles</label>
+                    @RolePicker(createRoles, createZones)
+                </div>
+            </div>
+            @ErrorCallout()
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => createVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(createUsername) || string.IsNullOrEmpty(createPassword) || createRoles.Count == 0)" @onclick="CreateConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Account</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(editAccount != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-user-pen"></span>
+            <span class="modal-header-title">Edit Admin Account</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (editAccount != null)
+            {
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label>Username</label>
+                        <input class="form-control" value="@editAccount.Username" disabled />
+                    </div>
+                    <div class="form-field">
+                        <label for="admin-edit-name">Name</label>
+                        <input id="admin-edit-name" class="form-control" @bind="editName" placeholder="Optional (ex. Jane Smith)" autocomplete="off" />
+                    </div>
+                    <div class="form-field wide">
+                        <label>Roles</label>
+                        @RolePicker(editRoles, editZones)
+                        <span class="hint">A change applies to what the Account does next. It doesn't have to sign in again</span>
+                    </div>
+                    <div class="form-field">
+                        <label for="admin-edit-password">New Password</label>
+                        <input id="admin-edit-password" class="form-control" type="password" @bind="newPassword" @bind:event="oninput" autocomplete="new-password" placeholder="Leave blank to keep" />
+                        <span class="hint">At least @TrakHoundAdminAccountStore.PasswordMinLength characters. Signs the Account out</span>
+                    </div>
+                    <div class="form-field">
+                        <label for="admin-edit-password-confirm">Confirm Password</label>
+                        <input id="admin-edit-password-confirm" class="form-control" type="password" @bind="newPasswordConfirm" @bind:event="oninput" autocomplete="new-password" />
+                    </div>
+                    <div class="form-field wide">
+                        <label class="admin-enabled">
+                            <input type="checkbox" @bind="editEnabled" />
+                            <span>
+                                Enabled
+                                <span class="muted">A disabled Account can't sign in, and is signed out now</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                @ErrorCallout()
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => editAccount = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@(editRoles.Count == 0)" @onclick="EditConfirmClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Save</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(deleteAccount != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Delete Admin Account</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (deleteAccount != null)
+            {
+                <p>Delete the Admin Account <strong>@deleteAccount.Username</strong>?</p>
+                <p class="muted">The Account is signed out everywhere. This can't be undone. To keep the Account but stop it signing in, Edit it and clear Enabled instead.</p>
+                @ErrorCallout()
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => deleteAccount = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="DeleteConfirmClicked"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Delete</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private List<TrakHoundAdminAccount> accounts = new List<TrakHoundAdminAccount>();
+    private string currentAccountId;
+    private bool canWrite;
+    private string search;
+    private string errorMessage;
+
+    private bool createVisible;
+    private string createUsername;
+    private string createName;
+    private string createPassword;
+    private string createPasswordConfirm;
+    private HashSet<string> createRoles = new HashSet<string>();
+    private Dictionary<string, string> createZones = new Dictionary<string, string>(); // Role ID => comma separated Zone IDs
+
+    private TrakHoundAdminAccount editAccount;
+    private string editName;
+    private HashSet<string> editRoles = new HashSet<string>();
+    private Dictionary<string, string> editZones = new Dictionary<string, string>();
+    private bool editEnabled;
+    private string newPassword;
+    private string newPasswordConfirm;
+
+    private TrakHoundAdminAccount deleteAccount;
+
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+        store.Changed += StoreChanged;
+        roleStore.Changed += StoreChanged;
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    public void Dispose()
+    {
+        store.Changed -= StoreChanged;
+        roleStore.Changed -= StoreChanged;
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    private void NotificationsUpdated(object sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    private void StoreChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void Load()
+    {
+        accounts = store.GetAccounts().ToList();
+        currentAccountId = adminAccess.Account?.Id;
+        canWrite = adminAccess.CanWrite(TrakHoundAdminSecurity.Admins);
+    }
+
+    private List<TrakHoundAdminAccount> GetRows()
+    {
+        if (string.IsNullOrWhiteSpace(search)) return accounts;
+
+        var query = search.Trim();
+        return accounts.Where(o =>
+            Contains(o.Username, query) ||
+            Contains(o.Name, query) ||
+            o.RoleIds.Any(r => Contains(r, query) || Contains(TrakHoundAdminSecurity.GetRole(r)?.Name, query))).ToList();
+    }
+
+    private static bool Contains(string value, string query) => value != null && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private RenderFragment RolePicker(HashSet<string> selected, Dictionary<string, string> zones) => __builder =>
+    {
+        <div class="admin-role-picker">
+            @foreach (var role in TrakHoundAdminSecurity.AllRoles)
+            {
+                var isSelected = selected.Contains(role.Id);
+
+                <div class="admin-role">
+                    <label class="admin-enabled">
+                        <input type="checkbox" checked="@isSelected" @onchange="e => ToggleRole(selected, role.Id, e.Value is true)" />
+                        <span>
+                            @role.Name
+                            <span class="muted">@(role.Description ?? "A Role you added")</span>
+                        </span>
+                    </label>
+
+                    @* A Role with something about a Module can be limited to Zones (never the Owner Role) *@
+                    @if (isSelected && CanLimitToZones(role))
+                    {
+                        <div class="admin-role-zones">
+                            <input class="form-control" aria-label="@($"Zones the {role.Name} Role is limited to")" value="@zones.GetValueOrDefault(role.Id)" @onchange="e => zones[role.Id] = e.Value?.ToString()" placeholder="Everywhere (or Zones, ex. dev, line-1)" spellcheck="false" autocomplete="off" list="admin-zone-list" />
+                            <span class="hint">Limit the Role to Zones : it then only applies to the Modules in them, and to the Services and Volumes their Rules allow. It gives nothing on the other areas</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            <datalist id="admin-zone-list">
+                @foreach (var zone in instance.ZoneManager?.GetZones() ?? Enumerable.Empty<TrakHound.Zones.TrakHoundZoneConfiguration>())
+                {
+                    <option value="@zone.Id"></option>
+                }
+            </datalist>
+        </div>
+    };
+
+    private static bool CanLimitToZones(TrakHoundAdminRole role)
+    {
+        return role.Id != TrakHoundAdminSecurity.OwnerRoleId && TrakHoundAdminScope.Resources.Any(o => role.Allows(o, TrakHoundAdminSecurity.ReadPermission));
+    }
+
+    // The Zones of the Roles that are selected (a Role without any applies everywhere)
+    private static Dictionary<string, IEnumerable<string>> GetZones(HashSet<string> selected, Dictionary<string, string> zones)
+    {
+        return selected.ToDictionary(o => o, o => (IEnumerable<string>)(zones.GetValueOrDefault(o)?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>()));
+    }
+
+    // Zones that don't exist (yet) are allowed, since a Zone can be added later, but are worth pointing out
+    private string GetUnknownZones(HashSet<string> selected, Dictionary<string, string> zones)
+    {
+        var known = (instance.ZoneManager?.GetZones() ?? Enumerable.Empty<TrakHound.Zones.TrakHoundZoneConfiguration>()).Select(o => o.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unknown = GetZones(selected, zones).SelectMany(o => o.Value).Where(o => !known.Contains(o)).Distinct().ToList();
+        return unknown.Count > 0 ? string.Join(", ", unknown) : null;
+    }
+
+    private RenderFragment ErrorCallout() => __builder =>
+    {
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="callout danger admin-error">
+                <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                <div>@errorMessage</div>
+            </div>
+        }
+    };
+
+    private void NotifyUnknownZones(string username, HashSet<string> selected, Dictionary<string, string> zones)
+    {
+        var unknown = GetUnknownZones(selected, zones);
+        if (unknown != null) notificationService.AddNotification(NotificationType.Warning, "Zone Not Found", $"{username} is limited to a Zone that doesn't exist, so that Role gives nothing until the Zone is added : {unknown}");
+    }
+
+    private static void ToggleRole(HashSet<string> selected, string roleId, bool isSelected)
+    {
+        if (isSelected) selected.Add(roleId);
+        else selected.Remove(roleId);
+    }
+
+    // Each Account is a file in the Profile, so a change is recorded in the Audit Log with the Admin who made it
+    private void RecordAudit(string accountId)
+    {
+        if (!string.IsNullOrEmpty(accountId)) instance.AuditMonitor?.RecordFile(store.GetAccountPath(accountId));
+    }
+
+    private void CreateClicked()
+    {
+        createUsername = null;
+        createName = null;
+        createPassword = null;
+        createPasswordConfirm = null;
+        createRoles = new HashSet<string>();
+        createZones = new Dictionary<string, string>();
+        errorMessage = null;
+        createVisible = true;
+    }
+
+    private void CreateConfirmClicked()
+    {
+        if (createPassword != createPasswordConfirm)
+        {
+            errorMessage = "The Passwords don't match";
+            return;
+        }
+
+        errorMessage = store.Create(createUsername?.Trim(), createName, createRoles, createPassword, GetZones(createRoles, createZones));
+        if (errorMessage == null)
+        {
+            NotifyUnknownZones(createUsername?.Trim(), createRoles, createZones);
+            createPassword = null;
+            createPasswordConfirm = null;
+            createVisible = false;
+            RecordAudit(store.GetAccountByUsername(createUsername?.Trim())?.Id);
+            Load();
+        }
+    }
+
+    private void EditClicked(TrakHoundAdminAccount account)
+    {
+        editName = account.Name;
+        editRoles = new HashSet<string>(account.RoleIds, StringComparer.OrdinalIgnoreCase);
+        editZones = (account.Assignments ?? new List<TrakHoundAdminRoleAssignment>())
+            .Where(o => !o.Zones.IsNullOrEmpty())
+            .GroupBy(o => o.RoleId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(o => o.Key, o => string.Join(", ", o.First().Zones), StringComparer.OrdinalIgnoreCase);
+        editEnabled = account.Enabled;
+        newPassword = null;
+        newPasswordConfirm = null;
+        errorMessage = null;
+        editAccount = account;
+    }
+
+    private void EditConfirmClicked()
+    {
+        if (editAccount == null) return;
+
+        // Checked before anything is saved, so a mistake in the Password doesn't save the other changes alone
+        var changePassword = !string.IsNullOrEmpty(newPassword);
+        if (changePassword)
+        {
+            errorMessage = newPassword != newPasswordConfirm ? "The Passwords don't match" : TrakHoundAdminAccountStore.ValidatePassword(newPassword);
+            if (errorMessage != null) return;
+        }
+
+        errorMessage = store.Update(editAccount.Id, editName, editRoles, GetZones(editRoles, editZones));
+        if (errorMessage == null) NotifyUnknownZones(editAccount.Username, editRoles, editZones);
+        if (errorMessage == null && editEnabled != editAccount.Enabled) errorMessage = store.SetEnabled(editAccount.Id, editEnabled);
+        if (errorMessage == null && changePassword) errorMessage = store.SetPassword(editAccount.Id, newPassword);
+
+        if (errorMessage == null)
+        {
+            newPassword = null;
+            newPasswordConfirm = null;
+            RecordAudit(editAccount.Id);
+            editAccount = null;
+        }
+        else
+        {
+            RecordAudit(editAccount.Id);
+        }
+
+        Load();
+    }
+
+    private void SignOut(TrakHoundAdminAccount account)
+    {
+        var message = store.EndSessions(account.Id);
+        if (message == null) notificationService.AddNotification(NotificationType.Success, "Signed Out", $"{account.Username} has to sign in again");
+        else notificationService.AddNotification(NotificationType.Error, "Sign Out Failed", $"{account.Username} : {message}");
+
+        RecordAudit(account.Id);
+        Load();
+    }
+
+    private void DeleteConfirmClicked()
+    {
+        if (deleteAccount == null) return;
+
+        errorMessage = store.Delete(deleteAccount.Id);
+        RecordAudit(deleteAccount.Id);
+        if (errorMessage == null) deleteAccount = null;
+
+        Load();
+    }
+
+}

@@ -1,0 +1,160 @@
+@implements IDisposable
+@inject ClientService clientService
+@inject JavascriptService javascriptService
+@using TrakHound.Blazor.Services
+
+@if (clientService.SelectedPath != null)
+{
+    var path = clientService.SelectedPath;
+    var pathParts = TrakHoundPath.GetPaths(path);
+    var message = clientService.GetMessage(path);
+    var messageCount = clientService.GetMessageCount(path);
+
+    <div class="event-information-panel">
+        <div class="top-container">
+            <div class="title-container">
+                <span class="title">Topic</span>
+            </div>
+            <div class="toolbar-container">
+                <button class="btn btn-toolbar" title="Copy Topic" aria-label="Copy Topic" @onclick="CopyTopic">
+                    <span class="icon fa-solid fa-sharp @(copied ? "fa-check copied" : "fa-copy")"></span>
+                </button>
+                @if (message?.Retain == true)
+                {
+                    <button class="admin-write btn btn-toolbar btn-delete" title="Clear the Retained Message" aria-label="Clear the Retained Message" @onclick="() => confirmClear = true" disabled="@clearing">
+                        <span class="icon fa-solid fa-sharp fa-trash"></span>
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="path-container">
+            <BreadcrumbLinks>
+
+                @foreach (var pathPart in pathParts)
+                {
+                    <BreadcrumbLink Display="@TrakHoundPath.GetObject(pathPart)" />
+                }
+
+            </BreadcrumbLinks>
+            <div class="topic-details">
+                <span>@messageCount.ToString("N0") @(messageCount == 1 ? "Message" : "Messages")@(message == null ? " (Child Topics)" : "")</span>
+            </div>
+
+            @if (confirmClear && message?.Retain == true)
+            {
+                <div class="confirm-clear">
+                    <span class="confirm-text">Clear the Retained Message? An empty Retained Message is Published to this Topic.</span>
+                    <button class="btn btn-sm btn-danger" @onclick="ClearRetained">Clear</button>
+                    <button class="btn btn-sm btn-light" @onclick="() => confirmClear = false">Cancel</button>
+                </div>
+            }
+            else if (clearing)
+            {
+                <div class="clear-status"><span class="icon fa-regular fa-sharp fa-loader spin"></span>Clearing..</div>
+            }
+            else if (clearStatus != null)
+            {
+                <div class="clear-status @(clearError ? "error" : "success")">@clearStatus</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+
+    private CancellationTokenSource copiedReset;
+    private bool copied;
+    private bool confirmClear;
+    private bool clearing;
+    private string clearStatus;
+    private bool clearError;
+
+
+    protected override void OnInitialized()
+    {
+        clientService.PathSelected += PathSelected;
+        clientService.MessageCountUpdated += MessageCountUpdated;
+    }
+
+    public void Dispose()
+    {
+        copiedReset?.Cancel();
+        clientService.PathSelected -= PathSelected;
+        clientService.MessageCountUpdated -= MessageCountUpdated;
+    }
+
+    private async void PathSelected(object sender, string path)
+    {
+        confirmClear = false;
+        clearStatus = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void MessageCountUpdated(string path, long count)
+    {
+        if (path == clientService.SelectedPath)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CopyTopic()
+    {
+        var path = clientService.SelectedPath;
+        if (path == null) return;
+
+        await javascriptService.CopyClipboard(path);
+
+        // Show the "Copied" check briefly, then return to the Copy icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copied = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            copied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private async Task ClearRetained()
+    {
+        var path = clientService.SelectedPath;
+        if (path == null || clearing) return;
+
+        confirmClear = false;
+        clearing = true;
+        clearStatus = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // An empty Retained Message removes the Retained Message from the Broker
+            var response = await clientService.Publish(path, null, retain: true);
+            if (response.Success)
+            {
+                clearStatus = "Retained Message Cleared";
+                clearError = false;
+            }
+            else
+            {
+                clearStatus = $"Clear Failed ({response.StatusCode}){(!string.IsNullOrEmpty(response.Message) ? $" : {response.Message}" : "")}";
+                clearError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            clearStatus = $"Clear Failed : {ex.Message}";
+            clearError = true;
+        }
+
+        clearing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

@@ -1,0 +1,423 @@
+.instance-page {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 20px;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+    container: instance-page / inline-size;
+}
+
+.header-panel {
+    grid-row: 1;
+}
+
+.toolbar-panel {
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.tab-panel {
+    grid-row: 3;
+    height: 100%;
+    overflow: hidden;
+    padding-top: 20px;
+}
+
+    .tab-panel ::deep .rz-tabview-nav {
+        /*padding-left: 20px;*/
+    }
+
+    .tab-panel ::deep .rz-tabview {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .tab-panel ::deep .rz-tabview-panels {
+        height: 100%;
+        overflow: hidden;
+        border-top: 1px solid var(--borderColor);
+    }
+
+    .tab-panel ::deep .rz-tabview-panel {
+        height: 100%;
+        overflow: hidden;
+        padding: 0;
+    }
+
+    .tab-panel .log-panel {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .tab-panel .scroll-panel {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 10px; /* Keep the scrollbar off the content */
+    }
+
+    .tab-panel .buffers-panel {
+        height: 100%;
+        overflow: hidden;
+    }
+
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    align-items: center;
+    grid-column-gap: 10px;
+    padding-left: 0px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--borderColorLight);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon-container {
+    grid-column: 1;
+    padding: 15px;
+}
+
+.header-panel .header-icon {
+    font-size: 1.25rem;
+    line-height: 35px;
+    color: var(--accent);
+}
+
+.header-panel .header-description-container {
+    grid-column: 2;
+    min-width: 0;
+    padding: 8px 20px 8px 0;
+}
+
+    .header-panel .header-description-container .header-name.unnamed {
+        color: var(--textMild);
+        font-style: italic;
+    }
+
+    .header-panel .header-set-name {
+        display: inline-block;
+        white-space: nowrap;
+        margin-left: 10px;
+        font-size: var(--fontSizeSm);
+        font-style: normal;
+        font-weight: normal;
+        color: var(--accent);
+    }
+
+    .header-panel .header-details {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 6px;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+        .header-panel .header-details .header-id {
+            display: inline;
+            font-family: var(--fontMono);
+            font-size: var(--fontSizeSm);
+            color: var(--textDark);
+        }
+
+    .header-panel .header-separator {
+        color: var(--textVeryLight);
+    }
+
+    .header-panel .header-url {
+        color: var(--accent);
+        text-decoration: none;
+    }
+
+        .header-panel .header-url:hover {
+            text-decoration: underline;
+        }
+
+        .header-panel .header-url .icon {
+            margin-left: 5px;
+            font-size: var(--fontSizeXs);
+        }
+
+.header-panel .header-health-container {
+    grid-column: 3;
+    padding-right: 5px;
+}
+
+.header-panel .header-health {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+    background: var(--panelBackgroundMedium);
+    color: var(--textDark);
+    text-decoration: none;
+    font-size: var(--fontSizeSm);
+}
+
+    .header-panel .header-health:hover {
+        border-color: var(--accent);
+    }
+
+    .header-panel .header-health .header-health-label {
+        color: var(--textMild);
+    }
+
+    .header-panel .header-health .header-health-status {
+        font-weight: bold;
+    }
+
+    .header-panel .header-health .header-health-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--textLight);
+    }
+
+    .header-panel .header-health.health-healthy .header-health-dot {
+        background: var(--colorGreen);
+    }
+
+    .header-panel .header-health.health-degraded .header-health-dot {
+        background: var(--colorOrange);
+    }
+
+    .header-panel .header-health.health-unhealthy .header-health-dot {
+        background: var(--colorRed);
+    }
+
+    .header-panel .header-description-container .header-title {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+        color: var(--textLight);
+    }
+
+    .header-panel .header-description-container .header-id {
+        display: block;
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-description-container .header-name {
+        display: block;
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        line-height: 24px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-description-container .header-description {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textLight);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    display: flex;
+    flex-wrap: wrap; /* Status moves below the buttons on narrow screens */
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0 0;
+}
+
+/* Joined buttons for related actions (like a Bootstrap btn-group) */
+.toolbar-group {
+    display: inline-flex;
+    flex-wrap: nowrap;
+}
+
+    .toolbar-group .btn {
+        position: relative;
+        white-space: nowrap;
+    }
+
+        /* Share the borders between buttons */
+        .toolbar-group .btn + .btn {
+            margin-left: -1px;
+        }
+
+        /* Keep the hovered button's whole border on top of its neighbors */
+        .toolbar-group .btn:hover,
+        .toolbar-group .btn:focus-visible {
+            z-index: 1;
+        }
+
+        .toolbar-group .btn:disabled {
+            color: var(--textLight);
+            opacity: 1;
+        }
+
+            .toolbar-group .btn:disabled .icon {
+                color: var(--textLight);
+            }
+
+    /* Wide enough for "Starting..", "Stopping.." and "Restarting.." so the buttons don't resize while loading */
+    .toolbar-group .btn-start,
+    .toolbar-group .btn-stop,
+    .toolbar-group .btn-restart {
+        width: 105px;
+    }
+
+    /* Solid colors while enabled (disabled falls back to the light button). The darker green keeps the white text readable */
+    .toolbar-group .btn-start:not(:disabled) {
+        color: #fff;
+        background: var(--buttonStartBackground);
+        border-color: var(--buttonStartBorder);
+        box-shadow: var(--buttonStartStopShadow);
+    }
+
+        /* Override the light button's icon color */
+        .toolbar-group .btn-start:not(:disabled) .icon,
+        .toolbar-group .btn-stop:not(:disabled) .icon {
+            color: #fff;
+        }
+
+        .toolbar-group .btn-start:not(:disabled):hover {
+            background: var(--buttonStartBackgroundHover);
+            border-color: var(--buttonStartBorder);
+        }
+
+        .toolbar-group .btn-start:not(:disabled):active {
+            background: var(--buttonStartBackgroundHighlight);
+            box-shadow: var(--buttonPrimaryShadowHighlight);
+        }
+
+    .toolbar-group .btn-stop:not(:disabled) {
+        color: #fff;
+        background: var(--buttonStopBackground);
+        border-color: var(--buttonStopBorder);
+        box-shadow: var(--buttonStartStopShadow);
+    }
+
+        .toolbar-group .btn-stop:not(:disabled):hover {
+            background: var(--buttonStopBackgroundHover);
+            border-color: var(--buttonStopBorder);
+        }
+
+        .toolbar-group .btn-stop:not(:disabled):active {
+            background: var(--buttonStopBackgroundHighlight);
+            box-shadow: var(--buttonPrimaryShadowHighlight);
+        }
+
+    .toolbar-group .btn-restart:not(:disabled) .icon {
+        color: var(--accent);
+    }
+
+    /* Restart stays looking active (with its spinner) while the Instance restarts */
+    .toolbar-group .btn-restart.restarting:disabled {
+        color: var(--buttonLightText);
+    }
+
+        .toolbar-group .btn-restart.restarting:disabled .icon {
+            color: var(--accent);
+        }
+
+/* Status on the right, with a colored dot */
+.toolbar-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    font-variant-numeric: tabular-nums;
+}
+
+    .toolbar-status .status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--textLight);
+    }
+
+    .toolbar-status .status-label {
+        font-weight: 600;
+        color: var(--textDark);
+    }
+
+    .toolbar-status.status-started .status-dot {
+        background: var(--colorGreen);
+    }
+
+    .toolbar-status.status-starting .status-dot,
+    .toolbar-status.status-stopping .status-dot {
+        background: var(--colorOrange);
+    }
+
+    .toolbar-status.status-error .status-dot,
+    .toolbar-status.status-stopped .status-dot {
+        background: var(--colorRed);
+    }
+
+    .tab-panel .monitor-panel {
+        height: 100%;
+        overflow: hidden;
+    }
+
+
+.loading-panel {
+    height: 100%;
+    background: var(--panelBackground);
+}
+
+.not-found-panel {
+    display: grid;
+    grid-template-rows: 1fr max-content 1fr;
+    grid-template-columns: 1fr max-content 1fr;
+    height: 100%;
+    background: var(--panelBackground);
+}
+
+.not-found-container {
+    grid-row: 2;
+    grid-column: 2;
+    text-align: center;
+}
+
+    .not-found-container .icon {
+        display: block;
+        font-size: 2rem;
+        color: var(--textLight);
+        margin-bottom: 10px;
+    }
+
+    .not-found-container .title {
+        display: block;
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .not-found-container .subtitle {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+/* Narrow pages (a narrow screen or a wide Explorer tree): the Health goes below the name instead of squeezing it */
+@container instance-page (max-width: 600px) {
+    .header-panel .header-content {
+        grid-template-columns: max-content minmax(0, 1fr);
+    }
+
+    .header-panel .header-health-container {
+        grid-column: 2;
+        padding: 0 0 8px;
+    }
+
+    .header-panel .header-description-container {
+        padding-right: 0;
+    }
+}

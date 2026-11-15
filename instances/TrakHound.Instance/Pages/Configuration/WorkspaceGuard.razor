@@ -1,0 +1,44 @@
+@* Shows a Workspace's page under a banner (so it's clear the running Instance isn't being edited), or that the Workspace doesn't exist *@
+@inject ConfigurationsService configurationsService
+
+@if (workspaceId == null)
+{
+    @ChildContent
+}
+else if (missing)
+{
+    <div class="workspace-missing">
+        <span class="icon fa-solid fa-sharp fa-folder-xmark"></span>
+        <span class="title">Workspace Not Found</span>
+        <span class="description">The Workspace <code>@workspaceId</code> doesn't exist. It may have been deleted.</span>
+        <a class="btn btn-light" href="_admin/deployments/workspaces">Workspaces</a>
+    </div>
+}
+else
+{
+    <div class="workspace-banner">
+        <span class="icon fa-solid fa-sharp fa-layer-group"></span>
+        <span class="text">Editing the Workspace <strong>@workspaceId</strong>. Changes are saved to the Workspace, not to this Instance.</span>
+        <a class="btn btn-light btn-sm" href="_admin/deployments/workspaces">Workspaces</a>
+    </div>
+    @ChildContent
+}
+
+@code {
+
+    private string workspaceId;
+    private bool missing;
+
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+
+    // A new Page is created for each target (see InstanceRoutes), so the Workspace is read once
+    protected override void OnInitialized()
+    {
+        workspaceId = configurationsService.WorkspaceId;
+        missing = configurationsService.IsWorkspaceMissing;
+    }
+
+}

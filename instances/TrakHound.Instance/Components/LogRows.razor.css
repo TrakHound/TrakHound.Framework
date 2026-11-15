@@ -1,0 +1,136 @@
+/* The Admin interface's log style (from the Api Logs). The parent's scroll container sets var(--logBackground) behind the rows */
+.log-rows {
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    border: none;
+    table-layout: fixed;
+}
+
+    .log-rows td {
+        font-size: var(--fontSizeSm);
+        padding: 3px 20px;
+        vertical-align: top;
+        background: var(--logBackground);
+        border-color: var(--logBorder);
+        color: var(--logText);
+    }
+
+    .log-rows tr:hover td {
+        background: var(--accent);
+    }
+
+    .log-rows td.level {
+        width: 105px;
+    }
+
+    .log-rows td.time {
+        width: 180px;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+        .log-rows td.time.since-first {
+            width: 110px;
+        }
+
+    .log-rows td.source {
+        width: 160px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Messages keep their line breaks (ex. stack traces) */
+    .log-rows td.message p {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .log-rows tr.debug td,
+    .log-rows tr.trace td {
+        background: var(--logDebugBackground);
+        color: var(--logText);
+    }
+
+    .log-rows tr.debug:hover td,
+    .log-rows tr.trace:hover td {
+        background: var(--accent);
+    }
+
+    .log-rows tr.warning td {
+        background: var(--logWarningBackground);
+        border-color: var(--logWarningBorder);
+        color: var(--logText);
+    }
+
+    .log-rows tr.warning:hover td {
+        background: var(--logWarningBackgroundHover);
+    }
+
+    .log-rows tr.error td,
+    .log-rows tr.critical td {
+        background: var(--logErrorBackground);
+        border-color: var(--logErrorBorder);
+        color: var(--logText);
+    }
+
+    .log-rows tr.error:hover td,
+    .log-rows tr.critical:hover td {
+        background: var(--logErrorBackgroundHover);
+    }
+
+.btn-show-all {
+    display: block;
+    padding: 8px 20px;
+    font-size: var(--fontSizeSm);
+    color: var(--logText);
+    text-decoration: none;
+}
+
+.empty-message {
+    display: block;
+    padding: 10px 20px;
+    font-size: var(--fontSizeSm);
+    color: var(--logText);
+}
+
+/* Row actions (when the parent handles them) */
+.log-rows td.time {
+    position: relative;
+}
+
+.btn-row-action {
+    display: none;
+    position: absolute;
+    right: 4px;
+    top: 2px;
+    padding: 0 4px;
+    border: none;
+    background: none;
+    font-size: 11px;
+    color: var(--logText);
+    cursor: pointer;
+}
+
+.log-rows tr:hover .btn-row-action {
+    display: inline-block;
+}
+
+.btn-source {
+    max-width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+    .btn-source:hover {
+        text-decoration: underline;
+    }

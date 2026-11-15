@@ -1,0 +1,786 @@
+.licenses-page {
+    --status-active: var(--colorGreen, #19b419);
+    --status-expiring: var(--colorOrange, #ff8b00);
+    --status-inactive: var(--colorRed, #d92b2b);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+    /* The Licenses or Assignments, under a Device ID warning */
+    .licenses-page > .content-panel,
+    .licenses-page > .loading-panel {
+        flex: 1;
+        min-height: 0;
+    }
+
+/* Header tools : Publisher, Device ID, Refresh (the area's header and sidebar are laid out by AreaLayout) */
+
+.device-panel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--textDark);
+}
+
+.device-panel label {
+    font-weight: bold;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    white-space: nowrap;
+}
+
+.device-panel ::deep .rz-dropdown {
+    min-width: 160px;
+}
+
+.device-panel .device-id-output {
+    padding: 6px 12px;
+    font-size: var(--fontSizeSm);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    background: color-mix(in srgb, var(--textDark) 6%, transparent);
+    user-select: all; /* One click selects the whole ID */
+}
+
+.btn-icon {
+    min-width: 0;
+    width: 34px;
+    padding: 6px 0;
+}
+
+.btn-icon .icon,
+.btn-cell .icon,
+.btn-action .icon {
+    margin: 0;
+}
+
+
+/* Content */
+
+.loading-panel {
+    height: 100%;
+}
+
+.content-panel {
+    display: grid;
+    grid-template-rows: max-content minmax(0, 1fr);
+    padding: 10px 25px 10px;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.tabs-panel {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.licenses-panel,
+.assignments-panel {
+    display: grid;
+    grid-template-rows: max-content minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Summary Tiles (click to filter) */
+
+.summary-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    max-width: 900px;
+    margin: 5px 0 15px;
+}
+
+.summary-tile {
+    --statusColor: var(--borderColorLight);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 14px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 4px solid var(--statusColor);
+    border-radius: 3px;
+    color: var(--textDark);
+    text-align: left;
+    cursor: pointer;
+}
+
+    .summary-tile:hover {
+        border-color: var(--accent);
+        border-left-color: var(--statusColor);
+    }
+
+    .summary-tile.selected {
+        border-color: var(--accent);
+        border-left-color: var(--statusColor);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .summary-tile.active { --statusColor: var(--status-active); }
+    .summary-tile.expiring { --statusColor: var(--status-expiring); }
+    .summary-tile.expired,
+    .summary-tile.inactive { --statusColor: var(--status-inactive); }
+
+    .summary-tile .tile-label {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+        .summary-tile .tile-label .icon {
+            margin-right: 7px;
+            color: var(--statusColor);
+        }
+
+    .summary-tile.zero .tile-label .icon {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-value {
+        font-size: var(--fontSize2xl, 1.5rem);
+        font-weight: bold;
+        line-height: 1.2;
+    }
+
+    .summary-tile.zero .tile-value {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-detail {
+        font-size: var(--fontSizeXs, 11px);
+        color: var(--textMild);
+    }
+
+/* Tab Toolbar : Add, Import, Filter */
+
+.tab-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0 2px;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    padding: 3px 4px 3px 12px;
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+.btn-chip-clear {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--textMild);
+}
+
+    .btn-chip-clear:hover {
+        background: var(--inputBackgroundHover);
+        color: var(--accent);
+    }
+
+    .btn-chip-clear .icon {
+        margin: 0;
+        font-size: 11px;
+    }
+
+.table-panel {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding: 10px 0 0;
+}
+
+    .table-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: auto;
+    }
+
+        .table-panel ::deep .rz-data-grid th {
+            padding: 0px 5px;
+        }
+
+        .table-panel ::deep .rz-data-grid td {
+            padding: 4px 10px;
+            vertical-align: middle;
+        }
+
+        .table-panel ::deep .rz-data-grid .rz-cell-data {
+            font-size: var(--fontSizeSm);
+            line-height: 20px;
+        }
+
+    /* The Licenses and Assignments grids are lists, so they look like the other list tables : no box, column borders or
+       striped rows, and a plain header. Only here (radzen.css sets the Data Grid borders with !important, so these do too) */
+    .table-panel ::deep .rz-data-grid {
+        background: transparent !important;
+        border: none !important;
+    }
+
+        .table-panel ::deep .rz-data-grid table th {
+            background: var(--panelBackground);
+            border-right: none !important;
+            border-bottom: 1px solid var(--borderColor) !important;
+        }
+
+            .table-panel ::deep .rz-data-grid table th .rz-column-title {
+                color: var(--textMild);
+            }
+
+        .table-panel ::deep .rz-data-grid table td {
+            border-right: none !important;
+            border-bottom: 1px solid var(--borderColorLight) !important;
+        }
+
+        .table-panel ::deep .rz-data-grid table tr:nth-child(even) > td {
+            background: transparent;
+        }
+
+    .table-panel ::deep .value {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+        .table-panel ::deep .value.code {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+        }
+
+    /* A value followed by small icon buttons (copy, reveal) */
+    .table-panel ::deep .value-with-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+    }
+
+        .table-panel ::deep .value-with-actions .value {
+            flex: 1;
+            min-width: 0;
+        }
+
+    .table-panel ::deep .btn-cell {
+        flex-shrink: 0;
+        width: 26px;
+        height: 24px;
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--textLight);
+    }
+
+        .table-panel ::deep .btn-cell:hover {
+            color: var(--accent);
+            background: var(--inputBackgroundHover);
+        }
+
+        .table-panel ::deep .btn-cell .icon {
+            font-size: 12px;
+        }
+
+
+/* Status */
+
+.table-panel ::deep .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--textDark);
+}
+
+.table-panel ::deep .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--textLight);
+}
+
+.table-panel ::deep .status-badge.active .status-dot {
+    background: var(--status-active);
+}
+
+.table-panel ::deep .status-badge.expiring .status-dot {
+    background: var(--status-expiring);
+}
+
+.table-panel ::deep .status-badge.expired .status-dot,
+.table-panel ::deep .status-badge.inactive .status-dot {
+    background: var(--status-inactive);
+}
+
+.table-panel ::deep .status-badge.expired,
+.table-panel ::deep .status-badge.inactive {
+    font-weight: bold;
+}
+
+
+/* Assignments usage */
+
+.table-panel ::deep .usage-text {
+    display: block;
+    line-height: 18px;
+}
+
+.table-panel ::deep .usage-bar {
+    display: block;
+    width: 90px;
+    height: 4px;
+    margin: 2px 0 2px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--textDark) 12%, transparent);
+    overflow: hidden;
+}
+
+    .table-panel ::deep .usage-bar .usage-fill {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+    }
+
+    .table-panel ::deep .usage-bar.full .usage-fill {
+        background: var(--status-expiring);
+    }
+
+/* Assignment ID under the Description, and a License's Description under its Product */
+
+.table-panel ::deep .value.sub-value {
+    display: block;
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--textMild);
+}
+
+/* Expired Licenses are dimmed; Unlicensed Assignments are marked */
+
+.table-panel ::deep tr.row-inactive td:not(:first-child):not(:last-child) {
+    opacity: 0.55;
+}
+
+.table-panel ::deep tr.row-unlicensed td:first-child {
+    box-shadow: inset 3px 0 0 var(--status-inactive);
+}
+
+
+/* Expires */
+
+.table-panel ::deep .expires {
+    display: block;
+    line-height: 18px;
+    color: var(--textDark);
+}
+
+    .table-panel ::deep .expires.expiring,
+    .table-panel ::deep .expires.expired {
+        font-weight: bold;
+    }
+
+.table-panel ::deep .expires-date {
+    display: block;
+    line-height: 16px;
+    font-size: 11px;
+    color: var(--textMild);
+}
+
+
+/* Actions */
+
+.table-panel ::deep .table-buttons-container {
+    display: flex;
+    gap: 6px;
+}
+
+.table-panel ::deep .btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    font-size: 11px;
+}
+
+    .table-panel ::deep .btn-action:focus {
+        box-shadow: none;
+    }
+
+    .table-panel ::deep .btn-action:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+
+    .table-panel ::deep .btn-action.btn-danger-icon:not(:disabled) {
+        color: var(--status-inactive);
+    }
+
+
+/* Assignment License dropdown fills its cell */
+
+.table-panel ::deep td.license-select {
+    padding: 0 !important;
+}
+
+    .table-panel ::deep td.license-select .rz-cell-data {
+        padding: 0 !important;
+    }
+
+    .table-panel ::deep td.license-select .rz-dropdown {
+        margin: 0 !important;
+        height: 100%;
+        width: 100%;
+        background: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+
+        .table-panel ::deep td.license-select .rz-dropdown:hover {
+            background: var(--inputBackgroundHover) !important;
+            cursor: pointer;
+        }
+
+        .table-panel ::deep td.license-select .rz-dropdown .rz-dropdown-label {
+            background: none !important;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+        }
+
+
+/* Empty / Error States */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+.empty-state-icon {
+    font-size: 36px;
+    margin-bottom: 6px;
+    color: var(--textLight);
+}
+
+    .empty-state-icon.error {
+        color: var(--status-inactive);
+    }
+
+.empty-state-title {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.empty-state-description {
+    font-size: var(--fontSizeSm);
+}
+
+.empty-state-links {
+    display: flex;
+    gap: 16px;
+    margin-top: 6px;
+    font-size: var(--fontSizeSm);
+}
+
+    .empty-state-links a {
+        color: var(--buttonLinkText);
+        text-decoration: none;
+    }
+
+        .empty-state-links a:hover {
+            color: var(--buttonLinkTextHover);
+            text-decoration: underline;
+        }
+
+
+/* Modals (rendered outside .licenses-page, so colors are set directly) */
+
+.renew-license-panel,
+.description-panel,
+.confirm-panel {
+    padding: 20px 40px;
+}
+
+.renew-license-table,
+.description-table,
+.confirm-table {
+    margin-bottom: 20px;
+}
+
+    .renew-license-table table,
+    .description-table table,
+    .confirm-table table {
+        width: 100%;
+    }
+
+    .renew-license-table td.label,
+    .description-table td.label,
+    .confirm-table td.label {
+        width: 140px;
+        font-size: var(--fontSizeMd);
+        font-weight: bold;
+        padding: 5px 20px 5px 10px;
+        vertical-align: top;
+    }
+
+    .renew-license-table td.value,
+    .description-table td.value,
+    .confirm-table td.value {
+        font-size: var(--fontSizeMd);
+        padding: 5px 20px 5px 10px;
+        overflow-wrap: anywhere;
+    }
+
+.confirm-message-container {
+    background: var(--panelBackgroundMedium);
+    color: var(--textDark);
+    padding: 8px 20px;
+    margin-bottom: 20px;
+}
+
+/* TRAKHOUND_DEVICE_ID was set but ignored */
+.device-id-warning {
+    margin: 0 16px 12px 16px;
+    padding: 8px 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: color-mix(in srgb, var(--colorOrange, #e08a00) 12%, transparent);
+}
+
+    .device-id-warning .icon {
+        margin-right: 8px;
+        color: var(--colorOrange, #e08a00);
+    }
+
+.modal-error {
+    margin-top: 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .modal-error .icon {
+        margin-right: 8px;
+        color: var(--colorRed, #d92b2b);
+    }
+
+
+/* Add License */
+
+.add-license-panel {
+    padding: 20px 40px;
+}
+
+.add-license-table {
+    margin-bottom: 15px;
+    padding: 6px 0;
+    background: var(--panelBackgroundMedium);
+}
+
+    .add-license-table table {
+        width: 100%;
+    }
+
+    .add-license-table td {
+        padding: 4px 15px;
+        border: none;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+    }
+
+        .add-license-table td.label {
+            width: 110px;
+            font-weight: bold;
+            color: var(--textMild);
+        }
+
+        .add-license-table td.value.code {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+.add-license-input {
+    margin-bottom: 12px;
+}
+
+    .add-license-input label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+
+/* Import */
+
+.import-license-panel {
+    padding: 20px 40px;
+}
+
+.import-description {
+    margin-bottom: 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .import-description .code {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        color: var(--textDark);
+    }
+
+.import-text {
+    width: 100%;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+}
+
+.import-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+/* The file input covers the button so it receives both clicks and dropped files */
+.import-file-button {
+    position: relative;
+    overflow: hidden;
+}
+
+    .import-file-button ::deep .import-file-input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .import-file-button.disabled ::deep .import-file-input {
+        pointer-events: none;
+    }
+
+.import-summary {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.import-errors {
+    margin-top: 6px;
+}
+
+    .import-errors .modal-error {
+        margin-top: 6px;
+    }
+
+.import-table {
+    margin-top: 15px;
+    max-height: 320px;
+    overflow: auto;
+}
+
+    .import-table table {
+        width: 100%;
+        table-layout: fixed;
+        font-size: var(--fontSizeSm);
+    }
+
+    .import-table th {
+        position: sticky;
+        top: 0;
+        padding: 6px 10px;
+        background: var(--panelBackgroundMedium);
+        color: var(--textMild);
+        font-weight: 600;
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+        .import-table th:nth-child(1) { width: 34%; }
+        .import-table th:nth-child(3) { width: 24%; }
+        .import-table th:nth-child(4) { width: 15%; }
+
+    .import-table td {
+        padding: 6px 10px;
+        vertical-align: top;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+        .import-table td.product {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .import-table td.product .product-description {
+            display: block;
+            font-size: 11px;
+            line-height: 16px;
+            color: var(--textMild);
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .import-table td.code {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+    .import-table .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .import-table .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--textLight);
+    }
+
+    .import-table .status-badge.ready .status-dot {
+        background: var(--accent);
+    }
+
+    .import-table .status-badge.active .status-dot {
+        background: var(--colorGreen, #19b419);
+    }
+
+    .import-table .status-badge.inactive {
+        font-weight: bold;
+    }
+
+        .import-table .status-badge.inactive .status-dot {
+            background: var(--colorRed, #d92b2b);
+        }
+
+    .import-table .status-message {
+        display: block;
+        margin-left: 15px;
+        font-size: 11px;
+        line-height: 16px;
+        color: var(--textMild);
+        overflow-wrap: anywhere;
+    }

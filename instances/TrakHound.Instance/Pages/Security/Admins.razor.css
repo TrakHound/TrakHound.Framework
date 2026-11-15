@@ -1,0 +1,45 @@
+.admin-error {
+    margin-top: 12px;
+}
+
+.admin-role-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.admin-enabled {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+    color: var(--textDark);
+}
+
+    .admin-enabled input {
+        margin-top: 4px;
+    }
+
+    /* The form-field label style is bold, which is for the title only, not its description */
+    .admin-enabled .muted {
+        display: block;
+        margin-top: 2px;
+        font-size: var(--fontSizeSm);
+        font-weight: 400;
+    }
+
+.item-name + .chip,
+.resource-id + .chip {
+    margin-left: 6px;
+}
+
+.admin-role-zones {
+    margin: 6px 0 4px 24px;
+}
+
+    .admin-role-zones .hint {
+        display: block;
+        margin-top: 4px;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }

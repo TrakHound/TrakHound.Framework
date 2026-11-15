@@ -1,0 +1,35 @@
+{
+  // Package Publish Targets (sample)
+  //
+  // Rename (or copy) this file to trakhound.package.publish.json to use it. The TrakHound CLI uses the nearest
+  // trakhound.package.publish.json, starting in the package directory and continuing up through its parent directories,
+  // so a file here applies to every package in the repository (ex. th packages build modules).
+  //
+  // - th packages publish uses the defaultTarget. --target picks another (ex. --target release)
+  // - The version is the "version" prefix in each package's trakhound.package.json plus the git height
+  // - Api Tokens are read from the environment variable an apiTokenVariable names (otherwise TRAKHOUND_API_TOKEN)
+  // - *.package.publish.json is in .gitignore, so the copy with your servers is not committed
+  "defaultTarget": "development",
+  "targets": {
+    "development": {
+      "destinations": [
+        {
+          "managementServer": "http://packages.contoso.local:8472",
+          "organization": "Contoso"
+        }
+      ],
+      "versionSuffix": "dev{branch}.{timestamp}",
+      "allowDirty": true
+    },
+    "release": {
+      "destinations": [
+        {
+          "managementServer": "https://packages.contoso.com",
+          "organization": "Contoso",
+          "apiTokenVariable": "CONTOSO_RELEASE_TOKEN"
+        }
+      ],
+      "requireSigning": true
+    }
+  }
+}

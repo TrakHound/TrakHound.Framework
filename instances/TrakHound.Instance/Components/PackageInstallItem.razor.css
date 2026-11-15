@@ -1,0 +1,276 @@
+.package-install-item {
+    display: grid;
+    /* Icon, identity, license (only when required), version and buttons */
+    grid-template-columns: max-content minmax(0, 1fr) max-content max-content max-content;
+    align-items: start;
+    grid-column-gap: 20px;
+    padding: 10px 10px 10px 25px;
+    border: 1px solid var(--borderColor);
+    border-radius: 2px;
+    margin-top: 5px;
+    background: var(--panelItemBackground);
+}
+
+    .package-install-item.active {
+        background: var(--panelItemBackgroundHover) !important;
+        border: 1px solid var(--accentLight);
+    }
+
+    .package-install-item:hover {
+        border: 1px solid var(--accent);
+        cursor: default;
+    }
+
+    .package-install-item .icon-container {
+        grid-column: 1;
+        text-align: center;
+        width: 36px;
+    }
+
+        .package-install-item .icon-container ::deep img.icon {
+            max-width: 36px;
+            max-height: 36px;
+        }
+
+        .package-install-item .icon-container ::deep span.icon {
+            font-size: 30px;
+            line-height: 40px;
+            color: #ccc;
+        }
+
+    .package-install-item:hover .icon-container ::deep .icon,
+    .package-install-item.active .icon-container ::deep .icon {
+        color: var(--accent);
+    }
+
+
+    .package-install-item .identity-container {
+        grid-column: 2;
+    }
+
+        .package-install-item .identity-container > .identifier {
+            display: block;
+            font-size: 12px;
+            font-weight: bold;
+            color: var(--textDark);
+            overflow-wrap: anywhere;
+        }
+
+        .package-install-item .identity-container .publisher {
+            color: var(--textLight);
+            font-size: 11px;
+            font-weight: normal;
+            margin-left: 8px;
+        }
+
+        .package-install-item .identity-container .description {
+            display: block;
+            font-size: 11px;
+            color: var(--textMild);
+        }
+
+        .package-install-item .identity-container .signature {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .package-install-item .identity-container .signature-state {
+            padding: 0 5px;
+            font-size: 11px;
+            color: var(--textMild);
+            border: 1px solid currentColor;
+            border-radius: 3px;
+        }
+
+            .package-install-item .identity-container .signature-state.trusted {
+                color: var(--bs-success, #198754);
+            }
+
+            .package-install-item .identity-container .signature-state.invalid {
+                color: var(--bs-danger, #dc3545);
+            }
+
+        .package-install-item .identity-container .signature-refused {
+            font-size: 11px;
+            color: var(--bs-danger, #dc3545);
+        }
+
+    .package-install-item.active .identity-container .publisher,
+    .package-install-item.active .identity-container .description {
+        color: var(--textDark);
+    }
+
+
+    .package-install-item .license-container {
+        grid-column: 3;
+    }
+
+        .package-install-item .license-container .license {
+            display: inline-block;
+            padding: 3px 30px 3px 10px;
+            background: red;
+        }
+
+        .package-install-item .license-container .license-label {
+            color: var(--accent);
+            font-size: 11px;
+            padding: 5px 10px;
+            border: 1px solid var(--borderColor);
+            border-radius: 2px;
+        }
+
+    .package-install-item.active .license-container .license-label {
+        border: 1px solid var(--accentLight);
+    }
+
+    .package-install-item .license-container .license-label .icon {
+        color: var(--accent);
+        margin-right: 10px;
+        font-size: 11px;
+    }
+
+
+    .package-install-item .version-container {
+        grid-column: 4;
+        padding-top: 6px;
+    }
+
+    .package-install-item .version {
+        display: inline-block;
+        font-size: 12px;
+        color: var(--textMild);
+    }
+
+    .package-install-item.active .version {
+        color: var(--textDark);
+    }
+
+    .package-install-item .version .symbol {
+        font-size: 12px;
+    }
+
+
+    .package-install-item .buttons-container {
+        grid-column: 5;
+    }
+
+        .package-install-item .buttons-container .btn {
+            display: inline-block;
+            margin-right: 0px;
+            font-size: 13px;
+            border: 1px solid var(--borderColorMedium);
+            border-radius: 0;
+            width: 90px;
+            /* Install and Update keep their own size, not the shared .btn size */
+            height: auto;
+            padding: .375rem .75rem;
+            font-weight: 400;
+            line-height: 1.5;
+        }
+
+            .package-install-item .buttons-container .btn .icon {
+                margin-right: 10px;
+                font-size: 14px;
+                line-height: inherit;
+            }
+
+            .package-install-item .buttons-container .btn .icon {
+                color: var(--accentLight) !important;
+            }
+
+            .package-install-item .buttons-container .btn:last-child {
+                margin-right: 0;
+            }
+
+    .package-install-item:hover .buttons-container .btn-install {
+        background: var(--accent);
+        color: #fff;
+    }
+
+        .package-install-item:hover .buttons-container .btn-install:hover {
+            background: var(--accentLight);
+        }
+
+        .package-install-item:hover .buttons-container .btn-install .icon {
+            color: #fff !important;
+        }
+
+
+    .package-install-item .installed {
+        display: inline-block;
+        text-align: center;
+        margin-left: 10px;
+        margin-right: 0px;
+        font-size: 13px;
+        color: var(--textMild);
+        height: 28px;
+    }
+
+    .package-install-item.active .installed {
+        color: var(--textDark);
+    }
+
+    .package-install-item .installing {
+        display: inline-block;
+        text-align: center;
+        margin-left: 10px;
+        margin-right: 0px;
+        font-size: 18px;
+        color: var(--accent);
+        width: 90px;
+        height: 28px;
+        padding: 2px 5px 0;
+    }
+
+
+/* Narrow list : the publisher goes under the ID, and the license and version under the description */
+@container package-list (max-width: 520px) {
+
+    .package-install-item {
+        grid-template-columns: max-content minmax(0, 1fr) max-content;
+        grid-row-gap: 6px;
+        padding-left: 15px;
+    }
+
+        .package-install-item .icon-container {
+            grid-row: 1 / 4;
+        }
+
+        .package-install-item .identity-container .publisher {
+            display: block;
+            margin: 0;
+        }
+
+        .package-install-item .version-container {
+            grid-row: 2;
+            grid-column: 2;
+            padding-top: 0;
+        }
+
+        .package-install-item .license-container {
+            grid-row: 3;
+            grid-column: 2;
+        }
+
+        .package-install-item .buttons-container {
+            grid-row: 1 / 4;
+            grid-column: 3;
+        }
+}
+
+
+.package-install-item .installed .icon {
+    margin-right: 5px;
+    color: var(--bs-success, #198754);
+}
+
+.package-install-item .installed-version {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    text-align: center;
+    color: var(--textMild);
+}

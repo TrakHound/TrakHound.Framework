@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+		<DebugSymbols>false</DebugSymbols>
+		<DebugType>None</DebugType>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<AssemblyName>TrakHound.Debug.AspNetCore</AssemblyName>
+		<RootNamespace>TrakHound.Debug</RootNamespace>
+		<Configurations>Debug;Release;Package</Configurations>
+		<Description>Contains classes for debugging .NET Apis in the TrakHound Framework</Description>
+		<RunAnalyzersDuringLiveAnalysis>False</RunAnalyzersDuringLiveAnalysis>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<!-- The Api Debugger page (served from the assembly at /_debug) -->
+	<ItemGroup>
+		<EmbeddedResource Include="Debugger\**" LogicalName="Debugger/%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
+	  <ProjectReference Include="..\..\libraries\TrakHound.Hosting.AspNetCore\TrakHound.Hosting.AspNetCore.csproj" />
+	  <ProjectReference Include="..\TrakHound.Debug\TrakHound.Debug.csproj" />
+	</ItemGroup>
+
+</Project>

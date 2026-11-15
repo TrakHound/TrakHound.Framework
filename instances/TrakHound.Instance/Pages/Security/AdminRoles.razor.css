@@ -1,0 +1,26 @@
+.admin-role-error {
+    margin-top: 12px;
+}
+
+.item-name + .resource-id,
+.resource-id + .chip {
+    margin-left: 6px;
+}
+
+.admin-role-grants {
+    margin-top: 14px;
+}
+
+    .admin-role-grants .grant-description {
+        display: block;
+        font-size: var(--fontSizeSm);
+        white-space: normal;
+    }
+
+    .admin-role-grants .form-select {
+        min-width: 110px;
+    }
+
+.admin-role-grantable {
+    margin-top: 14px;
+}

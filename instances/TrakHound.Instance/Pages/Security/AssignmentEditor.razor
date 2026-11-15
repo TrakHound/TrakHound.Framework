@@ -1,0 +1,204 @@
+@using TrakHound.Security
+
+@* Add or Edit an Assignment : Resource (pattern) + Roles => Permissions *@
+
+<Modal Class="security-modal" Visible="@Visible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-list-check"></span>
+        <span class="modal-header-title">@(isNew ? "Add Assignment" : "Edit Assignment")</span>
+    </HeaderContent>
+    <BodyContent>
+        @if (Visible)
+        {
+            <div class="assignment-editor">
+
+                <div class="editor-section">
+                    <span class="editor-section-title">1. Resources</span>
+                    <span class="editor-section-description">Which Apis, Apps, or Services this Assignment applies to</span>
+                    <ResourcePicker Id="assignment-resource" Resources="Resources" @bind-Value="resourceId" />
+                </div>
+
+                <div class="editor-section">
+                    <span class="editor-section-title">2. Who</span>
+                    <span class="editor-section-description">Identities from <strong>@ProviderName</strong> that have any of these Roles (ex. Groups)</span>
+                    <div class="check-list">
+                        <label><input type="checkbox" checked="@anyRole" @onchange="e => anyRole = (bool)e.Value" />Anyone signed in with this Identity Provider</label>
+                    </div>
+                    @if (!anyRole)
+                    {
+                        <div class="form-field">
+                            <input class="form-control" @bind="roles" @bind:event="oninput" placeholder="ex. operators, engineers, admin*" spellcheck="false" aria-label="Roles" />
+                            <span class="hint">Comma separated. End a Role with * to match by prefix</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="editor-section">
+                    <span class="editor-section-title">3. Permissions</span>
+                    <span class="editor-section-description">What those Identities can do</span>
+                    <div class="check-list">
+                        <label><input type="checkbox" checked="@fullAccess" @onchange="e => fullAccess = (bool)e.Value" />Full access</label>
+                    </div>
+                    @if (!fullAccess)
+                    {
+                        <div class="check-list">
+                            @foreach (var permission in AvailablePermissions)
+                            {
+                                var name = permission;
+                                <label title="@GetPermissionHint(name)"><input type="checkbox" checked="@selectedPermissions.Contains(name)" @onchange="e => TogglePermission(name, (bool)e.Value)" />@name</label>
+                            }
+                        </div>
+                        <div class="form-field">
+                            <input class="form-control" @bind="otherPermissions" @bind:event="oninput" placeholder="Other permissions (comma separated)" spellcheck="false" aria-label="Other permissions" />
+                            <span class="hint"><strong>read</strong> and <strong>write</strong> apply to Service operations. Api Endpoints can require their own Permissions</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="form-field">
+                    <label for="assignment-description">Description</label>
+                    <input id="assignment-description" class="form-control" @bind="description" placeholder="Optional" />
+                </div>
+
+                @if (error != null)
+                {
+                    <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</div>
+                }
+            </div>
+        }
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="Cancel"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+        <button class="admin-write btn btn-primary" @onclick="Save"><span class="icon fa-solid fa-sharp fa-check"></span>@(isNew ? "Add Assignment" : "Save")</button>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    private const string _wildcard = "*";
+
+    [Parameter]
+    public bool Visible { get; set; }
+
+    /// <summary>
+    /// The Assignment to edit (null to add a new Assignment)
+    /// </summary>
+    [Parameter]
+    public TrakHoundIdentityAssignment Assignment { get; set; }
+
+    [Parameter]
+    public SecurityResources Resources { get; set; }
+
+    [Parameter]
+    public string ProviderName { get; set; }
+
+    /// <summary>
+    /// Permissions offered as checkboxes (in addition to "read" and "write")
+    /// </summary>
+    [Parameter]
+    public IEnumerable<string> DeclaredPermissions { get; set; }
+
+    [Parameter]
+    public EventCallback<TrakHoundIdentityAssignment> OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private bool isNew;
+    private string resourceId;
+    private bool anyRole;
+    private string roles;
+    private bool fullAccess;
+    private HashSet<string> selectedPermissions = new HashSet<string>();
+    private string otherPermissions;
+    private string description;
+    private string error;
+    private bool wasVisible;
+
+    private IEnumerable<string> AvailablePermissions => new[] { "read", "write" }.Concat(DeclaredPermissions ?? Enumerable.Empty<string>()).Distinct();
+
+
+    protected override void OnParametersSet()
+    {
+        // Load the Assignment each time the Editor is opened
+        if (Visible && !wasVisible) Load();
+        wasVisible = Visible;
+    }
+
+    private void Load()
+    {
+        isNew = Assignment == null;
+        error = null;
+
+        resourceId = Assignment?.ResourceId ?? "*";
+        description = Assignment?.Description;
+
+        var assignmentRoles = Assignment?.Roles?.ToList() ?? new List<string> { _wildcard };
+        anyRole = assignmentRoles.Contains(_wildcard);
+        roles = string.Join(", ", assignmentRoles.Where(o => o != _wildcard));
+
+        var assignmentPermissions = Assignment?.Permissions?.ToList() ?? new List<string> { _wildcard };
+        fullAccess = assignmentPermissions.Contains(_wildcard);
+        var available = AvailablePermissions.ToList();
+        selectedPermissions = new HashSet<string>(assignmentPermissions.Where(o => available.Contains(o)));
+        otherPermissions = string.Join(", ", assignmentPermissions.Where(o => o != _wildcard && !available.Contains(o)));
+    }
+
+    private void TogglePermission(string permission, bool selected)
+    {
+        if (selected) selectedPermissions.Add(permission);
+        else selectedPermissions.Remove(permission);
+    }
+
+    private static string GetPermissionHint(string permission)
+    {
+        switch (permission)
+        {
+            case "read": return "Read Service data (ex. read Blobs, run Table queries, subscribe to Messages)";
+            case "write": return "Change Service data (ex. upload or delete Blobs, publish Messages)";
+            default: return "Declared by an Api Endpoint";
+        }
+    }
+
+    private async Task Save()
+    {
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(resourceId))
+        {
+            error = "Select the Resources for the Assignment.";
+            return;
+        }
+
+        var assignmentRoles = anyRole ? new List<string> { _wildcard } : Split(roles);
+        if (assignmentRoles.Count == 0)
+        {
+            error = "Enter at least one Role (or allow anyone signed in with the Identity Provider).";
+            return;
+        }
+
+        var assignmentPermissions = fullAccess ? new List<string> { _wildcard } : selectedPermissions.Concat(Split(otherPermissions)).Distinct().ToList();
+        if (assignmentPermissions.Count == 0)
+        {
+            error = "Select at least one Permission (or Full access).";
+            return;
+        }
+
+        var assignment = new TrakHoundIdentityAssignment();
+        assignment.Id = Assignment?.Id ?? Guid.NewGuid().ToString();
+        assignment.ResourceId = resourceId.Trim();
+        assignment.Roles = assignmentRoles;
+        assignment.Permissions = assignmentPermissions;
+        assignment.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+
+        await OnSave.InvokeAsync(assignment);
+    }
+
+    private async Task Cancel() => await OnCancel.InvokeAsync();
+
+    private static List<string> Split(string value)
+    {
+        return value?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct().ToList() ?? new List<string>();
+    }
+
+}

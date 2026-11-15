@@ -1,0 +1,318 @@
+@page "/_admin/security/api-keys"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.ApiKeys)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@using TrakHound.Instances
+@using TrakHound.Security
+
+<TrakHoundPageTitle Text="API Keys" />
+<AreaBreadcrumbs Items="@([new("API Keys")])" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-key"></span>
+        <div class="page-title">
+            <span class="title">API Keys</span>
+            <span class="description">Keys for scripts, integrations, and other Instances. Each Key's Roles are mapped to Permissions by Profiles that use the API Keys Identity Provider</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input class="form-control" type="search" placeholder="Search keys.." value="@search" @oninput="e => search = e.Value?.ToString()" spellcheck="false" />
+        </div>
+        <div class="toolbar-buttons">
+            <button class="admin-write btn btn-primary" disabled="@(state.KeyStore == null)" @onclick="CreateClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Create Key</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+
+        @if (!usedByProfile && state.Keys.Count > 0)
+        {
+            <div class="section callout-section">
+                <div class="callout warning">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>No Profile uses the API Keys Identity Provider, so these Keys don't grant access to anything yet. <a href="_admin/configuration/security-profiles">Add a Profile</a> for <code>@TrakHoundApiKeyIdentityProvider.ProviderId</code>.</div>
+                </div>
+            </div>
+        }
+
+        @if (state.Keys.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-key"></span>
+                <span class="empty-title">No API Keys</span>
+                <span class="empty-description">Create a Key to let a script, integration, or another Instance access protected Apis and Services.</span>
+                <button class="admin-write btn btn-primary" disabled="@(state.KeyStore == null)" @onclick="CreateClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Create Key</button>
+            </div>
+        }
+        else
+        {
+            var rows = GetRows();
+            @if (rows.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                    <span class="empty-title">No API Keys match "@search"</span>
+                    <button class="btn btn-light" @onclick="() => search = null">Clear Search</button>
+                </div>
+            }
+            else
+            {
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Key</th>
+                            <th>Roles</th>
+                            <th class="col-narrow">Status</th>
+                            <th class="col-narrow hide-narrow">Created</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var key in rows)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="item-name">@key.Name</span>
+                                    @if (!string.IsNullOrEmpty(key.Description))
+                                    {
+                                        <span class="item-description">@key.Description</span>
+                                    }
+                                    <code class="resource-id">thk_@(key.Id)_••••</code>
+                                </td>
+                                <td>
+                                    @if (key.Roles.IsNullOrEmpty())
+                                    {
+                                        <span class="muted">None</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="chips">
+                                            @foreach (var role in key.Roles)
+                                            {
+                                                <span class="chip">@role</span>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td class="col-narrow">
+                                    @if (key.IsExpired)
+                                    {
+                                        <span class="status error" title="Expired @key.Expires.Value.ToLocalTime().ToString("g")"><span class="status-dot"></span>Expired</span>
+                                    }
+                                    else if (key.Expires.HasValue)
+                                    {
+                                        var days = (int)Math.Ceiling((key.Expires.Value.ToUniversalTime() - DateTime.UtcNow).TotalDays);
+                                        <span class="status @(days <= 30 ? "warning" : "ok")" title="Expires @key.Expires.Value.ToLocalTime().ToString("g")"><span class="status-dot"></span>Expires in @days day@(days == 1 ? "" : "s")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status ok"><span class="status-dot"></span>Never expires</span>
+                                    }
+                                </td>
+                                <td class="col-narrow hide-narrow" title="@key.Created.ToLocalTime().ToString("g")">@key.Created.ToLocalTime().ToString("d")</td>
+                                <td class="col-actions">
+                                    <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => { revokeError = null; revokeKey = key; }"><span class="icon fa-regular fa-sharp fa-ban"></span>Revoke</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+
+    <Modal Class="security-modal" Visible="@createVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-key"></span>
+            <span class="modal-header-title">Create API Key</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="key-name">Name</label>
+                    <input id="key-name" class="form-control" @bind="createName" @bind:event="oninput" placeholder="ex. Reporting Script" />
+                </div>
+                <div class="form-field">
+                    <label for="key-expiration">Expiration</label>
+                    <select id="key-expiration" class="form-select" @bind="createExpirationDays">
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="365">1 year</option>
+                        <option value="0">Never</option>
+                    </select>
+                </div>
+                <div class="form-field wide">
+                    <label for="key-roles">Roles</label>
+                    <input id="key-roles" class="form-control" @bind="createRoles" @bind:event="oninput" placeholder="ex. readers, reporting" spellcheck="false" />
+                    <span class="hint">Comma separated. Profile Assignments map these Roles to Permissions</span>
+                    <RoleSuggestions ProviderId="@TrakHoundApiKeyIdentityProvider.ProviderId" @bind-Value="createRoles" />
+                </div>
+                <div class="form-field wide">
+                    <label for="key-description">Description</label>
+                    <input id="key-description" class="form-control" @bind="createDescription" placeholder="Optional (ex. who uses the Key)" />
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="callout danger key-error">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>@errorMessage</div>
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => createVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(createName)" @onclick="CreateConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Create Key</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(createdKey != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-circle-check"></span>
+            <span class="modal-header-title">API Key Created</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="callout warning">
+                <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                <div>Copy the Key now. Only a hash of it is stored, so it can't be shown again.</div>
+            </div>
+            <div class="created-key">
+                <CopyLabel Value="@createdKey" />
+            </div>
+            <div class="form-field">
+                <label>Usage</label>
+                <span class="hint">Send the Key in the Authorization header (or <code>@TrakHoundApiKeyIdentityProvider.ApiKeyHeader</code>):</span>
+                <code class="usage-example">Authorization: Bearer &lt;key&gt;</code>
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-primary" @onclick="() => createdKey = null"><span class="icon fa-solid fa-sharp fa-check"></span>Done</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(revokeKey != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-ban"></span>
+            <span class="modal-header-title">Revoke API Key</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (revokeKey != null)
+            {
+                <p>Revoke the API Key <strong>@revokeKey.Name</strong>?</p>
+                <p class="muted">Requests using the Key are rejected immediately. This can't be undone.</p>
+                @if (!string.IsNullOrEmpty(revokeError))
+                {
+                    <div class="callout danger key-error">
+                        <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                        <div>@revokeError</div>
+                    </div>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => revokeKey = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="RevokeConfirmClicked"><span class="icon fa-solid fa-sharp fa-ban"></span>Revoke</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private SecurityState state;
+    private bool usedByProfile;
+    private string search;
+
+    private bool createVisible;
+    private string createName;
+    private string createRoles;
+    private string createDescription;
+    private int createExpirationDays = 365;
+    private string createdKey;
+    private string errorMessage;
+
+    private TrakHoundApiKey revokeKey;
+    private string revokeError;
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+    }
+
+    private void SecurityChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void Load()
+    {
+        state = SecurityState.Load(instance);
+        usedByProfile = state.Profiles.Any(o => string.Equals(o.ProviderId, TrakHoundApiKeyIdentityProvider.ProviderId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private List<TrakHoundApiKey> GetRows()
+    {
+        if (string.IsNullOrWhiteSpace(search)) return state.Keys;
+
+        var query = search.Trim();
+        return state.Keys.Where(o =>
+            Contains(o.Name, query) ||
+            Contains(o.Description, query) ||
+            Contains(o.Id, query) ||
+            (o.Roles != null && o.Roles.Any(r => Contains(r, query)))).ToList();
+    }
+
+    private static bool Contains(string value, string query) => value != null && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private void CreateClicked()
+    {
+        createName = null;
+        createRoles = null;
+        createDescription = null;
+        createExpirationDays = 365;
+        errorMessage = null;
+        createVisible = true;
+    }
+
+    private void CreateConfirmClicked()
+    {
+        if (state.KeyStore == null || string.IsNullOrWhiteSpace(createName)) return;
+
+        var roles = createRoles?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        DateTime? expires = createExpirationDays > 0 ? DateTime.UtcNow.AddDays(createExpirationDays) : null;
+        var description = string.IsNullOrWhiteSpace(createDescription) ? null : createDescription.Trim();
+
+        // Roles that reach the System API or Services can only be given by an Admin who can change the Profiles that give that access
+        errorMessage = state.KeyStore.GetRoleDenial(roles);
+        if (errorMessage != null) return;
+
+        createdKey = state.KeyStore.Create(createName.Trim(), description, roles, expires);
+        createVisible = false;
+        Load();
+    }
+
+    private void RevokeConfirmClicked()
+    {
+        if (revokeKey != null && state.KeyStore != null)
+        {
+            revokeError = state.KeyStore.GetRoleDenial(revokeKey.Roles);
+            if (revokeError != null) return;
+
+            state.KeyStore.Revoke(revokeKey.Id);
+        }
+
+        revokeKey = null;
+        Load();
+    }
+
+}

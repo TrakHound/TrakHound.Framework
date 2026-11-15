@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "UserPackageId": {
+      "commandName": "Project"
+    },
+    "UserPackageId (name = Alice)": {
+      "commandName": "Project",
+      "commandLineArgs": "\"{\\\"name\\\":\\\"Alice\\\"}\""
+    }
+  }
+}

@@ -1,0 +1,470 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/modules"
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+@using TrakHound.Modules
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="Modules - Diagnostics" />
+
+<div class="modules-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-cubes"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Modules</span>
+                <span class="header-description">Packages loaded by the Instance (Apis, Apps, Functions, Services, Workers, ..) and Modules that failed to load</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <div class="filter-input">
+            <span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" class="form-control" placeholder="Filter by Package or Type" spellcheck="false" autocomplete="off" @bind="filterText" @bind:event="oninput" />
+        </div>
+
+        @if (!moduleTypes.IsNullOrEmpty())
+        {
+            <RadzenDropDown TValue="string" Data="@moduleTypes" @bind-Value="selectedModuleType" AllowClear="true" Placeholder="All Module Types" class="module-type-select dropdown-sm" />
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (loadError != null)
+            {
+                <div class="empty-panel">
+                    <span class="icon error fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <span class="empty-title">Unable to load Modules</span>
+                    <span class="empty-description">@loadError</span>
+                </div>
+            }
+            else if (!items.IsNullOrEmpty())
+            {
+                var loadedCount = items.Count(o => o.IsLoaded);
+                var failedCount = items.Count(o => !o.IsLoaded);
+                var warningCount = items.Count(o => o.IsLoaded && o.HasWarnings);
+
+                @* Summary : Loaded and Failed filter the table *@
+                <div class="summary-tiles">
+                    <button class="summary-tile loaded @(statusFilter == StatusFilter.Loaded ? "selected" : null)" title="Show Loaded Modules" @onclick="() => ToggleStatusFilter(StatusFilter.Loaded)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-circle-check"></span>Loaded</span>
+                        <span class="tile-value">@loadedCount.ToString("N0")</span>
+                        <span class="tile-detail">@Plural(items.Where(o => o.IsLoaded).Select(o => o.PackageId).Distinct().Count(), "Package")</span>
+                    </button>
+                    <div class="summary-tile static">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-code"></span>Types</span>
+                        <span class="tile-value">@items.Sum(o => o.TypeCount).ToString("N0")</span>
+                        <span class="tile-detail">across @Plural(items.Select(o => o.ModuleType).Distinct().Count(), "Module Type")</span>
+                    </div>
+                    <button class="summary-tile warning @(warningCount > 0 ? null : "zero") @(statusFilter == StatusFilter.Warnings ? "selected" : null)" title="Show Modules with Warnings" @onclick="() => ToggleStatusFilter(StatusFilter.Warnings)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Warnings</span>
+                        <span class="tile-value">@warningCount.ToString("N0")</span>
+                        <span class="tile-detail">Some Types not loaded</span>
+                    </button>
+                    <button class="summary-tile failed @(failedCount > 0 ? null : "zero") @(statusFilter == StatusFilter.Failed ? "selected" : null)" title="Show Modules that failed to load" @onclick="() => ToggleStatusFilter(StatusFilter.Failed)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-circle-xmark"></span>Failed</span>
+                        <span class="tile-value">@failedCount.ToString("N0")</span>
+                        <span class="tile-detail">@(failedCount > 0 ? "Failed to load" : "None")</span>
+                    </button>
+                </div>
+
+                var filteredItems = GetFilteredItems().ToList();
+
+                <div class="table-panel summary-panel">
+                    @if (filteredItems.Count > 0)
+                    {
+                        <RadzenDataGrid Data="@filteredItems"
+                                        TItem="TableItem"
+                                        Density="Density.Compact"
+                                        AllowSorting="true"
+                                        AllowColumnResize="true"
+                                        RowClick="@RowClicked"
+                                        RowRender="@RowRender">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="TableItem" Property="StatusOrder" Title="Status" Width="100px">
+                                    <Template Context="item">
+                                        <span class="status-badge @item.StatusClass"><span class="status-dot"></span>@item.Status</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="PackageId" Title="Package" MinWidth="180px">
+                                    <Template Context="item">
+                                        <span class="value" title="@item.PackageId">@item.PackageId</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="PackageVersion" Title="Version" Width="95px">
+                                    <Template Context="item">
+                                        <span class="value code">@item.PackageVersion</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="ModuleType" Title="Module Type" MinWidth="150px">
+                                    <Template Context="item">
+                                        <span class="value" title="@item.ModuleType">@item.ModuleType</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="TypeCount" Title="Types" Width="70px" TextAlign="TextAlign.Right">
+                                    <Template Context="item">
+                                        <span class="number">@(item.IsLoaded ? item.TypeCount.ToString("N0") : "-")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="Time" Title="Loaded" Width="130px">
+                                    <Template Context="item">
+                                        @if (item.IsLoaded)
+                                        {
+                                            <span class="value" title="@FormatTimestamp(item.Time)">@FormatAge(item.Time)</span>
+                                            <span class="sub-value">in @FormatDuration(item.LoadDuration)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="value" title="@FormatTimestamp(item.Time)">Failed @FormatAge(item.Time)</span>
+                                            <span class="sub-value">@Plural(item.ErrorCount, "attempt")</span>
+                                        }
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    }
+                    else
+                    {
+                        <div class="empty-panel compact">
+                            <span class="empty-title">No matching Modules</span>
+                            <span class="empty-description">Change or clear the filters to see more Modules</span>
+                        </div>
+                    }
+                </div>
+
+                @* Selected Module *@
+                var selected = filteredItems.FirstOrDefault(o => o.Key == selectedKey);
+                if (selected != null)
+                {
+                    <div class="detail-panel">
+                        <div class="detail-header">
+                            <span class="detail-title">@selected.PackageId</span>
+                            <span class="detail-version">v@(selected.PackageVersion)</span>
+                            <span class="status-badge @selected.StatusClass"><span class="status-dot"></span>@selected.Status</span>
+                        </div>
+
+                        <div class="detail-grid">
+                            <span class="detail-label">Module Type</span>
+                            <span class="detail-value">@selected.ModuleType</span>
+
+                            <span class="detail-label">Package Category</span>
+                            <span class="detail-value">@(selected.PackageCategory ?? "-")</span>
+
+                            <span class="detail-label">Loaded From</span>
+                            <span class="detail-value">@(!selected.ManagerCategories.IsNullOrEmpty() ? string.Join(", ", selected.ManagerCategories) : "-") <span class="detail-hint">(Package Categories)</span></span>
+
+                            @if (selected.IsLoaded)
+                            {
+                                <span class="detail-label">Loaded</span>
+                                <span class="detail-value">@FormatTimestamp(selected.Time) (@FormatAge(selected.Time)) in @FormatDuration(selected.LoadDuration)</span>
+
+                                <span class="detail-label">Directory</span>
+                                <span class="detail-value path">@selected.PackageDirectory</span>
+                            }
+                            else
+                            {
+                                <span class="detail-label">Last Failed</span>
+                                <span class="detail-value">@FormatTimestamp(selected.Time) (@FormatAge(selected.Time)) · @Plural(selected.ErrorCount, "attempt")</span>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(selected.Error))
+                        {
+                            <div class="detail-section-title">Error</div>
+                            <div class="message-block error"><span class="icon fa-solid fa-sharp fa-circle-xmark"></span>@selected.Error</div>
+                        }
+
+                        @if (!selected.Warnings.IsNullOrEmpty())
+                        {
+                            <div class="detail-section-title">Warnings</div>
+                            @foreach (var warning in selected.Warnings)
+                            {
+                                <div class="message-block warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@warning</div>
+                            }
+                        }
+
+                        @if (!selected.Types.IsNullOrEmpty())
+                        {
+                            <div class="detail-section-title">Types (@selected.Types.Count().ToString("N0"))</div>
+                            <div class="type-list">
+                                @foreach (var type in selected.Types)
+                                {
+                                    var (typeNamespace, typeName) = SplitTypeName(type);
+                                    <div class="type-item" title="@type">
+                                        <span class="icon fa-solid fa-sharp fa-code"></span>
+                                        <span class="type-name">@typeName</span>
+                                        @if (typeNamespace != null)
+                                        {
+                                            <span class="type-namespace">@typeNamespace</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="detail-hint-panel">Select a Module to see its Types, Directory and any Errors</div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-cubes"></span>
+                    <span class="empty-title">No Modules</span>
+                    <span class="empty-description">No Modules have been loaded by this Instance yet</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Modules.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private List<TableItem> items;
+    private IEnumerable<string> moduleTypes;
+    private string selectedModuleType;
+    private string selectedKey;
+    private string filterText;
+    private StatusFilter statusFilter;
+    private string previousInstanceId;
+    private bool loading = true;
+    private string loadError;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    enum StatusFilter
+    {
+        None,
+        Loaded,
+        Warnings,
+        Failed
+    }
+
+    class TableItem
+    {
+        public string Key { get; set; }
+        public bool IsLoaded { get; set; }
+        public bool HasWarnings { get; set; }
+        public string Status { get; set; }
+        public string StatusClass { get; set; }
+        public int StatusOrder { get; set; } // Sort Failed, then Warnings, then Loaded
+        public string ModuleType { get; set; }
+        public IEnumerable<string> ManagerCategories { get; set; }
+        public string PackageCategory { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public string PackageDirectory { get; set; }
+        public IEnumerable<string> Types { get; set; }
+        public int TypeCount { get; set; }
+        public DateTime Time { get; set; }
+        public TimeSpan LoadDuration { get; set; }
+        public IEnumerable<string> Warnings { get; set; }
+        public string Error { get; set; }
+        public int ErrorCount { get; set; }
+
+        public TableItem(TrakHoundModuleInformation information)
+        {
+            IsLoaded = information.IsLoaded;
+            HasWarnings = !information.Warnings.IsNullOrEmpty();
+            ModuleType = information.ModuleType;
+            ManagerCategories = information.ManagerCategories;
+            PackageCategory = information.PackageCategory;
+            PackageId = information.PackageId;
+            PackageVersion = information.PackageVersion;
+            PackageDirectory = information.PackageDirectory;
+            Types = information.Types;
+            TypeCount = information.Types?.Count() ?? 0;
+            Time = (IsLoaded ? information.LoadedTime : information.ErrorTime).ToDateTime();
+            LoadDuration = TimeSpan.FromMilliseconds(information.LoadDuration);
+            Warnings = information.Warnings;
+            Error = information.Error;
+            ErrorCount = information.ErrorCount;
+
+            // The same Package can be loaded by multiple Module Managers (ex. as a Worker and as an Api)
+            Key = $"{ModuleType}|{string.Join(",", ManagerCategories ?? Enumerable.Empty<string>())}|{PackageId}|{PackageVersion}";
+
+            if (!IsLoaded) (Status, StatusClass, StatusOrder) = ("Failed", "failed", 0);
+            else if (HasWarnings) (Status, StatusClass, StatusOrder) = ("Warnings", "warning", 1);
+            else (Status, StatusClass, StatusOrder) = ("Loaded", "loaded", 2);
+        }
+    }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadError = null;
+            await InvokeAsync(StateHasChanged);
+
+            if (explorerService.SelectedInstanceId != previousInstanceId)
+            {
+                // A different Instance, so start without a selection or filters
+                selectedKey = null;
+                selectedModuleType = null;
+                statusFilter = StatusFilter.None;
+            }
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Modules", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            try
+            {
+                var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+                var modules = client != null ? await client.Modules.GetModules() : null;
+                if (modules != null)
+                {
+                    items = modules
+                        .Select(o => new TableItem(o))
+                        .OrderBy(o => o.StatusOrder)
+                        .ThenBy(o => o.PackageId, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(o => o.ModuleType)
+                        .ToList();
+
+                    moduleTypes = items.Select(o => o.ModuleType).Where(o => o != null).Distinct().OrderBy(o => o).ToList();
+                }
+                else
+                {
+                    // Older Instances do not have the Modules System API
+                    items = null;
+                    moduleTypes = null;
+                    loadError = "The Instance did not return any Modules (it may be running an older version without the Modules API)";
+                }
+            }
+            catch (Exception ex)
+            {
+                items = null;
+                moduleTypes = null;
+                loadError = ex.Message;
+            }
+
+            loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private IEnumerable<TableItem> GetFilteredItems()
+    {
+        IEnumerable<TableItem> results = items;
+
+        switch (statusFilter)
+        {
+            case StatusFilter.Loaded: results = results.Where(o => o.IsLoaded); break;
+            case StatusFilter.Warnings: results = results.Where(o => o.IsLoaded && o.HasWarnings); break;
+            case StatusFilter.Failed: results = results.Where(o => !o.IsLoaded); break;
+        }
+
+        if (!string.IsNullOrEmpty(selectedModuleType))
+        {
+            results = results.Where(o => o.ModuleType == selectedModuleType);
+        }
+
+        var filter = filterText?.Trim();
+        if (!string.IsNullOrEmpty(filter))
+        {
+            results = results.Where(o =>
+                (o.PackageId?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (o.Types?.Any(t => t.Contains(filter, StringComparison.OrdinalIgnoreCase)) ?? false));
+        }
+
+        return results;
+    }
+
+    private void ToggleStatusFilter(StatusFilter filter)
+    {
+        statusFilter = statusFilter == filter ? StatusFilter.None : filter;
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        selectedKey = args.Data?.Key != selectedKey ? args.Data?.Key : null;
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        // A "class" attribute replaces the row classes, so keep rz-data-row
+        if (args.Data?.Key == selectedKey) args.Attributes.Add("class", "rz-data-row selected-row");
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    // Formatting
+
+    private static (string Namespace, string Name) SplitTypeName(string fullName)
+    {
+        var i = fullName?.LastIndexOf('.') ?? -1;
+        return i > 0 ? (fullName[..i], fullName[(i + 1)..]) : (null, fullName);
+    }
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        return timestamp > DateTime.MinValue ? timestamp.ToLocalTime().ToString("g") : "-";
+    }
+
+    private static string FormatAge(DateTime timestamp)
+    {
+        if (timestamp <= DateTime.MinValue) return "-";
+
+        var age = DateTime.UtcNow - timestamp;
+        if (age.TotalMinutes < 1) return "just now";
+        if (age.TotalHours < 1) return $"{Plural((int)age.TotalMinutes, "minute")} ago";
+        if (age.TotalDays < 1) return $"{Plural((int)age.TotalHours, "hour")} ago";
+        return $"{Plural((int)age.TotalDays, "day")} ago";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return duration.TotalSeconds >= 1 ? $"{duration.TotalSeconds:N1}s" : $"{duration.TotalMilliseconds:N0}ms";
+    }
+
+    private static string Plural(int value, string unit) => $"{value:N0} {unit}{(value == 1 ? "" : "s")}";
+
+}

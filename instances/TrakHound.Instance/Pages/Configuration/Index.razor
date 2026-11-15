@@ -1,0 +1,200 @@
+@page "/_admin/configuration"
+@page "/_admin/workspaces/{WorkspaceId}/configuration"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.AppConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.ApiConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.FunctionConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.WorkerConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.ServiceConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.RouterConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.GroupConfigurations, TrakHound.Instance.Security.TrakHoundAdminSecurity.IdentityProviders, TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles, TrakHound.Instance.Security.TrakHoundAdminSecurity.Zones, TrakHound.Instance.Security.TrakHoundAdminSecurity.Settings, TrakHound.Instance.Security.TrakHoundAdminSecurity.Variables)]
+@layout ConfigurationLayout
+@implements IDisposable
+@inject ConfigurationsService configurationsService
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@using TrakHound.Configurations
+@using TrakHound.Instance.Security
+@using TrakHound.Services
+
+<TrakHoundPageTitle />
+
+<div class="overview-page">
+
+    @* The same groups as the navigation, with only what the signed in Admin's Roles let them view *@
+    @foreach (var group in ConfigurationCategories.All.GroupBy(o => o.Group))
+    {
+        var categories = group.Where(o => CanView(TrakHoundAdminSecurity.GetConfigurationResource(o.ConfigurationCategory))).ToList();
+        var canViewGroups = group.Key == "Applications" && CanView(TrakHoundAdminSecurity.GroupConfigurations);
+        var canViewRouters = group.Key == "Services" && CanView(TrakHoundAdminSecurity.RouterConfigurations);
+        var canViewProfiles = group.Key == "Access" && configurationsService.WorkspaceId == null && adminAccess.CanRead(TrakHoundAdminSecurity.SecurityProfiles);
+        var canViewZones = group.Key == "Access" && CanView(TrakHoundAdminSecurity.Zones);
+        if (categories.Count == 0 && !canViewGroups && !canViewRouters && !canViewProfiles && !canViewZones) continue;
+
+        <div class="overview-group">
+            <span class="group-title">@group.Key</span>
+            <div class="category-grid">
+                @foreach (var category in categories)
+                {
+                    @CategoryCard(category)
+                }
+
+                @if (canViewGroups)
+                {
+                    var groupCount = configurationsService.ConfigurationProfile.Get<TrakHound.Groups.TrakHoundGroupConfiguration>(TrakHound.Groups.TrakHoundGroupConfiguration.ConfigurationCategory)?.Count() ?? 0;
+
+                    @PageCard("_admin/configuration/groups", "fa-solid fa-sharp fa-layer-group", "Groups", "Organize Apis, Apps, Functions and Workers, and set the Router their Service calls use", groupCount, "Group", "Groups")
+                }
+
+                @if (canViewRouters)
+                {
+                    var routerCount = configurationsService.ConfigurationProfile.Get<TrakHoundServiceRouterConfiguration>(TrakHoundServiceRouterConfiguration.ConfigurationCategory)?.Count() ?? 0;
+
+                    @PageCard("_admin/configuration/routing", "fa-regular fa-chart-network", "Routers", "Route requests from Apps, Api, Functions and Workers to Services", routerCount, "Router", "Routers")
+                }
+
+                @* Security Profiles are edited through the running Instance's Security Manager (not in a Workspace yet) *@
+                @if (canViewProfiles)
+                {
+                    {
+                        var profileCount = configurationsService.Instance.SecurityManager?.GetProfiles()?.Count() ?? 0;
+
+                        @PageCard("_admin/configuration/security-profiles", "fa-solid fa-sharp fa-shield-halved", "Security Profiles", "Choose the Identity Provider for a set of Resources and map its Roles to Permissions", profileCount, "Profile", "Profiles")
+                    }
+                }
+
+                @if (canViewZones)
+                {
+                    var zoneManager = configurationsService.Target.ZoneManager;
+                    var zoneCount = zoneManager?.GetZones()?.Count() ?? 0;
+                    var denied = zoneManager?.GetActivity()?.Count(o => o.Enforced) ?? 0;
+
+                    @PageCard("_admin/configuration/zones", "fa-solid fa-sharp fa-object-group", "Zones", "Limit what Modules can reach through their Client", zoneCount, "Zone", "Zones",
+                        denied > 0 ? AlertChip("error", "fa-solid fa-sharp fa-ban", $"{denied} denied {(denied == 1 ? "call" : "calls")}") : null)
+
+                    @PageCard("_admin/configuration/zone-map", "fa-solid fa-sharp fa-diagram-project", "Zone Map", "See what each Zone's Members can reach and grant the calls that were denied")
+                }
+            </div>
+        </div>
+    }
+
+    @if (CanView(TrakHoundAdminSecurity.Settings) || CanView(TrakHoundAdminSecurity.Variables))
+    {
+        <div class="overview-group">
+            <span class="group-title">Instance</span>
+            <div class="category-grid">
+                @if (CanView(TrakHoundAdminSecurity.Settings))
+                {
+                    @PageCard("_admin/configuration/settings", "fa-solid fa-sharp fa-wrench", "Settings", "Interfaces, Rate Limits, Logs, Notifications, Metrics and Health for the Instance")
+                }
+
+                @if (CanView(TrakHoundAdminSecurity.Variables))
+                {
+                    var savedVariables = TrakHoundConfigurationVariables.Read(configurationsService.ConfigurationProfile?.Path);
+                    // The running Instance applies saved Variables when it restarts
+                    var restartRequired = configurationsService.Target.IsLive && !IsSame(savedVariables, TrakHoundConfigurationVariables.Variables);
+
+                    @PageCard("_admin/configuration/variables", "fa-solid fa-sharp fa-brackets-curly", "Variables", "Values shared by every configuration, referenced in a Parameter as ${name}", savedVariables.Count, "Variable", "Variables",
+                        restartRequired ? AlertChip("update", "fa-solid fa-sharp fa-rotate", "Restart to apply") : null)
+                }
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    protected override void OnInitialized()
+    {
+        configurationsService.Packages.Changed += Changed;
+    }
+
+    public void Dispose()
+    {
+        configurationsService.Packages.Changed -= Changed;
+    }
+
+    private void Changed() => _ = InvokeAsync(StateHasChanged);
+
+    // A Workspace's pages are part of Deployments (the Admin got here with that), so all of them are shown
+    private bool CanView(string resourceId) => configurationsService.WorkspaceId != null || adminAccess.CanRead(resourceId);
+
+
+    // A module Category : its Configurations, the Packages installed for it, and any missing Packages or updates
+    private RenderFragment CategoryCard(ConfigurationCategoryDefinition category)
+    {
+        var configurations = category.Load(configurationsService.ConfigurationProfile)?.ToList() ?? new List<ConfigurationModel>();
+        var packageCount = configurationsService.PackageManager?.GetByCategory(category.PackageCategory)?.Select(o => o.Id).Distinct().Count() ?? 0;
+        var missing = configurations.Count(o => configurationsService.ResolvePackage(o) == null);
+        var updates = configurations.Select(o => o.PackageId).Distinct().Count(o => configurationsService.Packages.GetUpdate(o) != null);
+
+        return @<a class="category-card" href="@configurationsService.GetLink($"_admin/configuration/{category.Key}")">
+            <div class="card-header">
+                <span class="card-icon @category.Icon"></span>
+                <div class="card-title">
+                    <span class="title">@category.Title</span>
+                    <span class="description">@category.Description</span>
+                </div>
+            </div>
+            <div class="card-stats">
+                <div class="stat">
+                    <span class="stat-value">@configurations.Count</span>
+                    <span class="stat-label">@(configurations.Count == 1 ? "Configuration" : "Configurations")</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">@packageCount</span>
+                    <span class="stat-label">Packages installed</span>
+                </div>
+            </div>
+            @if (missing > 0 || updates > 0)
+            {
+                <div class="card-alerts">
+                    @if (missing > 0)
+                    {
+                        @AlertChip("error", "fa-solid fa-sharp fa-circle-exclamation", $"{missing} missing {(missing == 1 ? "package" : "packages")}")
+                    }
+                    @if (updates > 0)
+                    {
+                        @AlertChip("update", "fa-solid fa-sharp fa-up-to-line", $"{updates} {(updates == 1 ? "update" : "updates")} available")
+                    }
+                </div>
+            }
+        </a>;
+    }
+
+    // Any other configuration page (a count is shown when given)
+    private RenderFragment PageCard(string path, string icon, string title, string description, int? count = null, string singular = null, string plural = null, RenderFragment alert = null)
+    {
+        return @<a class="category-card" href="@configurationsService.GetLink(path)">
+            <div class="card-header">
+                <span class="card-icon @icon"></span>
+                <div class="card-title">
+                    <span class="title">@title</span>
+                    <span class="description">@description</span>
+                </div>
+            </div>
+            @if (count != null)
+            {
+                <div class="card-stats">
+                    <div class="stat">
+                        <span class="stat-value">@count</span>
+                        <span class="stat-label">@(count == 1 ? singular : plural)</span>
+                    </div>
+                </div>
+            }
+            @if (alert != null)
+            {
+                <div class="card-alerts">@alert</div>
+            }
+        </a>;
+    }
+
+    private static RenderFragment AlertChip(string type, string icon, string text)
+    {
+        return @<span class="alert-chip @type"><span class="icon @icon"></span>@text</span>;
+    }
+
+    private static bool IsSame(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b)
+    {
+        if (a.Count != b.Count) return false;
+        return a.All(o => b.TryGetValue(o.Key, out var value) && value == o.Value);
+    }
+
+}

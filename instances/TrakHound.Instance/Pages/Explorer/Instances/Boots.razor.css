@@ -1,0 +1,215 @@
+.boots-panel {
+    padding: 10px 2px 20px;
+    container-type: inline-size;
+}
+
+.boots-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.boots-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.boots-summary {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .boots-summary .separator {
+        margin: 0 8px;
+        color: var(--textLight);
+    }
+
+.boots-message {
+    padding: 20px 0;
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+.problem {
+    color: var(--colorRed);
+}
+
+.warning {
+    color: var(--colorOrange);
+}
+
+.muted {
+    color: var(--textLight);
+}
+
+/* Table */
+.boots-table {
+    border: 1px solid var(--tableBorderColor);
+    table-layout: fixed;
+    width: 100%;
+}
+
+    .boots-table th {
+        font-size: var(--fontSizeXs);
+        font-weight: bold;
+        color: var(--tableHeaderText);
+        background: var(--tableHeaderBackground);
+        border-bottom: 1px solid var(--tableHeaderBorderColor);
+        padding: 6px 10px;
+        white-space: nowrap;
+    }
+
+    .boots-table td {
+        font-size: var(--fontSizeSm);
+        padding: 6px 10px;
+        vertical-align: middle;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+.col-expand {
+    width: 32px;
+    color: var(--textLight);
+}
+
+.col-status {
+    width: 150px;
+}
+
+.col-started {
+    width: 150px;
+}
+
+.col-boot {
+    width: 160px;
+}
+
+.col-log {
+    width: 110px;
+}
+
+.col-starts {
+    width: 110px;
+}
+
+.col-uptime {
+    width: 90px;
+}
+
+.boot-row {
+    cursor: pointer;
+}
+
+    .boot-row:hover td {
+        background: var(--tableBackgroundHover);
+    }
+
+    .boot-row.expanded td {
+        background: var(--tableRowAltBackground);
+        border-bottom-color: transparent;
+    }
+
+.boot-details-row > td {
+    background: var(--tableRowAltBackground);
+    white-space: normal;
+    padding: 4px 16px 14px 42px;
+}
+
+/* Status */
+.boot-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: bold;
+    --statusColor: var(--textLight);
+}
+
+.boot-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--statusColor);
+}
+
+.status-running {
+    --statusColor: var(--colorGreen);
+}
+
+.status-stopped {
+    --statusColor: var(--textLight);
+}
+
+.status-starting {
+    --statusColor: var(--colorBlue);
+}
+
+.status-failed,
+.status-crashed {
+    --statusColor: var(--colorRed);
+    color: var(--colorRed);
+}
+
+.status-unclean {
+    --statusColor: var(--colorOrange);
+    color: var(--colorOrange);
+}
+
+.current-tag {
+    margin-left: 8px;
+    padding: 1px 6px;
+    font-size: var(--fontSizeXs);
+    color: var(--accent);
+    border: 1px solid var(--accentLight);
+    border-radius: 3px;
+}
+
+/* Boot Time */
+.boot-bar {
+    display: inline-block;
+    width: 80px;
+    height: 8px;
+    margin-right: 8px;
+    vertical-align: middle;
+    background: var(--borderColorLight);
+    position: relative;
+}
+
+.boot-bar-value {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--accentLight);
+}
+
+.boot-time {
+    font-variant-numeric: tabular-nums;
+}
+
+.col-reason {
+    color: var(--textMild);
+}
+
+/* Narrow panels : the less important columns are hidden (the details still show them) */
+@container (max-width: 1000px) {
+    .col-starts,
+    .col-reason {
+        display: none;
+    }
+}
+
+@container (max-width: 760px) {
+    .col-log,
+    .col-uptime {
+        display: none;
+    }
+
+    .boot-details-row > td {
+        padding-left: 16px;
+    }
+}

@@ -1,0 +1,44 @@
+.info-grid {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 10px 30px;
+    align-items: center;
+    padding: 12px 0;
+    font-size: var(--fontSizeBase);
+}
+
+.info-label {
+    color: var(--textMild);
+    white-space: nowrap;
+}
+
+.info-value {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+    .info-value code {
+        padding: 2px 6px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        background: var(--inputBackground);
+        border: 1px solid var(--borderColorLight);
+        border-radius: 3px;
+    }
+
+    .info-value.path {
+        font-size: var(--fontSizeSm);
+    }
+
+    .info-value .btn-copy {
+        padding: 0 4px;
+        color: var(--textMild);
+    }
+
+        .info-value .btn-copy:hover {
+            color: var(--accentLight);
+        }

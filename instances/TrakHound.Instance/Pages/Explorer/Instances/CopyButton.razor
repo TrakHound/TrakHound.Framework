@@ -1,0 +1,53 @@
+@* Copies a value to the Clipboard and briefly shows a check *@
+@implements IDisposable
+@inject JavascriptService javascriptService
+@using TrakHound.Blazor.Services
+
+@if (!string.IsNullOrEmpty(Value))
+{
+    <button class="copy-button @(copied ? "copied" : null)" title="@(copied ? "Copied" : Title)" aria-label="@Title" @onclick="Copy">
+        <span class="icon @(copied ? "fa-solid fa-sharp fa-check" : "fa-regular fa-sharp fa-copy")"></span>
+    </button>
+}
+
+@code {
+
+    private static readonly TimeSpan _copiedDuration = TimeSpan.FromSeconds(2);
+
+    private CancellationTokenSource copiedReset;
+    private bool copied;
+
+
+    [Parameter]
+    public string Value { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "Copy";
+
+
+    void IDisposable.Dispose()
+    {
+        copiedReset?.Cancel();
+    }
+
+    private async Task Copy()
+    {
+        await javascriptService.CopyClipboard(Value);
+
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copied = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(_copiedDuration, token);
+            copied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }
+    }
+
+}

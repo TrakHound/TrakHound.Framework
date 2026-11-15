@@ -1,0 +1,60 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "trakhound-instance-debug",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [ "TrakHound.Instance.dll" ],
+      "cwd": "instances/TrakHound.Instance/bin/Debug/net10.0",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "TRAKHOUND_CONFIGURATION_PROFILE": "preview"
+      },
+      "port": 8480,
+      "autoPort": false
+    },
+    {
+      "name": "trakhound-instance-debug-default",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [ "TrakHound.Instance.dll" ],
+      "cwd": "instances/TrakHound.Instance/bin/Debug/net10.0",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "TRAKHOUND_CONFIGURATION_PROFILE": "default"
+      },
+      "port": 8475
+    },
+    {
+      "name": "trakhound-instance-loadtest",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [ "TrakHound.Instance.dll" ],
+      "cwd": "instances/TrakHound.Instance/bin/Release/net10.0",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Production",
+        "TRAKHOUND_CONFIGURATION_PROFILE": "loadtest"
+      },
+      "port": 8495
+    },
+    {
+      "name": "packages-app-debug",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [ "run", "--no-launch-profile", "--project", "modules/TrakHound.Packages.App/TrakHound.Packages.App.csproj", "--urls", "http://localhost:8490" ],
+      "cwd": "modules/TrakHound.Packages.App",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "port": 8490
+    },
+    {
+      "name": "welcome-app-debug",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [ "run", "--no-launch-profile", "--project", "TrakHound.Welcome.App.csproj", "--urls", "http://localhost:49790" ],
+      "cwd": "modules/TrakHound.Welcome.App",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "port": 49790,
+      "autoPort": false
+    }
+  ]
+}

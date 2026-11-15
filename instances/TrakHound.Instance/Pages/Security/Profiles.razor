@@ -1,0 +1,266 @@
+@page "/_admin/configuration/security-profiles"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles)]
+@layout TrakHound.Instance.Pages.Configuration.ConfigurationLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject NavigationManager navigationManager
+@using TrakHound.Instances
+@using TrakHound.Security
+
+<TrakHound.Instance.Pages.Security.SecurityPageStyles>
+    <TrakHoundPageTitle Text="Security Profiles" />
+    <AreaBreadcrumbs Items="@([new("Security Profiles")])" />
+
+    <div class="page">
+
+        <div class="page-header">
+            <span class="page-icon fa-solid fa-sharp fa-shield-halved"></span>
+            <div class="page-title">
+                <span class="title">Security Profiles</span>
+                <span class="description">A Profile chooses the Identity Provider for a set of Resources. Its Assignments map the Provider's Roles to Permissions</span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="toolbar-search">
+                <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                <input class="form-control" type="search" placeholder="Search profiles.." value="@search" @oninput="e => search = e.Value?.ToString()" spellcheck="false" />
+            </div>
+            <div class="toolbar-buttons">
+                <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Profile</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            @if (state.Profiles.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-solid fa-sharp fa-shield-halved"></span>
+                    <span class="empty-title">No Profiles</span>
+                    <span class="empty-description">Everything on this Instance can be accessed without signing in. Add a Profile to require an Identity for Apis, Apps, or Services.</span>
+                    <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Profile</button>
+                </div>
+            }
+            else
+            {
+                var rows = GetRows();
+                @if (rows.Count == 0)
+                {
+                    <div class="empty-state">
+                        <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                        <span class="empty-title">No Profiles match "@search"</span>
+                        <button class="btn btn-light" @onclick="() => search = null">Clear Search</button>
+                    </div>
+                }
+                else
+                {
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Profile</th>
+                                <th>Identity Provider</th>
+                                <th class="col-narrow" title="Chooses which Identity Provider's sign in page is shown when several Profiles cover a Resource (highest first). It isn't a rule order: every matching Profile applies">Priority <span class="icon fa-regular fa-sharp fa-circle-info priority-info" aria-hidden="true"></span></th>
+                                <th class="col-narrow hide-narrow">Assignments</th>
+                                <th class="col-actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var profile in rows)
+                            {
+                                var link = GetLink(profile);
+                                var provider = state.GetProvider(profile.ProviderId);
+
+                                <tr>
+                                    <td>
+                                        <a class="item-name" href="@link">@profile.Id</a>
+                                        @if (!string.IsNullOrEmpty(profile.Description))
+                                        {
+                                            <span class="item-description">@profile.Description</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (string.IsNullOrEmpty(profile.ProviderId))
+                                        {
+                                            <span class="status warning" title="Resources in this Profile can be accessed without signing in"><span class="status-dot"></span>None (public)</span>
+                                        }
+                                        else if (provider == null)
+                                        {
+                                            <span class="status error"><span class="status-dot"></span>@profile.ProviderId (not found)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="status @(provider.IsLoaded ? "ok" : "error")" title="@(provider.IsLoaded ? "Loaded" : "Not loaded")"><span class="status-dot"></span>@provider.DisplayName</span>
+                                        }
+                                    </td>
+                                    <td class="col-narrow">@profile.Priority</td>
+                                    <td class="col-narrow hide-narrow">@(profile.Assignments?.Count() ?? 0)</td>
+                                    <td class="col-actions">
+                                        <a class="btn btn-sm btn-command" href="@link"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</a>
+                                        <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removeProfile = profile"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            }
+        </div>
+
+        <Modal Class="security-modal" Visible="@addVisible">
+            <HeaderContent>
+                <span class="modal-header-icon fa-solid fa-sharp fa-shield-halved"></span>
+                <span class="modal-header-title">Add Profile</span>
+            </HeaderContent>
+            <BodyContent>
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="profile-id">ID</label>
+                        <input id="profile-id" class="form-control" @bind="addId" @bind:event="oninput" placeholder="ex. operators" spellcheck="false" />
+                        <span class="hint">Letters, numbers, '-', '_', and '.'</span>
+                    </div>
+                    <div class="form-field">
+                        <label for="profile-provider">Identity Provider</label>
+                        <select id="profile-provider" class="form-select" @bind="addProviderId">
+                            <option value="">None (Resources are public)</option>
+                            @foreach (var provider in state.Providers)
+                            {
+                                <option value="@provider.Id">@provider.DisplayName@(provider.IsLoaded ? "" : " (not loaded)")</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-field wide">
+                        <label for="profile-description">Description</label>
+                        <input id="profile-description" class="form-control" @bind="addDescription" placeholder="Optional" />
+                    </div>
+                    <div class="form-field">
+                        <label for="profile-priority">Priority</label>
+                        <input id="profile-priority" class="form-control" type="number" @bind="addPriority" />
+                        <span class="hint">When several Profiles cover a Resource, browsers sign in with the highest priority Profile's Provider</span>
+                    </div>
+                </div>
+                @if (string.IsNullOrEmpty(addProviderId))
+                {
+                    <div class="callout warning provider-none">
+                        <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                        <div>Resources covered by this Profile can be accessed without signing in, whatever other Profiles require. Use it to make a few Resources public (ex. an App's sign in Page), and avoid wildcards in its Assignments. Check the result on <a href="_admin/security/public">What is Public?</a></div>
+                    </div>
+                }
+                @if (addError != null)
+                {
+                    <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@addError</div>
+                }
+            </BodyContent>
+            <FooterContent>
+                <button class="btn btn-secondary" @onclick="() => addVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(addId)" @onclick="AddConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Profile</button>
+            </FooterContent>
+        </Modal>
+
+        <Modal Class="security-modal" Visible="@(removeProfile != null)">
+            <HeaderContent>
+                <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+                <span class="modal-header-title">Remove Profile</span>
+            </HeaderContent>
+            <BodyContent>
+                @if (removeProfile != null)
+                {
+                    <p>Remove the Profile <strong>@removeProfile.Id</strong> and its @(removeProfile.Assignments?.Count() ?? 0) Assignment(s)?</p>
+                    <p class="muted">Resources that are only covered by this Profile will be accessible without signing in.</p>
+                }
+            </BodyContent>
+            <FooterContent>
+                <button class="btn btn-secondary" @onclick="() => removeProfile = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="admin-write btn btn-danger" @onclick="RemoveConfirmClicked"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Remove</button>
+            </FooterContent>
+        </Modal>
+
+    </div>
+</TrakHound.Instance.Pages.Security.SecurityPageStyles>
+
+@code {
+
+    private SecurityState state;
+    private string search;
+
+    private bool addVisible;
+    private string addId;
+    private string addProviderId;
+    private string addDescription;
+    private int addPriority;
+    private string addError;
+
+    private TrakHoundSecurityProfile removeProfile;
+
+
+    protected override void OnInitialized()
+    {
+        state = SecurityState.Load(instance);
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+    }
+
+    private void SecurityChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { state = SecurityState.Load(instance); StateHasChanged(); });
+
+    // Highest priority first (the order the Instance checks Profiles in to choose a sign in page), then by ID
+    private List<TrakHoundSecurityProfile> GetRows()
+    {
+        var profiles = state.Profiles.OrderByDescending(o => o.Priority).ThenBy(o => o.Id, StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(search)) return profiles.ToList();
+
+        var query = search.Trim();
+        return profiles.Where(o =>
+            Contains(o.Id, query) ||
+            Contains(o.Description, query) ||
+            Contains(o.ProviderId, query) ||
+            Contains(state.GetProvider(o.ProviderId)?.DisplayName, query)).ToList();
+    }
+
+    private static bool Contains(string value, string query) => value != null && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private static string GetLink(TrakHoundSecurityProfile profile) => $"_admin/configuration/security-profiles/{Uri.EscapeDataString(profile.Id)}";
+
+    private void AddClicked()
+    {
+        addId = null;
+        addDescription = null;
+        addPriority = 0;
+        addError = null;
+
+        // Default to the only Identity Provider that can sign in (or the API Key Provider)
+        // A configured Identity Provider (ex. LDAP) is preferred over the built in Users
+        addProviderId = state.Providers.Where(o => o.IsLoaded && o.CanSignIn).OrderBy(o => o.IsBuiltIn).Select(o => o.Id).FirstOrDefault() ?? TrakHoundApiKeyIdentityProvider.ProviderId;
+        addVisible = true;
+    }
+
+    private void AddConfirmClicked()
+    {
+        var id = addId?.Trim();
+
+        addError = SecurityProfileValidation.ValidateId(id);
+        if (addError == null && instance.SecurityManager.GetProfile(id) != null) addError = $"A Profile with the ID \"{id}\" already exists.";
+        if (addError != null) return;
+
+        var profile = new TrakHoundSecurityProfile();
+        profile.Id = id;
+        profile.Description = string.IsNullOrWhiteSpace(addDescription) ? null : addDescription.Trim();
+        profile.ProviderId = string.IsNullOrEmpty(addProviderId) ? null : addProviderId; // None : the Profile's Resources are public
+        profile.Priority = addPriority;
+        profile.Assignments = new List<TrakHoundIdentityAssignment>();
+
+        instance.SecurityManager.AddProfile(profile);
+        addVisible = false;
+
+        navigationManager.NavigateTo(GetLink(profile));
+    }
+
+    private void RemoveConfirmClicked()
+    {
+        if (removeProfile != null) instance.SecurityManager.RemoveProfile(removeProfile.Id);
+        removeProfile = null;
+    }
+
+}

@@ -1,0 +1,159 @@
+@using TrakHound.Packages
+
+@if (Package != null)
+{
+    var active = IsSelected ? "active" : "";
+    var publisher = Package.Metadata != null && Package.Metadata.ContainsKey("publisher") ? Package.Metadata["publisher"]?.ToString() : null;
+    var description = Package.Metadata != null && Package.Metadata.ContainsKey("description") ? Package.Metadata["description"]?.ToString() : null;
+    var image = Package.Metadata != null && Package.Metadata.ContainsKey(".image") ? Package.Metadata[".image"]?.ToString() : null;
+    var licenseRequired = Package.Metadata != null && Package.Metadata.ContainsKey(".licenseRequired") ? Package.Metadata[".licenseRequired"].ToBoolean() : false;
+
+    <div class="package-install-item @active" @onclick="Click">
+
+        <div class="icon-container">
+
+            <PackageIcon Src="@image" Class="icon" />
+
+        </div>
+
+        <div class="identity-container">
+            <span class="identifier">
+                @Package.Id
+                @if (!string.IsNullOrEmpty(publisher))
+                {
+                    <span class="publisher">by @publisher</span>
+                }
+            </span>
+            <span class="description">@description</span>
+            @if (ManifestCheck != null)
+            {
+                <div class="signature">
+                    <span class="signature-state @GetSignatureClass()" title="@GetSignatureTitle()">@GetSignatureText()</span>
+                    @if (WouldRefuse)
+                    {
+                        <span class="signature-refused">This Instance would refuse it</span>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (licenseRequired)
+        {
+            <div class="license-container">
+                <span class="license-label"><span class="icon fa-solid fa-sharp fa-key"></span>License Required</span>
+            </div>
+        }
+
+        <div class="version-container">
+            <span class="version"><span class="symbol">v</span>@Package.Version</span>
+        </div>
+
+        <div class="buttons-container">
+
+            @if (IsInstalling)
+            {
+                <div class="installing"><span class="loader fa-solid fa-sharp fa-loader spin"></span></div>
+            }
+            else if (!IsInstalled)
+            {
+                <button class="admin-write btn-install btn-command btn" @onclick="Select" @onclick:stopPropagation="true"><span class="icon fa-solid fa-sharp fa-down-to-bracket"></span>Install</button>
+            }
+            else if (!IsUpdated)
+            {
+                <button class="admin-write btn-install btn-command btn" @onclick="Select" @onclick:stopPropagation="true" title="Update from v@(InstalledVersion) to v@(Package.Version)"><span class="icon fa-solid fa-sharp fa-up-to-line"></span>Update</button>
+                @if (!string.IsNullOrEmpty(InstalledVersion))
+                {
+                    <span class="installed-version">v@(InstalledVersion) installed</span>
+                }
+            }
+            else
+            {
+                <span class="installed"><span class="icon fa-solid fa-sharp fa-check"></span>Installed@(!string.IsNullOrEmpty(InstalledVersion) && InstalledVersion != Package.Version ? $" v{InstalledVersion}" : "")</span>
+            }
+
+        </div>
+
+    </div>
+}
+
+
+@code {
+
+    [Parameter]
+    public TrakHoundPackage Package { get; set; }
+
+    [Parameter]
+    public bool IsInstalled { get; set; }
+
+    [Parameter]
+    public bool IsInstalling { get; set; }
+
+    /// <summary>
+    /// The latest installed version (null if not installed)
+    /// </summary>
+    [Parameter]
+    public string InstalledVersion { get; set; }
+
+    [Parameter]
+    public bool IsUpdated { get; set; }
+
+    [Parameter]
+    public bool IsSelected { get; set; }
+
+    /// <summary>
+    /// Who signed the Package's Manifest (null if the Source doesn't provide Manifests or it hasn't loaded). This isn't a check of the files, so it never says Verified
+    /// </summary>
+    [Parameter]
+    public TrakHoundPackageManifestCheck ManifestCheck { get; set; }
+
+    [Parameter]
+    public bool WouldRefuse { get; set; }
+
+    [Parameter]
+    public EventCallback Selected { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Clicked { get; set; }
+
+
+    private string GetSignatureText()
+    {
+        switch (ManifestCheck.State)
+        {
+            case TrakHoundPackageManifestState.Trusted: return $"Signed by {ManifestCheck.Publisher?.Name}";
+            case TrakHoundPackageManifestState.Untrusted: return "Untrusted signature";
+            case TrakHoundPackageManifestState.Unsigned: return "Unsigned";
+            case TrakHoundPackageManifestState.NoManifest: return "No Manifest";
+            default: return "Invalid";
+        }
+    }
+
+    private string GetSignatureClass()
+    {
+        switch (ManifestCheck.State)
+        {
+            case TrakHoundPackageManifestState.Trusted: return "trusted";
+            case TrakHoundPackageManifestState.Invalid: return "invalid";
+            default: return "";
+        }
+    }
+
+    private string GetSignatureTitle()
+    {
+        if (ManifestCheck.Errors.Count > 0) return string.Join(Environment.NewLine, ManifestCheck.Errors);
+        if (ManifestCheck.State == TrakHoundPackageManifestState.Trusted) return "The Manifest is signed by a Trusted Publisher. The files are checked when the Package is installed, or with Check Package";
+
+        return ManifestCheck.KeyId != null ? $"Signed by key {ManifestCheck.KeyId}" : null;
+    }
+
+    private async void Click()
+    {
+        await Clicked.InvokeAsync(Package.Id);
+    }
+
+    private async void Select()
+    {
+        await Selected.InvokeAsync();
+    }
+
+}

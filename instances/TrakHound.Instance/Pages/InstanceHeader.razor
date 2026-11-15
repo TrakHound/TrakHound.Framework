@@ -1,0 +1,248 @@
+﻿@rendermode InteractiveServer
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHoundThemeService themeService
+@inject TrakHound.Instance.Security.AdminAuthenticationService authenticationService
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@inject NavigationManager navigationManager
+@inject TrakHound.Instance.Notifications.TrakHoundInstanceNotificationService notificationService
+@inject TrakHound.Instance.Pages.Notifications.NotificationsSidebarState notificationsSidebarState
+@using TrakHound.Instances
+@using TrakHound.Instance.Services
+@using TrakHound.Blazor.Services
+
+@{
+    var statusIcon = "";
+    switch (instance.Status)
+    {
+        case TrakHoundInstanceStatus.Started: statusIcon = "fa-solid fa-sharp fa-play"; break;
+        case TrakHoundInstanceStatus.Starting: statusIcon = "fa-solid fa-sharp fa-loader spin"; break;
+        case TrakHoundInstanceStatus.Stopped: statusIcon = "fa-solid fa-sharp fa-stop"; break;
+        case TrakHoundInstanceStatus.Stopping: statusIcon = "fa-solid fa-sharp fa-loader spin"; break;
+        case TrakHoundInstanceStatus.Error: statusIcon = "fa-solid fa-sharp fa-triangle-exclamation"; break;
+    }
+
+    var themeIcon = "";
+    var themeTitle = "";
+    switch (themeService.Theme)
+    {
+        case TrakHoundThemes.Light: themeIcon = "fa-regular fa-sharp fa-sun-bright"; themeTitle = "Switch to the Dark theme"; break;
+        case TrakHoundThemes.Dark: themeIcon = "fa-regular fa-sharp fa-moon"; themeTitle = "Switch to the Light theme"; break;
+    }
+}
+
+<div class="instance-header">
+    <div class="instance-header-container">
+        <div class="instance-header-logo-container">
+            <img class="instance-header-logo" src="img/trakhound-logo.svg" alt="" />
+        </div>
+        <div class="instance-header-title-container">
+            <span class="instance-header-title">TrakHound<span class="instance-header-subtitle">Instance</span></span>
+        </div>
+        <div class="instance-header-information-container">
+
+            @if (!string.IsNullOrEmpty(instance.Information?.Name))
+            {
+                <div class="instance-header-name"><b>@instance.Information?.Name</b> (@instance.Id)</div>
+            }
+            else
+            {
+                <div class="instance-header-id"><b>@instance.Id</b></div>          
+            }
+
+            <div class="instance-header-host">@instance.Information?.GetInterface("HTTP")?.GetBaseUrl()</div>
+        </div>
+        <div class="instance-header-application-container">
+            <div class="instance-header-label"><b>Version</b></div>
+            <div class="instance-header-version"><span>@instance.Version</span></div>
+        </div>
+        <div class="instance-header-status-container">
+            <div class="instance-header-status"><span class="instance-header-status-icon @statusIcon"></span><b>@instance.Status</b></div>
+            <div class="instance-header-timer"><InstanceUptime /></div>
+        </div>
+        <a class="instance-header-health-container health-@healthStatus.ToString().ToLower()" href="@($"_admin/explorer/{instance.Id}/diagnostics/health")" title="@healthTitle">
+            <div class="instance-header-label"><b>Health</b></div>
+            <div class="instance-header-health"><span class="health-dot"></span><span>@healthStatus</span></div>
+        </a>
+        <div class="instance-header-buttons">
+            <button class="btn btn-theme" title="@themeTitle" aria-label="@themeTitle" @onclick="ToggleTheme"><span class="icon @themeIcon"></span></button>
+            <div class="help-menu-container" @onkeydown="HelpMenuKeyDown">
+                <button class="btn btn-help @(helpMenuOpen ? "active" : "")" title="Help" aria-label="Help" aria-haspopup="menu" aria-expanded="@(helpMenuOpen ? "true" : "false")" @onclick="ToggleHelpMenu">
+                    <span class="icon fa-solid fa-sharp fa-circle-question"></span>
+                </button>
+
+                @if (helpMenuOpen)
+                {
+                    @* Clicking anywhere else closes the menu *@
+                    <div class="help-menu-backdrop" @onclick="CloseHelpMenu"></div>
+                    <div class="help-menu" role="menu">
+                        <a role="menuitem" href="@TrakHoundWebsite.FrameworkDocs" target="_blank" rel="noopener" @onclick="CloseHelpMenu"><span class="icon fa-solid fa-sharp fa-book"></span>Documentation</a>
+                        <a role="menuitem" href="@TrakHoundWebsite.Docs(TrakHoundWebsite.Topics.GettingStarted)" target="_blank" rel="noopener" @onclick="CloseHelpMenu"><span class="icon fa-solid fa-sharp fa-flag-checkered"></span>Getting Started</a>
+                        <div class="help-menu-divider"></div>
+                        <a role="menuitem" href="@TrakHoundWebsite.Home" target="_blank" rel="noopener" @onclick="CloseHelpMenu"><span class="icon fa-solid fa-sharp fa-globe"></span>TrakHound Website</a>
+                        <a role="menuitem" href="@TrakHoundWebsite.Contact" target="_blank" rel="noopener" @onclick="CloseHelpMenu"><span class="icon fa-solid fa-sharp fa-envelope"></span>Contact Us</a>
+                        <a role="menuitem" href="@TrakHoundWebsite.GitHubUrl" target="_blank" rel="noopener" @onclick="CloseHelpMenu"><span class="icon fa-brands fa-github"></span>GitHub</a>
+                    </div>
+                }
+            </div>
+            <button class="btn btn-notifications @(notificationsSidebarState.IsOpen ? "active" : "")" title="Notifications" aria-label="@($"Notifications ({unreadCount} unread)")" aria-expanded="@(notificationsSidebarState.IsOpen ? "true" : "false")" @onclick="notificationsSidebarState.Toggle">
+                <span class="icon fa-solid fa-sharp fa-bell"></span>
+                @if (unreadCount > 0)
+                {
+                    <span class="notifications-badge">@(unreadCount > 99 ? "99+" : unreadCount.ToString())</span>
+                }
+            </button>
+
+            @if (instance.Configuration.AdminAuthenticationEnabled)
+            {
+                var account = adminAccess.Account;
+                if (account != null)
+                {
+                    <a class="btn btn-account" href="_admin/security/account" title="Your Account, its Roles and your Password" aria-label="@($"{account.DisplayName} : Your Account")"><span class="icon fa-solid fa-sharp fa-user"></span><span class="text">@account.DisplayName</span></a>
+                }
+
+                @* The texts are hidden on a narrow window, so the buttons are named by their labels *@
+                <button class="btn btn-logout" title="Sign Out" aria-label="Sign Out" @onclick="Logout"><span class="text">Sign Out</span><span class="icon fa-solid fa-sharp fa-right-from-bracket"></span></button>
+            }
+
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private int unreadCount;
+    private TrakHoundHealthStatus healthStatus = TrakHoundHealthStatus.Unknown;
+    private string healthTitle;
+    private TrakHound.Instance.Health.TrakHoundHealthMonitor healthMonitor;
+
+
+    protected override void OnInitialized()
+    {
+        instance.Started += Updated;
+        instance.Starting += Updated;
+        instance.Stopped += Updated;
+        instance.Stopping += Updated;
+
+        unreadCount = notificationService.UnreadCount;
+        notificationService.Changed += NotificationsChanged;
+        notificationsSidebarState.Changed += NotificationsSidebarChanged;
+        themeService.ThemeChanged += ThemeChanged;
+
+        // The Uptime text re-renders itself (InstanceUptime), so this only re-renders on Status, Health, Theme and Notification changes
+        SubscribeHealth();
+        UpdateHealth();
+    }
+
+    void IDisposable.Dispose()
+    {
+        if (healthMonitor != null) healthMonitor.Updated -= HealthUpdated;
+        themeService.ThemeChanged -= ThemeChanged;
+
+        instance.Started -= Updated;
+        instance.Starting -= Updated;
+        instance.Stopped -= Updated;
+        instance.Stopping -= Updated;
+        notificationService.Changed -= NotificationsChanged;
+        notificationsSidebarState.Changed -= NotificationsSidebarChanged;
+    }
+
+    private bool helpMenuOpen;
+
+    private void ToggleHelpMenu() => helpMenuOpen = !helpMenuOpen;
+
+    private void CloseHelpMenu() => helpMenuOpen = false;
+
+    // Escape closes the menu (the focus is on its button or one of its links)
+    private void HelpMenuKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") helpMenuOpen = false;
+    }
+
+    private async void ToggleTheme()
+    {
+        var theme = themeService.Theme;
+        switch (theme)
+        {
+            case TrakHoundThemes.Light: theme = TrakHoundThemes.Dark; break;
+            case TrakHoundThemes.Dark: theme = TrakHoundThemes.Light; break;
+        }
+
+        await themeService.SetTheme(AdminThemes.Key, theme);
+    }
+
+    private async void Logout()
+    {
+        // Revoked here (so other Browser Tabs using the Session are signed out too), then the browser removes the Cookie
+        await authenticationService.Logout();
+        navigationManager.NavigateTo("_admin/session/signout", forceLoad: true);
+    }
+
+    private void SubscribeHealth()
+    {
+        // The Health Monitor may not exist until the Instance has started
+        var monitor = instance.Health;
+        if (monitor != null && monitor != healthMonitor)
+        {
+            if (healthMonitor != null) healthMonitor.Updated -= HealthUpdated;
+            healthMonitor = monitor;
+            healthMonitor.Updated += HealthUpdated;
+        }
+    }
+
+    // Returns whether the displayed Health changed
+    private bool UpdateHealth()
+    {
+        var health = instance.Health?.GetHealth();
+        var status = health?.Status ?? TrakHoundHealthStatus.Unknown;
+        var summary = health?.Checks?
+            .Where(o => o.Status == status && status > TrakHoundHealthStatus.Healthy)
+            .Select(o => $"{o.Title} : {o.Description}");
+        var title = summary.IsNullOrEmpty() ? $"Instance Health : {status}" : string.Join("\n", summary);
+
+        if (status == healthStatus && title == healthTitle) return false;
+
+        healthStatus = status;
+        healthTitle = title;
+        return true;
+    }
+
+    private async void HealthUpdated(object sender, TrakHoundInstanceHealth health)
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (UpdateHealth()) StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) { } // Component or Circuit disposed during the update
+    }
+
+    private async void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void Updated(object sender, EventArgs args)
+    {
+        await InvokeAsync(() =>
+        {
+            SubscribeHealth();
+            UpdateHealth();
+            StateHasChanged();
+        });
+    }
+
+    private async void NotificationsChanged()
+    {
+        unreadCount = notificationService.UnreadCount;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void NotificationsSidebarChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

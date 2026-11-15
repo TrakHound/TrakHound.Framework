@@ -1,0 +1,17 @@
+{
+  "id": "TrakHound.Example.App",
+  "category": "app",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Example App that shows the readings served by TrakHound.Example.Api. Installs the Example Api, Function and Worker",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "examples/TrakHound.Example.App",
+    ".defaultName": "Example",
+    ".defaultRoute": "example"
+  },
+  "dependencies": [
+    { "id": "TrakHound.Example.Api", "version": "0.*" },
+    { "id": "TrakHound.Example.Function", "version": "0.*" },
+    { "id": "TrakHound.Example.Worker", "version": "0.*" }
+  ]
+}

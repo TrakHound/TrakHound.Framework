@@ -1,0 +1,13 @@
+.provider-none {
+    margin-top: 14px;
+}
+
+    .provider-none a {
+        color: var(--accentLight);
+    }
+
+.priority-info {
+    margin-left: 2px;
+    color: var(--textMild);
+    cursor: help;
+}

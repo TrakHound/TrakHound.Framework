@@ -1,0 +1,324 @@
+.log-view {
+    height: 100%;
+    overflow: hidden;
+}
+
+.log-live-panel,
+.log-history-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.log-live-panel .log-toolbar-panel {
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: max-content max-content 1fr max-content;
+    grid-column-gap: 15px;
+    padding: 10px;
+    border-bottom: 1px solid var(--borderColor);
+}
+
+    .log-live-panel .log-toolbar-panel .btn-subscribe {
+        width: 130px;
+        height: 30px;
+        border-radius: 0;
+    }
+
+    .log-live-panel .log-toolbar-panel .log-options-container ::deep .rz-dropdown {
+        width: 130px;
+    }
+
+    .log-live-panel .log-toolbar-panel .log-filter-container ::deep .text-box.small input {
+        height: 30px !important;
+        font-size: 12px !important;
+    }
+
+    .log-live-panel .log-toolbar-panel .btn-query {
+        width: 130px;
+        font-size: 12px;
+        height: 30px;
+        border-radius: 0;
+    }
+
+    .log-history-panel .log-toolbar-panel {
+        grid-row: 1;
+        display: grid;
+        grid-template-columns: max-content max-content 1fr;
+        grid-column-gap: 15px;
+        padding: 10px;
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+        .log-history-panel .log-toolbar-panel .btn-subscribe {
+            width: 130px;
+            height: 30px;
+            border-radius: 0;
+        }
+
+        .log-history-panel .log-toolbar-panel .log-options-container ::deep .rz-dropdown {
+            width: 130px;
+        }
+
+        .log-history-panel .log-toolbar-panel .log-filter-container ::deep .text-box.small input {
+            height: 30px !important;
+            font-size: 12px !important;
+        }
+
+        .log-history-panel .log-toolbar-panel .btn-query {
+            width: 130px;
+            font-size: 12px;
+            height: 30px;
+            border-radius: 0;
+        }
+
+.log-table-panel {
+    grid-row: 2;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Live : a Status row (ex. Subscribe failed) between the Toolbar and the lines */
+.log-live-panel.has-status {
+    grid-template-rows: max-content max-content 1fr;
+}
+
+    .log-live-panel.has-status .log-table-panel {
+        grid-row: 3;
+    }
+
+
+/* History : Toolbar, Status, Results */
+
+.log-history-panel {
+    grid-template-rows: max-content max-content 1fr;
+}
+
+    .log-history-panel .log-toolbar-panel {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 15px;
+    }
+
+    /* Range : a dropdown of time ranges, with the From and To pickers for a Custom range */
+    .log-history-panel .log-range-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .log-history-panel .log-range-container ::deep .rz-dropdown {
+            width: 140px;
+        }
+
+    /* Download : at the right end of the toolbar */
+    .log-history-panel .log-download-container {
+        margin-left: auto;
+    }
+
+        .log-history-panel .log-download-container .btn-download {
+            height: 30px;
+            padding: 0 12px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+
+            .log-history-panel .log-download-container .btn-download .icon {
+                margin-right: 6px;
+            }
+
+    .log-download-link {
+        display: none;
+    }
+
+    .log-history-panel .log-options-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .log-history-panel .log-option-label {
+        font-size: 12px;
+        color: var(--textMild);
+        white-space: nowrap;
+    }
+
+    .log-history-panel .log-table-panel {
+        grid-row: 3;
+    }
+
+.log-status-panel {
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 28px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--textMild);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .log-status-panel .log-status .icon {
+        margin-right: 6px;
+    }
+
+    .log-status-panel .log-status.error {
+        color: var(--textDark);
+    }
+
+        .log-status-panel .log-status.error .icon {
+            color: var(--bs-danger, #dc3545);
+        }
+
+.log-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+.log-empty-state-icon {
+    font-size: 36px;
+    margin-bottom: 6px;
+    color: var(--textLight);
+}
+
+.log-empty-state-title {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.log-empty-state-description {
+    font-size: var(--fontSizeSm);
+}
+
+/* History : Search, Level Counts, Load More */
+
+.log-history-panel .log-search-container {
+    width: 220px;
+}
+
+    .log-history-panel .log-search-container ::deep .text-box.small input {
+        height: 30px !important;
+        font-size: 12px !important;
+    }
+
+.log-status-panel .log-level-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.log-status-panel .log-level-count {
+    padding: 1px 8px;
+    border: 1px solid var(--borderColorLight);
+    border-radius: 10px;
+    background: none;
+    font-size: 11px;
+    color: var(--textMild);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+    .log-status-panel .log-level-count:hover {
+        color: var(--textDark);
+        border-color: var(--borderColor);
+    }
+
+    .log-status-panel .log-level-count.critical,
+    .log-status-panel .log-level-count.error {
+        border-color: var(--bs-danger, #dc3545);
+        color: var(--textDark);
+    }
+
+    .log-status-panel .log-level-count.warning {
+        border-color: var(--bs-warning, #ffc107);
+        color: var(--textDark);
+    }
+
+    /* The Level shown on its own */
+    .log-status-panel .log-level-count.selected {
+        color: #fff;
+        background: var(--accent);
+        border-color: var(--accent);
+    }
+
+/* Source filter : a chip that is removed with its x */
+.log-status-panel .log-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 360px;
+    padding: 1px 4px 1px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    font-size: 11px;
+    color: var(--textDark);
+}
+
+    .log-status-panel .log-filter-chip .log-filter-chip-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .log-status-panel .log-filter-chip .btn-chip-remove {
+        padding: 0 4px;
+        border: none;
+        background: none;
+        font-size: 11px;
+        color: var(--textMild);
+        cursor: pointer;
+    }
+
+        .log-status-panel .log-filter-chip .btn-chip-remove:hover {
+            color: var(--textDark);
+        }
+
+.log-status-panel .log-kept-levels {
+    margin-left: auto;
+    color: var(--textLight);
+    white-space: nowrap;
+}
+
+/* Load More : after the last line */
+.log-load-more {
+    padding: 10px 20px;
+}
+
+    .log-load-more .btn-load-more {
+        height: 30px;
+        padding: 0 12px;
+        font-size: 12px;
+        border-radius: 3px;
+    }
+
+        .log-load-more .btn-load-more .icon {
+            margin-right: 6px;
+        }
+
+/* Toolbar Content : at the right end of both toolbars */
+.log-toolbar-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+}
+
+    .log-toolbar-content ::deep a {
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+        .log-toolbar-content ::deep a .icon {
+            margin-right: 6px;
+        }

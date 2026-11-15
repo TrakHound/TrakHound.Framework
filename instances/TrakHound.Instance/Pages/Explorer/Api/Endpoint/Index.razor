@@ -1,0 +1,334 @@
+@page "/_admin/explorer/{instanceId}/api/{apiId}/{controllerId}/{endPointId}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject JavascriptService javascriptService
+@using TrakHound.Api
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using static TrakHound.Instance.Pages.Explorer.Api.ApiMetricsHelper
+
+<TrakHoundPageTitle Text="@($"{(apiInformation != null && controllerInformation != null && endPointInformation != null ? GetRoute() : EndPointId)} - Api")" />
+
+@if (loading)
+{
+    <div class="endpoint-loading">
+        <Loading Message="Loading Api Endpoint.." />
+    </div>
+}
+else if (apiInformation == null || controllerInformation == null || endPointInformation == null)
+{
+    <div class="endpoint-not-found">
+        <span class="icon fa-solid fa-sharp fa-circle-location-arrow"></span>
+        <span class="empty-title">Endpoint Not Found</span>
+        <span class="empty-description">@GetNotFoundMessage()</span>
+        <a class="btn btn-light" href="@(apiInformation != null ? GetApiLink() : GetApiListLink())"><span class="icon fa-solid fa-sharp fa-arrow-left"></span>@(apiInformation != null ? "Back to Api" : "Back to Apis")</a>
+    </div>
+}
+else
+{
+    var route = GetRoute();
+    var endpointMetrics = GetEndpointMetrics(metrics, controllerInformation, endPointInformation);
+
+    <div class="endpoint-panel">
+
+        <div class="header-panel">
+            <div class="header-content">
+                <div class="header-icon-container">
+                    <span class="header-type" title="@endPointInformation.Type">@GetHeaderMethod()</span>
+                </div>
+                <div class="header-description-container">
+                    <span class="header-title">API Endpoint</span>
+                    <span class="header-route">
+                        <span class="header-route-value" title="@route">@route</span>
+                        <span class="header-route-copy">
+                            @if (!routeCopied)
+                            {
+                                <button class="btn btn-link btn-copy" title="Copy Route" @onclick="CopyRoute"><span class="icon fa-regular fa-sharp fa-copy"></span></button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-link btn-copy clipboard" title="Copied" @onclick="CopyRoute"><span class="icon fa-solid fa-sharp fa-check"></span></button>
+                            }
+                        </span>
+                    </span>
+                    <span class="header-description">@endPointInformation.Id</span>
+                </div>
+                <div class="header-package-icon-container">
+
+                    <PackageIcon Src="@apiInformation.PackageIcon" Class="header-package-icon" />
+
+                </div>
+                <div class="header-package-container">
+                    <span class="header-title">Package</span>
+                    <span class="header-package">@apiInformation.PackageId</span>
+                    <span class="header-version">@apiInformation.PackageVersion</span>
+                </div>
+            </div>
+
+            @* Request Metrics for this Endpoint (since the Instance started) *@
+            <div class="metrics-strip">
+                <div class="metric">
+                    <span class="metric-label">Requests</span>
+                    <span class="metric-value">@((endpointMetrics?.TotalRequestCount ?? 0).ToString("N0"))</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Errors</span>
+                    <span class="metric-value">@((endpointMetrics?.TotalErrorCount ?? 0).ToString("N0")) <span class="metric-unit">@FormatErrorPercent(endpointMetrics?.TotalErrorCount ?? 0, endpointMetrics?.TotalRequestCount ?? 0)</span></span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Avg Time</span>
+                    <span class="metric-value">@(endpointMetrics?.TotalRequestCount > 0 ? FormatDuration(endpointMetrics.AverageDuration) : "-")</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Max Time</span>
+                    <span class="metric-value">@(endpointMetrics?.TotalRequestCount > 0 ? FormatDuration(endpointMetrics.MaxDuration) : "-")</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Status</span>
+                    <span class="metric-value @GetStatusClass(endpointMetrics?.LastStatusCode ?? 0)">@(endpointMetrics?.LastStatusCode > 0 ? endpointMetrics.LastStatusCode.ToString() : "-")</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Request</span>
+                    <span class="metric-value">@FormatLastRequested(endpointMetrics?.LastRequested)</span>
+                </div>
+                <a class="metrics-link" href="@GetApiLink()">Api @(!string.IsNullOrEmpty(apiInformation.Route) ? apiInformation.Route : "/")<span class="icon fa-solid fa-sharp fa-arrow-right"></span></a>
+            </div>
+        </div>
+
+        <div class="tab-panel">
+
+            <RadzenTabs RenderMode="TabRenderMode.Client">
+                <Tabs>
+
+                    <RadzenTabsItem Text="Run">
+                        <Run ServerId="@InstanceId" Api="@apiInformation" Controller="@controllerInformation" Endpoint="@endPointInformation" />
+                    </RadzenTabsItem>
+
+                    <RadzenTabsItem Text="Information">
+
+                        <div class="information-tab">
+                            <div class="information-panel">
+                                <InformationTable Api="@apiInformation" Controller="@controllerInformation" Endpoint="@endPointInformation" Route="@route" />
+                            </div>
+
+                            @if (!endPointInformation.Parameters.IsNullOrEmpty())
+                            {
+                                <div class="parameters-panel">
+                                    <label>Parameters</label>
+                                    <div class="parameters-content">
+                                        <ParameterTable Information="@endPointInformation" />
+                                    </div>
+                                </div>
+                            }
+
+                            @if (!endPointInformation.Responses.IsNullOrEmpty())
+                            {
+                                <div class="responses-panel">
+                                    <label>Responses</label>
+                                    <div class="responses-content">
+                                        <ResponseTable Information="@endPointInformation" />
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                    </RadzenTabsItem>
+
+                    <RadzenTabsItem Text="Logs">
+                        <EndpointLog ApiInformation="@apiInformation" ControllerInformation="@controllerInformation" EndpointInformation="@endPointInformation" />
+                    </RadzenTabsItem>
+
+                </Tabs>
+            </RadzenTabs>
+
+        </div>
+
+    </div>
+}
+
+@code {
+
+    private const int _metricsInterval = 2000;
+    private static readonly TimeSpan _copiedDuration = TimeSpan.FromSeconds(2);
+
+    private TrakHoundApiInformation apiInformation;
+    private TrakHoundApiControllerInformation controllerInformation;
+    private TrakHoundApiEndpointInformation endPointInformation;
+    private TrakHoundApiMetrics metrics;
+    private System.Threading.Timer metricsTimer;
+    private int updatingMetrics;
+    private CancellationTokenSource copiedReset;
+
+    private string previousInstanceId;
+    private string previousApiId;
+    private string previousControllerId;
+    private string previousEndPointId;
+
+    private bool loading = true;
+    private bool routeCopied;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ApiId { get; set; }
+
+    [Parameter]
+    public string ControllerId { get; set; }
+
+    [Parameter]
+    public string EndPointId { get; set; }
+
+
+    void IDisposable.Dispose()
+    {
+        metricsTimer?.Dispose();
+        copiedReset?.Cancel();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (explorerService.SelectedInstanceId != previousInstanceId || ApiId != previousApiId || ControllerId != previousControllerId || EndPointId != previousEndPointId)
+        {
+            previousInstanceId = explorerService.SelectedInstanceId;
+            previousApiId = ApiId;
+            previousControllerId = ControllerId;
+            previousEndPointId = EndPointId;
+
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        metricsTimer?.Dispose();
+        metrics = null;
+        routeCopied = false;
+
+        var instanceId = explorerService.SelectedInstanceId;
+        await explorerService.LoadInstance(instanceId);
+
+        apiInformation = explorerService.GetApiRoutes(instanceId)?.FirstOrDefault(o => o.Id == ApiId);
+        controllerInformation = apiInformation?.Controllers?.FirstOrDefault(o => o.Id == ControllerId);
+        endPointInformation = controllerInformation?.EndPoints?.FirstOrDefault(o => o.Id == EndPointId);
+
+        // Set Explorer Breadcrumbs
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(instanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Api", GetApiListLink()));
+        if (apiInformation != null)
+        {
+            breadcrumbItems.Add(new BreadcrumbItem(!string.IsNullOrEmpty(apiInformation.Route) ? apiInformation.Route : "/", GetApiLink()));
+            if (!string.IsNullOrEmpty(controllerInformation?.Route) && controllerInformation.Route != "/") breadcrumbItems.Add(new BreadcrumbItem(controllerInformation.Route, null));
+            if (endPointInformation != null) breadcrumbItems.Add(new BreadcrumbItem(endPointInformation.Route, null));
+        }
+        explorerService.BreadcrumbItems = breadcrumbItems;
+
+        var client = explorerService.GetClient(instanceId);
+        if (endPointInformation != null && client != null)
+        {
+            await UpdateMetrics(client);
+
+            // Poll Request Metrics
+            metricsTimer = new System.Threading.Timer(MetricsTimerElapsed, client, _metricsInterval, _metricsInterval);
+        }
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        try
+        {
+            metrics = await client.Api.GetMetrics(ApiId);
+        }
+        catch
+        {
+            // Metrics are optional (ex. a remote Instance with the System API disabled)
+        }
+    }
+
+    private async void MetricsTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updatingMetrics, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updatingMetrics, 0);
+        }
+    }
+
+
+    private string GetRoute()
+    {
+        var route = Url.Combine(apiInformation.Route, controllerInformation.Route, endPointInformation.Route);
+        return $"/{route?.TrimStart('/')}";
+    }
+
+    private string GetHeaderMethod()
+    {
+        if (endPointInformation.Type == TrakHoundApiEndpointType.Stream) return "STREAM";
+        return endPointInformation.Method?.ToString() ?? "REQUEST";
+    }
+
+    private string GetNotFoundMessage()
+    {
+        if (apiInformation == null) return $"No Api with the ID \"{ApiId}\" is configured in this Instance";
+        if (controllerInformation == null) return $"The Api has no Controller with the ID \"{ControllerId}\"";
+        return $"The Controller has no Endpoint with the ID \"{EndPointId}\"";
+    }
+
+    private static string GetStatusClass(int statusCode)
+    {
+        if (statusCode >= 500) return "status-error";
+        if (statusCode >= 400) return "status-warning";
+        return null;
+    }
+
+    private string GetApiListLink()
+    {
+        return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "api");
+    }
+
+    private string GetApiLink()
+    {
+        return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "api", ApiId);
+    }
+
+    private async Task CopyRoute()
+    {
+        await javascriptService.CopyClipboard(GetRoute());
+
+        // Show the "Copied" check briefly, then return to the Copy icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        routeCopied = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(_copiedDuration, token);
+            routeCopied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+}

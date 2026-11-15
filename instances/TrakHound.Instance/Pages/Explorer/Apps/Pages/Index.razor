@@ -1,0 +1,183 @@
+﻿@page "/_admin/explorer/{instanceId}/apps/{appId}/pages/{pageId}"
+@inject ExplorerService explorerService
+@inject NavigationManager navigationManager
+@using TrakHound.Apps
+@using TrakHound.Instance.Apps
+
+<TrakHoundPageTitle Text="@($"{GetPageTitleRoute()} - Apps")" />
+
+@if (appInformation != null && pageInformation != null)
+{
+    var route = Url.Combine(appInformation.Route, pageInformation.Route);
+    route = $"/{route}";
+
+    <div class="app-page-panel">
+
+        <div class="header-panel">
+            <div class="header-content">
+                <div class="header-icon-container">
+                    <span class="header-icon fa-regular fa-sharp fa-window"></span>
+                </div>
+                <div class="header-description-container">
+                    <span class="header-title">App Page</span>
+                    <span class="header-id">@route</span>
+                    <span class="header-description">@pageInformation.Id</span>
+                </div>
+                <div class="header-package-icon-container">
+
+                    <PackageIcon Src="@appInformation.PackageIcon" Class="header-package-icon" />
+
+                </div>
+                <div class="header-package-container">
+                    <span class="header-title">Package</span>
+                    <span class="header-package">@appInformation.PackageId</span>
+                    <span class="header-version">@appInformation.PackageVersion</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-panel">
+            <RadzenTabs RenderMode="TabRenderMode.Client">
+                <Tabs>
+                    <RadzenTabsItem Text="Preview">
+
+                        <AppPreview Source="@previewLink" />
+
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Information">
+
+                        <div class="information-panel">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td class="label">App ID</td>
+                                        <td class="value">@appInformation.Id</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label">App Package ID</td>
+                                        <td class="value">@appInformation.PackageId</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label">App Package Version</td>
+                                        <td class="value">@appInformation.PackageVersion</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label">Page ID</td>
+                                        <td class="value">@pageInformation.Id</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label">Route</td>
+                                        <td class="value">@pageInformation.Route</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="label">Access Log</td>
+                                        <td class="value"><a href="@GetAccessLogLink(route)" title="The page views of this Page (client and time on page)"><span class="icon fa-solid fa-sharp fa-file-lines"></span> Page Views</a></td>
+                                    </tr>
+
+                                    @if (!string.IsNullOrEmpty(pageInformation.Description))
+                                    {
+                                        <tr>
+                                            <td class="label">Description</td>
+                                            <td class="value">@pageInformation.Description</td>
+                                        </tr>
+                                    }
+
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(appInformation.PackageReadMe))
+                        {
+                            <div class="readme-panel">
+                                <MarkdownContent Markdown="@appInformation.PackageReadMe" />
+                            </div>
+                        }
+
+                    </RadzenTabsItem>
+                </Tabs>
+            </RadzenTabs>
+        </div>
+
+    </div>
+}
+
+@code {
+
+    private string GetPageTitleRoute() => route != null ? $"/{route.TrimStart('/')}" : PageId;
+
+    /// <summary>
+    /// The App's Access Log searched for the Page (a Route with Parameters is logged after the Path, ex. "/orders/12 (/orders/{id})")
+    /// </summary>
+    private string GetAccessLogLink(string route)
+    {
+        var search = route.Contains('{') ? $"({route})" : $"Page View : {route} :";
+        return TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId, appInformation?.PackageId, search);
+    }
+
+    private TrakHoundAppInformation appInformation;
+    private TrakHoundAppPageInformation pageInformation;
+    private string previousAppId;
+    private string previousPageId;
+    private string route;
+    private string previewLink;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string AppId { get; set; }
+
+    [Parameter]
+    public string PageId { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        if (AppId != previousAppId || PageId != previousPageId)
+        {
+            previousAppId = AppId;
+            previousPageId = PageId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId);
+
+            route = null;
+            previewLink = null;
+
+            var informations = explorerService.GetApps(InstanceId);
+            if (!informations.IsNullOrEmpty())
+            {
+                var server = explorerService.GetServer(InstanceId);
+                appInformation = informations.FirstOrDefault(o => o.Id == AppId);
+                if (appInformation != null)
+                {
+                    pageInformation = appInformation.Pages.FirstOrDefault(o => o.Id == PageId);
+                    if (pageInformation != null)
+                    {
+                        route = Url.Combine(appInformation.Route, pageInformation.Route);
+
+                        // On the HTTP Port when the Admin Interface has its own Port
+                        var baseUrl = TrakHound.Instance.Http.TrakHoundAdminPort.GetHttpBaseUri(navigationManager.BaseUri);
+                        previewLink = Url.Combine(baseUrl, route);
+
+                        var breadcrumbItems = new List<BreadcrumbItem>();
+                        breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+                        breadcrumbItems.Add(new BreadcrumbItem("Apps", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "apps")));
+                        breadcrumbItems.Add(new BreadcrumbItem(appInformation.Route, Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "apps", appInformation.Id)));
+                        breadcrumbItems.Add(new BreadcrumbItem("Pages", null));
+                        breadcrumbItems.Add(new BreadcrumbItem(pageInformation.Route, null));
+                        explorerService.BreadcrumbItems = breadcrumbItems;
+                    }
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

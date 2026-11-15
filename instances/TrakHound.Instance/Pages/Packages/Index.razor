@@ -1,0 +1,127 @@
+@page "/_admin/packages"
+@page "/_admin/packages/{Tab}"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Packages)]
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject RemotesConfiguration remotesConfiguration
+@using TrakHound.Instance.Configurations
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="Packages" />
+<AreaBreadcrumbs Items="@GetBreadcrumbs()" />
+
+<div class="packages-page">
+
+    <AreaLayout Icon="fa-solid fa-sharp fa-box" Title="Packages" Subtitle="Install, update and remove Packages" Link="_admin/packages">
+        <Tools>
+            <PackageSourcePicker Context="context" />
+        </Tools>
+        <Nav>
+            @foreach (var tab in _tabs)
+            {
+                @* Updates : the number available from the selected Source *@
+                var updates = tab.Id == "updates";
+
+                <AreaNavItem Href="@GetLink(tab)" Icon="@tab.Icon" Label="@tab.Title" Count="@(updates ? (updateCount > 0 ? updateCount : null) : GetCount(tab.Id))" Highlight="@updates" Match="@(tab == _tabs[0] ? NavLinkMatch.All : NavLinkMatch.Prefix)" />
+            }
+        </Nav>
+        <ChildContent>
+            <CascadingValue Value="context">
+                @switch (SelectedTab)
+                {
+                    case "updates":
+                        <Installed UpdatesOnly="true" />
+                        break;
+
+                    case "browse":
+                        <Browse />
+                        break;
+
+                    case "upload":
+                        <Upload />
+                        break;
+
+                    case "sources":
+                        <Sources />
+                        break;
+
+                    default:
+                        <Installed />
+                        break;
+                }
+            </CascadingValue>
+        </ChildContent>
+    </AreaLayout>
+
+    @* Notifications *@
+    <PackageNotifications Context="context" />
+
+</div>
+
+@code {
+
+    private record PackagesTab(string Id, string Title, string Icon);
+
+    private static readonly PackagesTab[] _tabs = new[]
+    {
+        new PackagesTab("installed", "Installed", "fa-solid fa-sharp fa-boxes-stacked"),
+        new PackagesTab("updates", "Updates", "fa-solid fa-sharp fa-circle-up"),
+        new PackagesTab("browse", "Browse", "fa-solid fa-sharp fa-magnifying-glass"),
+        new PackagesTab("upload", "Upload", "fa-solid fa-sharp fa-upload"),
+        new PackagesTab("sources", "Sources", "fa-solid fa-sharp fa-signal")
+    };
+
+    private PackagesContext context;
+    private int updateCount;
+
+
+    // The section (from the route). The first one is the area's first page ("_admin/packages")
+    [Parameter]
+    public string Tab { get; set; }
+
+    private string SelectedTab => _tabs.Any(o => o.Id == Tab?.ToLower()) ? Tab.ToLower() : _tabs[0].Id;
+
+    private static string GetLink(PackagesTab tab) => tab == _tabs[0] ? "_admin/packages" : $"_admin/packages/{tab.Id}";
+
+    private IEnumerable<BreadcrumbItem> GetBreadcrumbs()
+    {
+        var tab = _tabs.First(o => o.Id == SelectedTab);
+        return tab == _tabs[0] ? [] : [new(tab.Title)];
+    }
+
+
+    protected override void OnInitialized()
+    {
+        context = new PackagesContext(instance, remotesConfiguration);
+        context.Changed += ContextChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Load the Source after the first render so the page isn't held up by a slow or unreachable Source
+        if (firstRender) await context.SelectSource(null);
+    }
+
+    public void Dispose()
+    {
+        context.Changed -= ContextChanged;
+    }
+
+
+    private void ContextChanged()
+    {
+        updateCount = context.UpdateCount;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private int? GetCount(string tabId)
+    {
+        switch (tabId)
+        {
+            case "installed": return context.InstalledCount;
+            case "sources": return context.Sources.Count();
+            default: return null;
+        }
+    }
+
+}

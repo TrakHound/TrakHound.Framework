@@ -1,0 +1,71 @@
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject ITrakHoundInstance instance
+@inject TrakHoundInstanceConfiguration instanceConfiguration
+@inject TrakHound.Blazor.Services.JavascriptService javascriptService
+@using TrakHound.Instances
+
+@* The running Instance's details (a Workspace isn't an Instance) *@
+@if (configurationsService.Target.IsLive)
+{
+    <SettingsSection Title="Instance" Description="Identifies this Instance (read only)" Icon="fa-solid fa-sharp fa-server">
+        <div class="info-grid">
+            <span class="info-label">Instance ID</span>
+            <span class="info-value">
+                <code>@instance.Id</code>
+                <button class="btn btn-link btn-copy" title="Copy Instance ID" @onclick="CopyInstanceId">
+                    <span class="icon fa-solid fa-sharp @(instanceIdCopied ? "fa-check" : "fa-copy")"></span>
+                </button>
+            </span>
+
+            <span class="info-label">Version</span>
+            <span class="info-value">@instance.Version</span>
+
+            <span class="info-label">Configuration Profile</span>
+            <span class="info-value">@GetConfigurationProfile()</span>
+
+            <span class="info-label">Configuration File</span>
+            <span class="info-value path">@instanceConfiguration.Path</span>
+        </div>
+    </SettingsSection>
+}
+
+<SettingsSection Title="Details" Description="How this Instance is shown in the Explorer and to other Instances" Icon="fa-solid fa-sharp fa-pen">
+    <SettingsField Label="Name" Description="A display name for this Instance" ReferencePath="name" References="@Model.References">
+        <RadzenTextBox Immediate="true" @bind-Value="@Model.Name" @bind-Value:after="EditContext.Changed" Placeholder="@instance.Id" />
+    </SettingsField>
+    <SettingsField Label="Description" Description="Optional notes about this Instance (ex. location or purpose)" ReferencePath="description" References="@Model.References">
+        <RadzenTextArea Immediate="true" @bind-Value="@Model.Description" @bind-Value:after="EditContext.Changed" Rows="3" />
+    </SettingsField>
+</SettingsSection>
+
+@code {
+
+    private bool instanceIdCopied;
+
+
+    [Parameter]
+    public InstanceSettingsModel Model { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    // The Configuration directory is "{configurationPath}/{profileId}"
+    private string GetConfigurationProfile()
+    {
+        var directory = !string.IsNullOrEmpty(instanceConfiguration.Path) ? Path.GetDirectoryName(instanceConfiguration.Path) : null;
+        return !string.IsNullOrEmpty(directory) ? Path.GetFileName(directory) : instance.ConfigurationProfile?.Id;
+    }
+
+    private async Task CopyInstanceId()
+    {
+        await javascriptService.CopyClipboard(instance.Id);
+        instanceIdCopied = true;
+        StateHasChanged();
+
+        await Task.Delay(1500);
+        instanceIdCopied = false;
+        StateHasChanged();
+    }
+
+}

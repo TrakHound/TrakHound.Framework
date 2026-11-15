@@ -1,0 +1,482 @@
+@page "/_admin/security/trusted-publishers"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.TrustedPublishers)]
+@layout SecurityLayout
+@inject ITrakHoundInstance instance
+@inject IServiceProvider services
+@using Microsoft.Extensions.DependencyInjection
+@using TrakHound.Instance.PackageSources
+@using TrakHound.Instances
+@using TrakHound.Packages
+
+<TrakHoundPageTitle Text="Trusted Publishers" />
+<AreaBreadcrumbs Items="@([new("Trusted Publishers")])" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-signature"></span>
+        <div class="page-title">
+            <span class="title">Trusted Publishers</span>
+            <span class="description">The publishers whose Package signatures this Configuration Profile trusts. Package Verification is <a href="_admin/configuration/settings?section=package-verification">@instance.PackageManager.VerificationMode</a></span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-buttons">
+            <button class="admin-write btn btn-primary" disabled="@(loadError != null)" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Publisher</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+
+        @if (loadError != null)
+        {
+            <div class="section">
+                <div class="callout danger">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>The Trusted Publishers file can't be read, so no signature is trusted. Fix or remove <code>@TrakHoundTrustedPublishers.GetPath(instance.ConfigurationProfile.Path)</code> : @loadError</div>
+                </div>
+            </div>
+        }
+        else if (publishers.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-signature"></span>
+                <span class="empty-title">No Trusted Publishers</span>
+                <span class="empty-description">Add a publisher's public key to trust the Packages they sign. Publishers create a key with <code>th packages keygen</code>.</span>
+                <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Publisher</button>
+            </div>
+        }
+        else
+        {
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Publisher</th>
+                        <th>Package IDs</th>
+                        <th class="col-narrow">Verified Packages</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var publisher in publishers)
+                    {
+                        <tr>
+                            <td>
+                                <span class="item-name">@publisher.Name</span>
+                                <code class="resource-id">@publisher.KeyId</code>
+                            </td>
+                            <td>
+                                @if (publisher.PackageIdPrefixes.IsNullOrEmpty())
+                                {
+                                    <span class="muted">Any</span>
+                                }
+                                else
+                                {
+                                    <div class="chips">
+                                        @foreach (var prefix in publisher.PackageIdPrefixes)
+                                        {
+                                            <span class="chip">@prefix*</span>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td class="col-narrow">@GetPackageCount(publisher)</td>
+                            <td class="col-actions">
+                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removePublisher = publisher"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @if (approvalSources.Count > 0 || instance.PackageManager.VerificationMode == TrakHoundPackageVerificationMode.RequireApproval)
+    {
+        <div class="section synced-section">
+            <div class="section-header">
+                <span class="section-title">Package Manager Approvals<span class="section-description">Under the RequireApproval Mode, only the builds on a valid attestation list of a TrakHound Package Manager are used. Each list is signed by the Package Manager's server key, which is pinned the first time it's read. Confirm the Key ID with the one the Package Manager shows</span></span>
+            </div>
+
+            @if (instance.PackageManager.VerificationMode == TrakHoundPackageVerificationMode.RequireApproval && approvals?.HasList != true)
+            {
+                <div class="callout danger">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>Package Verification is RequireApproval and there's no valid attestation list, so every Package is refused : @(approvals?.NoListReason ?? "no Package Source is a TrakHound Package Manager")</div>
+                </div>
+            }
+        </div>
+
+        @if (approvalSources.Count > 0)
+        {
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Server Key</th>
+                            <th>Attestation List</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var status in approvalSources)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="item-name">@status.SourceName</span>
+                                    @if (status.Error != null)
+                                    {
+                                        <span class="muted" title="The last attempt to read the key or the list">@status.Error</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (status.PinnedKey != null)
+                                    {
+                                        <code class="resource-id" title="Server @status.PinnedKey.ServerId">@status.PinnedKey.KeyId</code>
+                                        <span class="muted">Pinned @status.PinnedKey.Pinned.ToLocalTime().ToString("g")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">Not read yet</span>
+                                    }
+                                    @if (status.RefusedKeyId != null)
+                                    {
+                                        <div class="callout warning">
+                                            <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                                            <div>The Package Manager sent a different key (<code>@status.RefusedKeyId</code>), which is refused. If its key was replaced, confirm the new Key ID with the Package Manager and clear the pinned key</div>
+                                        </div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (status.List != null)
+                                    {
+                                        <span>@status.List.Packages.Count build(s) in @(status.List.Channel ?? "the Channel")</span>
+                                        @if (status.ListExpired)
+                                        {
+                                            <div class="callout warning">
+                                                <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                                                <div>Expired @status.List.Expires.ToLocalTime().ToString("g"). The Packages on it keep working, but nothing new is installed until a new list is read</div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="muted">Issued @status.List.Issued.ToLocalTime().ToString("g"), valid until @status.List.Expires.ToLocalTime().ToString("g")</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">None</span>
+                                    }
+                                </td>
+                                <td class="col-actions">
+                                    @if (status.PinnedKey != null)
+                                    {
+                                        <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => clearKeySource = status"><span class="icon fa-solid fa-sharp fa-key"></span>Clear Pinned Key</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+
+    @if (syncedSources.Count > 0)
+    {
+        <div class="section synced-section">
+            <div class="section-header">
+                <span class="section-title">From TrakHound Package Managers<span class="section-description">Publishers verified by the Package Sources marked as TrakHound Package Manager, read when the Instance starts and every hour. They're trusted along with the publishers above and can't be changed here. A publisher above with the same key is used instead</span></span>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Publisher</th>
+                        <th>Package IDs</th>
+                        <th>Source</th>
+                        <th class="col-narrow">Verified Packages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var source in syncedSources)
+                    {
+                        @if (source.Publishers.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4"><span class="muted">@(source.SourceName ?? source.SourceId) has no Trusted Publishers (read @source.Updated.ToLocalTime().ToString("g"))</span></td>
+                            </tr>
+                        }
+
+                        @foreach (var publisher in source.Publishers)
+                        {
+                            var keyId = GetKeyId(publisher);
+                            var overridden = keyId != null && publishers.Any(o => o.KeyId == keyId);
+
+                            <tr>
+                                <td>
+                                    <span class="item-name">@publisher.Name</span>
+                                    <code class="resource-id">@(keyId ?? "Invalid key")</code>
+                                </td>
+                                <td>
+                                    @if (publisher.PackageIdPrefixes.IsNullOrEmpty())
+                                    {
+                                        <span class="muted">Any</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="chips">
+                                            @foreach (var prefix in publisher.PackageIdPrefixes)
+                                            {
+                                                <span class="chip">@prefix*</span>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td>
+                                    <span>@(source.SourceName ?? source.SourceId)</span>
+                                    <span class="muted" title="When the publishers were last read">@source.Updated.ToLocalTime().ToString("g")</span>
+                                    @if (overridden)
+                                    {
+                                        <span class="muted">Trusted above instead</span>
+                                    }
+                                </td>
+                                <td class="col-narrow">@(overridden || keyId == null ? "-" : GetPackageCount(keyId).ToString())</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <Modal Class="security-modal" Visible="@addVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-signature"></span>
+            <span class="modal-header-title">Add Trusted Publisher</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="form-grid">
+                <div class="form-field wide">
+                    <label for="publisher-name">Name</label>
+                    <input id="publisher-name" class="form-control" @bind="addName" @bind:event="oninput" placeholder="ex. Contoso" />
+                </div>
+                <div class="form-field wide">
+                    <label for="publisher-prefixes">Package IDs</label>
+                    <input id="publisher-prefixes" class="form-control" @bind="addPrefixes" @bind:event="oninput" placeholder="ex. Contoso." spellcheck="false" />
+                    <span class="hint">Comma separated, by the start of the ID. Leave empty to let this publisher sign any Package ID. Limiting it stops this publisher from signing a Package that claims another's ID</span>
+                </div>
+                <div class="form-field wide">
+                    <label for="publisher-key">Public Key</label>
+                    <textarea id="publisher-key" class="form-control" rows="5" @bind="addKey" @bind:event="oninput" placeholder="-----BEGIN PUBLIC KEY-----" spellcheck="false"></textarea>
+                    <span class="hint">The contents of the publisher's <code>.public.pem</code> file. Confirm with the publisher that this is their key, since anyone holding the matching private key will be trusted</span>
+                </div>
+            </div>
+            @if (addError != null)
+            {
+                <div class="callout danger">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>@addError</div>
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => addVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(addName) || string.IsNullOrWhiteSpace(addKey))" @onclick="AddConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Publisher</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(removePublisher != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Remove Trusted Publisher</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (removePublisher != null)
+            {
+                <p>Stop trusting <strong>@removePublisher.Name</strong>?</p>
+                @if (TrakHoundPackageVerificationPolicy.RequiresTrust(instance.PackageManager.VerificationMode) && GetPackageCount(removePublisher) > 0)
+                {
+                    <div class="callout warning">
+                        <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                        <div>Package Verification is @instance.PackageManager.VerificationMode, so the @GetPackageCount(removePublisher) Package version(s) they signed will be refused immediately, and anything using them will stop.</div>
+                    </div>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => removePublisher = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="RemoveConfirmClicked"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(clearKeySource != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-key"></span>
+            <span class="modal-header-title">Clear Pinned Server Key</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (clearKeySource != null)
+            {
+                <p>Stop trusting the server key <code>@clearKeySource.PinnedKey?.KeyId</code> of <strong>@clearKeySource.SourceName</strong>? The key it sends next is pinned, so confirm its Key ID with the Package Manager afterwards.</p>
+                @if (instance.PackageManager.VerificationMode == TrakHoundPackageVerificationMode.RequireApproval)
+                {
+                    <div class="callout warning">
+                        <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                        <div>Package Verification is RequireApproval, so its attestation list is removed too, and the Packages only it approved are refused until a new list is read.</div>
+                    </div>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => clearKeySource = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="ClearKeyConfirmClicked"><span class="icon fa-solid fa-sharp fa-key"></span>Clear Pinned Key</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private List<TrakHoundTrustedPublisher> publishers = new List<TrakHoundTrustedPublisher>();
+    private List<TrakHoundPackageManagerPublisherSource> syncedSources = new List<TrakHoundPackageManagerPublisherSource>();
+    private string loadError;
+
+    private bool addVisible;
+    private string addName;
+    private string addPrefixes;
+    private string addKey;
+    private string addError;
+
+    private TrakHoundTrustedPublisher removePublisher;
+
+    private List<TrakHoundPackageManagerApprovalStatus> approvalSources = new List<TrakHoundPackageManagerApprovalStatus>();
+    private TrakHoundPackageApprovals approvals;
+    private TrakHoundPackageManagerApprovalStatus clearKeySource;
+
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        try
+        {
+            publishers = TrakHoundTrustedPublishers.Read(instance.ConfigurationProfile.Path).Publishers;
+            loadError = null;
+        }
+        catch (Exception ex)
+        {
+            publishers = new List<TrakHoundTrustedPublisher>();
+            loadError = ex.Message;
+        }
+
+        syncedSources = services.GetService<TrakHoundPackageManagerPublisherSync>()?.GetSources()?.ToList() ?? new List<TrakHoundPackageManagerPublisherSource>();
+
+        var approvalSync = services.GetService<TrakHoundPackageManagerApprovalSync>();
+        approvalSources = approvalSync?.GetStatus()?.ToList() ?? new List<TrakHoundPackageManagerApprovalStatus>();
+        approvals = approvalSync?.GetApprovals();
+    }
+
+    private async Task ClearKeyConfirmClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.TrustedPublishers);
+
+        var sourceId = clearKeySource?.SourceId;
+        clearKeySource = null;
+
+        var approvalSync = services.GetService<TrakHoundPackageManagerApprovalSync>();
+        if (approvalSync == null || sourceId == null) return;
+
+        if (approvalSync.ClearPinnedKey(sourceId))
+        {
+            instance.AuditMonitor?.RecordFile(TrakHoundPackageManagerKeys.GetPath(instance.ConfigurationProfile.Path));
+
+            // Pins the key the Package Manager sends now, and reads its list
+            await approvalSync.Sync();
+        }
+
+        Load();
+    }
+
+    private int GetPackageCount(TrakHoundTrustedPublisher publisher) => GetPackageCount(publisher.KeyId);
+
+    private int GetPackageCount(string keyId)
+    {
+        return instance.PackageManager.GetVerificationReport().Packages.Count(o => o.State == TrakHoundPackageVerificationState.Verified && o.KeyId == keyId);
+    }
+
+    private static string GetKeyId(TrakHoundTrustedPublisher publisher)
+    {
+        try { return publisher.KeyId; }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Saved changes apply to every Package now, rather than leaving what's in use out of step with what's trusted
+    /// </summary>
+    private async Task ApplyChanges()
+    {
+        Load();
+        await Task.Run(() => instance.PackageManager.VerifyAll());
+    }
+
+    private void AddClicked()
+    {
+        addName = null;
+        addPrefixes = null;
+        addKey = null;
+        addError = null;
+        addVisible = true;
+    }
+
+    private async Task AddConfirmClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.TrustedPublishers);
+
+        try
+        {
+            var path = instance.ConfigurationProfile.Path;
+            var trusted = TrakHoundTrustedPublishers.Read(path);
+            trusted.Add(addName, addKey, addPrefixes?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+            trusted.Save(path);
+            instance.AuditMonitor?.RecordFile(TrakHoundTrustedPublishers.GetPath(path));
+        }
+        catch (Exception ex)
+        {
+            addError = ex.Message;
+            return;
+        }
+
+        addVisible = false;
+        await ApplyChanges();
+    }
+
+    private async Task RemoveConfirmClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.TrustedPublishers);
+
+        var keyId = removePublisher?.KeyId;
+        removePublisher = null;
+
+        try
+        {
+            var path = instance.ConfigurationProfile.Path;
+            var trusted = TrakHoundTrustedPublishers.Read(path);
+            trusted.Publishers.RemoveAll(o => o.KeyId == keyId);
+            trusted.Save(path);
+            instance.AuditMonitor?.RecordFile(TrakHoundTrustedPublishers.GetPath(path));
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+            return;
+        }
+
+        await ApplyChanges();
+    }
+
+}

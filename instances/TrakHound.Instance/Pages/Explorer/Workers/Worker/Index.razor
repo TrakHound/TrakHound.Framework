@@ -1,0 +1,205 @@
+﻿@page "/_admin/explorer/{instanceId}/workers/{workerId}"
+@rendermode InteractiveServer
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+@using TrakHound.Workers
+
+<TrakHoundPageTitle Text="@($"{(!string.IsNullOrEmpty(_worker?.Name) ? _worker.Name : WorkerId)} - Workers")" />
+
+@if (!loading)
+{
+    if (_worker != null)
+    {
+        <div class="worker-page">
+            <div class="header-panel">
+                <Header WorkerInformation="@_worker" />
+            </div>
+            <div class="toolbar-panel">
+                <Toolbar WorkerInformation="@_worker" />
+            </div>
+            <div class="tab-panel">
+                <RadzenTabs RenderMode="TabRenderMode.Client">
+                    <Tabs>
+                        <RadzenTabsItem Text="Information">
+                            <div class="information-panel">
+                                <Information WorkerInformation="@_worker" CpuSamples="@cpuSamples" CpuWindow="@_cpuHistoryWindow" />
+                            </div>
+                        </RadzenTabsItem>
+                        <RadzenTabsItem Text="Log">
+                            <div class="log-panel">
+                                <Log WorkerInformation="@_worker" />
+                            </div>
+                        </RadzenTabsItem>
+                        <RadzenTabsItem Text="Volume">
+                            <TrakHound.Instance.Pages.Explorer.VolumeExplorer VolumeId="@_worker.VolumeId" Client="@client" />
+                        </RadzenTabsItem>
+                    </Tabs>
+                </RadzenTabs>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="not-found-panel">
+            <div class="not-found-container">
+                <span class="icon fa-solid fa-sharp fa-ban"></span>
+                <span class="title">Worker Not Found</span>
+                <span class="subtitle">@WorkerId</span>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <Loading Message="Loading Worker.." />
+}
+
+@code {
+
+    private const int _cpuUpdateInterval = 2000;
+    private static readonly TimeSpan _cpuHistoryWindow = TimeSpan.FromMinutes(10);
+
+    private TrakHoundWorkerInformation _worker;
+    private System.Threading.Timer cpuUpdateTimer;
+    private int cpuUpdating;
+    private readonly Queue<TrakHoundWorkerCpuSample> cpuHistory = new Queue<TrakHoundWorkerCpuSample>();
+    private TrakHoundWorkerCpuSample[] cpuSamples = Array.Empty<TrakHoundWorkerCpuSample>();
+    private ITrakHoundClient client;
+    private ITrakHoundStream<TrakHoundWorkerStatusResponse> statusConsumer;
+    private string previousInstanceId;
+    private string previousWorkerId;
+    private bool loading;
+
+
+    [Parameter]
+    public string WorkerId { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    void IDisposable.Dispose()
+    {
+        if (cpuUpdateTimer != null) cpuUpdateTimer.Dispose();
+        if (statusConsumer != null) statusConsumer.Dispose();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId || WorkerId != previousWorkerId)
+        {
+            previousInstanceId = explorerService.SelectedInstanceId;
+            previousWorkerId = WorkerId;
+
+            loading = true;
+            await InvokeAsync(StateHasChanged);
+
+            if (cpuUpdateTimer != null) cpuUpdateTimer.Dispose();
+            if (statusConsumer != null) statusConsumer.Dispose();
+
+            lock (cpuHistory)
+            {
+                cpuHistory.Clear();
+                cpuSamples = Array.Empty<TrakHoundWorkerCpuSample>();
+            }
+
+            _worker = null;
+            client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                // Get Worker Information
+                _worker = await client.Workers.GetInformation(WorkerId);
+
+                // Get CPU Usage History (kept by the Worker Engine)
+                if (_worker != null) AddCpuSamples(await client.Workers.GetCpuHistory(_worker.Id));
+
+                // Set Explorer Breadcrumbs
+                var breadcrumbItems = new List<BreadcrumbItem>();
+                breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+                breadcrumbItems.Add(new BreadcrumbItem("Workers", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "workers")));
+                breadcrumbItems.Add(new BreadcrumbItem(!string.IsNullOrEmpty(_worker?.Name) ? _worker.Name : WorkerId, null));
+                explorerService.BreadcrumbItems = breadcrumbItems;
+
+                // Subscribe to Status Updates
+                statusConsumer = await client.Workers.SubscribeStatus(WorkerId);
+                if (statusConsumer != null)
+                {
+                    statusConsumer.Received += ServiceUpdated;
+                    statusConsumer.Start();
+                }
+
+                // Poll for CPU Usage Updates
+                cpuUpdateTimer = new System.Threading.Timer(UpdateCpuUsage, client, _cpuUpdateInterval, _cpuUpdateInterval);
+            }
+
+            loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void UpdateCpuUsage(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref cpuUpdating, 1) == 1) return;
+
+        try
+        {
+            var worker = _worker;
+            if (state is ITrakHoundClient updateClient && worker != null)
+            {
+                var information = await updateClient.Workers.GetInformation(worker.Id);
+
+                // Only request samples newer than the latest one already received
+                DateTime? lastTimestamp;
+                lock (cpuHistory) lastTimestamp = cpuHistory.Count > 0 ? cpuHistory.Last().Timestamp : null;
+                var samples = await updateClient.Workers.GetCpuHistory(worker.Id, lastTimestamp);
+
+                if (information != null && worker == _worker)
+                {
+                    worker.CpuUsage = information.CpuUsage;
+                    worker.CpuTime = information.CpuTime;
+                    AddCpuSamples(samples);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref cpuUpdating, 0);
+        }
+    }
+
+    private void AddCpuSamples(IEnumerable<TrakHoundWorkerCpuSample> samples)
+    {
+        if (samples.IsNullOrEmpty()) return;
+
+        lock (cpuHistory)
+        {
+            foreach (var sample in samples.OrderBy(o => o.Timestamp))
+            {
+                if (cpuHistory.Count == 0 || sample.Timestamp > cpuHistory.Last().Timestamp) cpuHistory.Enqueue(sample);
+            }
+
+            // Trim relative to the newest sample (the Instance's clock, not this browser's)
+            var newest = cpuHistory.Last().Timestamp;
+            while (cpuHistory.Count > 0 && newest - cpuHistory.Peek().Timestamp > _cpuHistoryWindow) cpuHistory.Dequeue();
+
+            // Pass a new array so the Chart detects the change
+            cpuSamples = cpuHistory.ToArray();
+        }
+    }
+
+    private async void ServiceUpdated(object sender, TrakHoundWorkerStatusResponse statusResponse)
+    {
+        if (_worker != null)
+        {
+            _worker.Status = statusResponse.Status;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

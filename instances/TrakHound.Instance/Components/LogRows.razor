@@ -1,0 +1,104 @@
+@* The log lines of the Admin interface (Api, Endpoint, Worker, Function Run and Instance logs), so they all look the same.
+   The parent filters and orders the Rows and owns the scroll container (set its background to var(--logBackground)) *@
+@using TrakHound.Logging
+
+@if (!Rows.IsNullOrEmpty())
+{
+    var firstTimestamp = Rows[0].Timestamp;
+    var count = MaxRows > 0 && !showAll ? Math.Min(MaxRows, Rows.Count) : Rows.Count;
+
+    <table class="table table-sm log-rows">
+        <tbody>
+            @for (var i = 0; i < count; i++)
+            {
+                var row = Rows[i];
+                var level = row.Level.ToString();
+
+                <tr @key="row.Key" class="@level.ToLower()">
+                    <td class="level">@level</td>
+                    <td class="time @(TimeFormat == LogRowTimeFormat.SinceFirst ? "since-first" : null)" title="@row.Timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff")">
+                        @FormatTime(row.Timestamp, firstTimestamp)
+                        @if (ShowAround.HasDelegate)
+                        {
+                            <button class="btn-row-action" title="Show the lines around this time" @onclick="() => ShowAround.InvokeAsync(row)"><span class="fa-solid fa-sharp fa-arrows-left-right-to-line"></span></button>
+                        }
+                    </td>
+                    @if (ShowSource)
+                    {
+                        <td class="source" title="@row.Source">
+                            @if (SourceSelected.HasDelegate && !string.IsNullOrEmpty(row.Source))
+                            {
+                                <button class="btn-source" title="@($"Only show {row.Source}")" @onclick="() => SourceSelected.InvokeAsync(row)">@row.Source</button>
+                            }
+                            else
+                            {
+                                @row.Source
+                            }
+                        </td>
+                    }
+                    <td class="message"><p>@row.Message</p></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (count < Rows.Count)
+    {
+        <button class="btn btn-link btn-show-all" @onclick="() => showAll = true">Show all @Rows.Count.ToString("N0") lines</button>
+    }
+}
+else if (!string.IsNullOrEmpty(EmptyMessage))
+{
+    <span class="empty-message">@EmptyMessage</span>
+}
+
+@code {
+
+    private bool showAll;
+
+
+    [Parameter]
+    public IReadOnlyList<LogRow> Rows { get; set; }
+
+    [Parameter]
+    public LogRowTimeFormat TimeFormat { get; set; }
+
+    /// <summary>
+    /// Show each line's Source (ex. for logs that combine several)
+    /// </summary>
+    [Parameter]
+    public bool ShowSource { get; set; }
+
+    /// <summary>
+    /// The most lines to show before "Show all" (0 shows every line)
+    /// </summary>
+    [Parameter]
+    public int MaxRows { get; set; }
+
+    [Parameter]
+    public string EmptyMessage { get; set; }
+
+    /// <summary>
+    /// A row's Source was clicked (makes the Sources buttons, ex. to filter by it)
+    /// </summary>
+    [Parameter]
+    public EventCallback<LogRow> SourceSelected { get; set; }
+
+    /// <summary>
+    /// A row's "around this time" button was clicked (shows the button on each row)
+    /// </summary>
+    [Parameter]
+    public EventCallback<LogRow> ShowAround { get; set; }
+
+
+    private string FormatTime(DateTime timestamp, DateTime firstTimestamp)
+    {
+        if (TimeFormat == LogRowTimeFormat.Clock) return timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff");
+
+        var offset = timestamp - firstTimestamp;
+        if (offset < TimeSpan.Zero) offset = TimeSpan.Zero;
+        if (offset.TotalMinutes >= 1) return $"+{(int)offset.TotalMinutes}:{offset.Seconds:00}.{offset.Milliseconds:000}";
+        return $"+{offset.TotalSeconds:0.000}s";
+    }
+
+}

@@ -1,0 +1,311 @@
+﻿.login-container {
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: grid;
+    grid-template-rows: 1fr max-content;
+}
+
+.login-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 48px 16px;
+}
+
+    /* The logo, panel and version appear together */
+    .login-main > * {
+        opacity: 0;
+        animation: loginFadeIn 0.4s ease-out forwards;
+        animation-delay: 0.1s;
+    }
+
+    .login-main > .version {
+        font-size: var(--fontSizeSm);
+        font-family: var(--fontMono);
+        color: var(--textLight);
+    }
+
+
+/* Panel */
+/* A flat panel in the Theme's colors (like the rest of the Admin Interface), on a page that follows the Theme too */
+
+.login-panel {
+    width: 100%;
+    max-width: 380px;
+    border: 1px solid var(--borderColor);
+    border-radius: 4px;
+    background: var(--panelBackground);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+}
+
+@keyframes loginFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-main > * {
+        animation: none;
+        opacity: 1;
+    }
+}
+
+
+/* Header */
+/* The logo, above the panel on the page (white on the dark Theme, blue on the light Theme) */
+
+.login-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+    .login-header .logo-image {
+        height: 34px;
+        background-color: var(--logoColor);
+    }
+
+    .login-header .logo-title {
+        font-size: 2rem;
+        font-weight: 500;
+        font-family: var(--fontSans);
+        line-height: 1;
+        color: var(--logoColor);
+        white-space: nowrap;
+    }
+
+    .login-header .logo-subtitle {
+        font-weight: 300;
+        margin-left: 4px;
+    }
+
+
+/* Body */
+
+.login-body {
+    padding: 24px 32px 28px;
+}
+
+.heading-container {
+    margin-bottom: 20px;
+}
+
+    .heading-container .heading {
+        font-size: var(--fontSizeXl);
+        font-weight: 500;
+        color: var(--textDark);
+        margin: 0 0 4px;
+    }
+
+    .heading-container .description {
+        font-size: var(--fontSizeBase);
+        color: var(--textMild);
+        margin: 0;
+    }
+
+.login-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 9px 12px;
+    font-size: var(--fontSizeBase);
+    color: var(--textDark);
+    border: 1px solid var(--logErrorBackground);
+    border-left-width: 3px;
+    background: rgba(201, 42, 42, 0.12);
+}
+
+    .login-message .icon {
+        color: var(--logErrorBackgroundHover);
+        margin-top: 2px;
+    }
+
+.setup-instructions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}
+
+    .setup-instructions .setup-step {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .setup-instructions .setup-label {
+        color: var(--textDark);
+        font-weight: 500;
+    }
+
+    .setup-instructions .setup-command {
+        display: block;
+        padding: 9px 12px;
+        color: var(--inputText);
+        border: 1px solid var(--borderColorLight);
+        background: var(--inputBackground);
+        user-select: all;
+        overflow-wrap: anywhere;
+    }
+
+    .setup-instructions code {
+        color: var(--textDark);
+        overflow-wrap: anywhere;
+    }
+
+.input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+    .input-container ::deep .form-group {
+        margin: 0;
+    }
+
+    .input-container ::deep .text-box .title,
+    .input-container ::deep .password-box .title {
+        display: block;
+        margin-bottom: 5px;
+        font-size: var(--fontSizeMd) !important;
+        font-weight: 500;
+        color: var(--textMild) !important;
+    }
+
+    /* The colors, border and focus are the Theme's own input styles : only the size is changed */
+    .input-container ::deep input {
+        height: 38px !important;
+        padding: 6px 12px !important;
+        font-size: var(--fontSizeLg) !important;
+    }
+
+        /* Keep browser autofill from painting the inputs white/yellow */
+        .input-container ::deep input:-webkit-autofill {
+            -webkit-text-fill-color: var(--inputText);
+            -webkit-box-shadow: 0 0 0 1000px var(--inputBackground) inset !important;
+            caret-color: var(--inputText);
+        }
+
+    /* Show / Hide Password, inside the right end of the input */
+    .input-container .password-field {
+        position: relative;
+        margin-bottom: 10px;
+    }
+
+        /* The space under the box moves to the field, so the button lines up with the input */
+        .input-container .password-field ::deep .password-box {
+            margin-bottom: 0;
+        }
+
+        .input-container .password-field ::deep input {
+            padding-right: 42px !important;
+        }
+
+    .input-container .btn-show-password {
+        position: absolute;
+        right: 3px;
+        bottom: 3px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        color: var(--textLight);
+        border: none;
+        background: transparent;
+        cursor: pointer;
+    }
+
+        .input-container .btn-show-password:hover {
+            color: var(--textDark);
+            background: var(--panelItemBackgroundHover);
+        }
+
+        .input-container .btn-show-password:focus-visible {
+            color: var(--textDark);
+            outline: 2px solid var(--accentLight);
+            outline-offset: -2px;
+        }
+
+    /* The Theme's primary button, a little taller than the inputs */
+    .input-container .btn-login {
+        gap: 10px;
+        width: 100%;
+        height: 44px;
+        margin-top: 6px;
+        font-size: var(--fontSizeLg) !important;
+    }
+
+        .input-container .btn-login:focus-visible {
+            outline: 2px solid var(--accentLight);
+            outline-offset: 2px;
+        }
+
+        .input-container .btn-login.loading {
+            cursor: progress;
+        }
+
+        .input-container .btn-login .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: loginSpin 0.7s linear infinite;
+        }
+
+@keyframes loginSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .input-container .btn-login .spinner {
+        animation-duration: 2s;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-main {
+        padding: 24px 16px;
+    }
+
+        .login-header .logo-image {
+            height: 30px;
+        }
+
+        .login-header .logo-title {
+            font-size: 1.75rem;
+        }
+
+    .login-body {
+        padding: 24px 20px;
+    }
+}
+
+
+/* Footer */
+
+.footer-container {
+    padding: 16px;
+    text-align: center;
+    border-top: 1px solid var(--borderColorLight);
+    background: var(--panelBackgroundMedium);
+}
+
+.copyright {
+    font-size: var(--fontSizeXs);
+    color: var(--textLight);
+}

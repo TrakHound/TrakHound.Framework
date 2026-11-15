@@ -1,0 +1,182 @@
+.backups-panel {
+    height: 100%;
+    overflow: auto;
+}
+
+.backups-content {
+    max-width: 1100px;
+    padding: 20px 25px 80px;
+}
+
+.muted {
+    color: var(--textMild);
+}
+
+.spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+.backups-description {
+    margin-bottom: 16px;
+    font-size: var(--fontSizeSm);
+    overflow-wrap: anywhere;
+}
+
+    .backups-description code {
+        color: var(--textMild);
+    }
+
+/* Wider than the content by the cell padding, so the text lines up with the description and the row hover runs past it */
+.backups-table {
+    width: calc(100% + 24px);
+    margin: 0 -12px;
+    font-size: var(--fontSizeBase);
+    border-collapse: collapse;
+}
+
+    .backups-table th {
+        padding: 9px 12px;
+        font-size: var(--fontSizeSm);
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--textMild);
+        background: transparent;
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+    .backups-table td {
+        padding: 10px 12px;
+        vertical-align: middle;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .backups-table tbody tr:hover {
+        background: var(--panelItemBackground);
+    }
+
+    /* Created */
+    .backups-table td:first-child {
+        white-space: nowrap;
+    }
+
+.col-actions {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+    .col-actions .btn {
+        margin-left: 4px;
+    }
+
+/* Operation */
+
+.operation-card {
+    margin-bottom: 18px;
+    padding: 16px 18px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColor);
+    border-left-width: 4px;
+    border-radius: 6px;
+}
+
+    .operation-card.running {
+        border-left-color: var(--accentLight);
+    }
+
+    .operation-card.success {
+        border-left-color: var(--bs-success, #198754);
+    }
+
+    .operation-card.error {
+        border-left-color: var(--bs-danger, #dc3545);
+    }
+
+.operation-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.operation-icon {
+    font-size: 18px;
+}
+
+.operation-card.running .operation-icon {
+    color: var(--accentLight);
+}
+
+.operation-card.success .operation-icon {
+    color: var(--bs-success, #198754);
+}
+
+.operation-card.error .operation-icon {
+    color: var(--bs-danger, #dc3545);
+}
+
+.operation-title {
+    font-weight: 600;
+    color: var(--textDark);
+}
+
+.operation-steps {
+    margin: 0 0 6px;
+    padding-left: 22px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+.operation-error {
+    margin-top: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .operation-error .icon {
+        margin-right: 6px;
+        color: var(--bs-danger, #dc3545);
+    }
+
+.btn-done {
+    margin-top: 12px;
+}
+
+.confirm-list {
+    margin: 0 0 12px;
+    padding-left: 20px;
+    color: var(--textDark);
+}
+
+    .confirm-list li {
+        margin-bottom: 6px;
+    }
+
+/* Empty */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 220px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .empty-state .empty-icon {
+        margin-bottom: 6px;
+        font-size: 40px;
+        color: var(--textLight);
+    }
+
+    .empty-state .empty-title {
+        font-size: var(--fontSizeMd, 15px);
+        font-weight: bold;
+        color: var(--textDark);
+    }

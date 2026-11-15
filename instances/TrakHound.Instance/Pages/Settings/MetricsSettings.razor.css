@@ -1,0 +1,34 @@
+.switch-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.switch-label {
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}
+
+/* Sections that don't apply while all Metrics are disabled */
+.settings-metrics ::deep .settings-section.disabled .settings-field-title,
+.settings-metrics ::deep .settings-section.disabled .settings-field-description {
+    opacity: 0.5;
+}
+
+.restart-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 10px 14px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--colorOrange);
+    border-radius: 3px;
+}
+
+    .restart-notice .icon {
+        margin-top: 2px;
+        color: var(--colorOrange);
+    }

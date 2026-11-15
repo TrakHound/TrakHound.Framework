@@ -1,0 +1,43 @@
+﻿.explorer-tree-view {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 50px;
+    padding-top: 15px;
+    background: var(--panelBackgroundMedium);
+}
+
+    .explorer-tree-view ::deep .folder > .tree-item-content > .tree-item-header-container > .tree-item-header > .default-header-content-container > .icon-container > .icon {
+        color: #9cb3c9;
+    }
+
+    /* Counts / Status shown after the Title */
+    .explorer-tree-view ::deep .tree-item .subtitle {
+        margin-left: 4px;
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+    }
+
+    /* Worker Status (icon shape + subtitle label, color is secondary) */
+    .explorer-tree-view ::deep .worker-started > .tree-item-content .icon-container .icon {
+        color: var(--colorGreen);
+    }
+
+    .explorer-tree-view ::deep .worker-starting > .tree-item-content .icon-container .icon,
+    .explorer-tree-view ::deep .worker-stopping > .tree-item-content .icon-container .icon {
+        color: var(--colorOrange);
+    }
+
+    .explorer-tree-view ::deep .worker-stopped > .tree-item-content .icon-container .icon {
+        color: var(--textLight);
+    }
+
+    .explorer-tree-view ::deep .worker-error > .tree-item-content .icon-container .icon {
+        color: var(--colorRed);
+    }
+
+.explorer-tree-empty {
+    padding: 10px 25px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}

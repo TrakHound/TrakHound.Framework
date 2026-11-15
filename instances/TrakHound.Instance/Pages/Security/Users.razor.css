@@ -1,0 +1,32 @@
+.callout a {
+    color: var(--accentLight);
+}
+
+.user-error {
+    margin-top: 12px;
+}
+
+.user-enabled {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+    color: var(--textDark);
+}
+
+    .user-enabled input {
+        margin-top: 4px;
+    }
+
+    /* The form-field label style is bold, which is for the title only, not its description */
+    .user-enabled .muted {
+        display: block;
+        margin-top: 2px;
+        font-size: var(--fontSizeSm);
+        font-weight: 400;
+    }
+
+/* Kept apart from Cancel and Save, since it opens a new tab */
+.signin-preview {
+    margin-right: auto;
+}

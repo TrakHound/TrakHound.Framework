@@ -1,0 +1,10 @@
+﻿{
+  "id": "UserPackageId",
+  "category": "api",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "{publisher}",
+    "description": "{description}",
+    ".defaultRoute": "{defaultRoute}"
+  }
+}

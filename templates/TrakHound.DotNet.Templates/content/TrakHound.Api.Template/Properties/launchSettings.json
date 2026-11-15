@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "UserPackageId": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "_debug",
+      "applicationUrl": "http://localhost:5091",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

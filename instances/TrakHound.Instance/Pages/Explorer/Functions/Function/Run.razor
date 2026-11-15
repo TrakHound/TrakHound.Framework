@@ -1,0 +1,1037 @@
+﻿@implements IDisposable
+@inject ExplorerService explorerService
+@inject JavascriptService javascriptService
+@inject ITrakHoundAppLocalStorageService localStorage
+@using TrakHound.Apps
+@using TrakHound.Blazor.Components
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Functions
+@using TrakHound.Instance.Pages.Explorer.Functions.Function.Runs
+@using TrakHound.Logging
+
+<div class="run-panel @(inputCollapsed ? "input-collapsed" : null)" @ref="runPanel">
+
+    @{
+        var statusClass = requestStatus?.ToLower() ?? "ready";
+    }
+
+    @* Run (or Cancel) beside the Status. The buttons stretch to the Status bar's height *@
+    <div class="run-toolbar">
+
+        @if (!running)
+        {
+            <button class="admin-write btn btn-primary btn-run" @onclick="RunRequest"><span class="icon fa-solid fa-play"></span>Run</button>
+        }
+        else if (!cancelling)
+        {
+            <button class="btn btn-light btn-run btn-cancel" @onclick="CancelRequest" title="Cancel the Function Run"><span class="icon fa-solid fa-stop"></span>Cancel</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-cancel btn-loading" disabled><span class="icon fa-regular fa-loader spin"></span>Cancelling..</button>
+        }
+
+        <div class="request-panel @statusClass">
+            <div class="request-status-container">
+                <span class="request-status-icon @GetStatusIcon() @(running ? "spinning" : null)"></span>
+                <span class="request-status">@(requestStatus ?? "Ready")</span>
+            </div>
+            @* The facts are always shown (– until a Run starts), so the bar keeps its size when Run is clicked *@
+            <div class="request-fact request-fact-duration">
+                <span class="request-fact-label">Duration</span>
+                @* The JS Timer replaces its element's text, so Blazor's Duration has its own element (or it would keep the Timer's last value) *@
+                @if (running)
+                {
+                    <span id="request-duration" class="request-fact-value"></span>
+                }
+                else
+                {
+                    <span class="request-fact-value request-duration">@(requestDuration != null ? requestDuration.Value.ToDetailedFormattedString() : "–")</span>
+                }
+            </div>
+            <div class="request-fact request-fact-detail" title="@requestStarted?.ToUniversalTime().ToISO8601String()">
+                <span class="request-fact-label">Started</span>
+                <span class="request-fact-value">@(requestStarted != null ? requestStarted.Value.ToString("yyyy-MM-dd HH:mm:ss") : "–")</span>
+            </div>
+            <div class="request-fact request-fact-detail" title="@(requestCompleted != null ? $"Completed {requestCompleted.Value.ToUniversalTime().ToISO8601String()}" : null)">
+                <span class="request-fact-label">CPU</span>
+                <span class="request-fact-value">@(requestCpuTime != null ? FormatCpuTime(requestCpuTime.Value) : "–")</span>
+            </div>
+            <div class="request-message-container">
+                @if (!string.IsNullOrEmpty(responseMessage))
+                {
+                    <span class="request-message" title="@responseMessage">@responseMessage</span>
+                }
+            </div>
+            <div class="request-id-container">
+                @if (!running && requestRunId != null && response.Id != null)
+                {
+                    if (runRecorded)
+                    {
+                        <a href="@GetRunLink(requestRunId)" class="request-id" title="Open the Run (its Logs, Input and Output)">View Run<span class="icon fa-solid fa-sharp fa-arrow-right"></span></a>
+                    }
+                    else
+                    {
+                        <span class="request-not-recorded" title="The Functions API isn't installed, so Runs aren't recorded">Not Recorded</span>
+                    }
+                }
+            </div>
+        </div>
+
+    </div>
+
+    @* The Result (what the Run did) beside the Input (what it uses), so both are visible while it runs. Stacked on a narrow window *@
+    <div class="result-pane">
+
+        @* The Level filter is shown in the tab row (over the right end of the Tabs) *@
+        @if (selectedTab == LogsTab)
+        {
+            <div class="tab-tools">
+                <span class="log-count">@GetLogCountText()</span>
+                <RadzenDropDown class="dropdown-sm" TValue="TrakHoundLogLevel" @bind-Value="@logMinimumLevel" Data="@logLevels" title="The lowest Log Level to show" />
+            </div>
+        }
+
+        <RadzenTabs RenderMode="TabRenderMode.Client" SelectedIndex="@selectedTab" SelectedIndexChanged="@(index => selectedTab = index)">
+            <Tabs>
+                <RadzenTabsItem Text="Logs">
+                    <div class="response-log" @ref="logContainer">
+                        <LogRows Rows="@GetLogLines()" TimeFormat="LogRowTimeFormat.SinceFirst" EmptyMessage="@(responseLogs.Count > 0 ? "No logs at this level" : "Logs are shown here while the Function runs")" />
+                    </div>
+                </RadzenTabsItem>
+                <RadzenTabsItem Text="@(outputParameters.IsNullOrEmpty() ? "Output" : $"Output ({outputParameters.Count})")" Disabled="@outputParameters.IsNullOrEmpty()">
+                    <div class="output-parameters">
+                        @if (response.Id != null && !string.IsNullOrEmpty(response.PackageVersion))
+                        {
+                            <div class="output-information">Status Code <b>@response.StatusCode</b> · Package Version <b>@response.PackageVersion</b></div>
+                        }
+                        <RunParameters Parameters="@outputParameters" EmptyMessage="The Run returned no output" />
+                    </div>
+                </RadzenTabsItem>
+            </Tabs>
+        </RadzenTabs>
+
+    </div>
+
+    @* Styled like the Api Run tab's Request Parameters sidebar. Collapsed to a strip at the right (or to its header on a narrow window) *@
+    <div class="input-pane @(inputCollapsed ? "collapsed" : null)" @ref="inputPane">
+
+        @* Drag to change the Input's width (double-click returns it to its default). Hidden (not removed) while collapsed, so it stays attached *@
+        <div class="resize-handle" @ref="inputResizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize the Input" tabindex="0" title="Drag to resize (double-click to reset)"></div>
+
+        <div class="section-header">
+            @if (inputCollapsed)
+            {
+                <button class="btn btn-link btn-collapse" title="Show the Input" @onclick="() => SetInputCollapsed(false)"><span class="icon fa-solid fa-sharp fa-angles-left"></span></button>
+                <span class="section-label" @onclick="() => SetInputCollapsed(false)">Input Parameters <span class="section-detail">(@ParameterEditor.ToDictionary(requestParameters).Count)</span></span>
+            }
+            else
+            {
+                <span class="section-label">Input Parameters</span>
+                <div class="section-tools">
+                    @if (jobs != null)
+                    {
+                        <button class="admin-write btn btn-link btn-tool" @onclick="SaveJobClicked" disabled="@running" title="Save the Input Parameters as a Job (to run again or schedule)"><span class="icon fa-regular fa-sharp fa-floppy-disk"></span>Save as Job</button>
+                    }
+                    @if (ParameterEditor.ToDictionary(requestParameters).Count > 0 || selectedJobId != null)
+                    {
+                        <button class="btn btn-link btn-tool" @onclick="ClearInput" disabled="@running" title="Clear the Job and the Parameter values"><span class="icon fa-regular fa-sharp fa-eraser"></span>Clear</button>
+                    }
+                    <button class="btn btn-link btn-collapse" title="Hide the Input" @onclick="() => SetInputCollapsed(true)"><span class="icon fa-solid fa-sharp fa-angles-right"></span></button>
+                </div>
+            }
+        </div>
+
+        @if (!inputCollapsed)
+        {
+            <div class="input-content">
+
+                @if (!jobs.IsNullOrEmpty())
+                {
+                    <div class="input-section job-section">
+                        <span class="job-label">Job</span>
+                        <RadzenDropDown TValue="string" Value="@selectedJobId" ValueChanged="@JobSelected" Data="@jobs" TextProperty="Name" ValueProperty="Id" AllowClear="true" Disabled="@running" Placeholder="No Job (Input Parameters only)" title="Run the Function with a Job's Parameters" />
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(inputNote))
+                {
+                    <div class="input-note @(inputNoteWarning ? "warning" : null)">
+                        <span class="icon fa-regular fa-sharp @(inputNoteWarning ? "fa-triangle-exclamation" : "fa-rotate-right")"></span>
+                        <span>@inputNote</span>
+                    </div>
+                }
+
+                @if (SelectedJob != null)
+                {
+                    <div class="job-note">
+                        <span class="icon fa-regular fa-sharp fa-list-check"></span>
+                        <span>The <b>@SelectedJob.Name</b> Job's current Parameters. Changes here override them for this Run only</span>
+                    </div>
+                }
+
+                <div class="input-section">
+                    <ParameterEditor Items="@requestParameters" Definitions="@FunctionInformation?.Parameters" HighlightMissing="@highlightMissing" Submitted="RunRequest" />
+                </div>
+
+                @if (recentRuns.Count > 0)
+                {
+                    <div class="input-section">
+                        <span class="section-label">Recent Runs <span class="section-detail">(from this page)</span></span>
+                        <div class="recent-runs">
+                            @foreach (var recentRun in recentRuns)
+                            {
+                                <div class="recent-run @recentRun.Status?.ToLower()">
+                                    <span class="recent-status" title="@recentRun.Status"></span>
+                                    <span class="recent-time">@recentRun.Started.ToString("HH:mm:ss")</span>
+                                    <span class="recent-description" title="@recentRun.Message">@(recentRun.JobName ?? "No Job") · @recentRun.Duration.ToDetailedFormattedString()</span>
+                                    <button class="btn btn-link btn-sm" @onclick="() => LoadRecentRun(recentRun)" disabled="@running" title="Load this Run's Job and Input Parameters">Load</button>
+                                    @if (recentRun.Recorded)
+                                    {
+                                        <a href="@GetRunLink(recentRun.RunId)" class="btn btn-link btn-sm" title="Open the Run">View</a>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+            </div>
+        }
+
+    </div>
+
+    <Modal Class="save-job-modal" Visible="@saveJobModalVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-floppy-disk"></span>
+            <span class="modal-header-title">Save as Job</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="configuration-panel">
+                @if (SelectedJob != null)
+                {
+                    <div class="form-field">
+                        <label>Save To</label>
+                        <RadzenRadioButtonList TValue="bool" @bind-Value="@saveJobUpdate" Orientation="Orientation.Vertical">
+                            <Items>
+                                <RadzenRadioButtonListItem Text="@($"Update the {SelectedJob.Name} Job")" Value="true" />
+                                <RadzenRadioButtonListItem Text="A new Job" Value="false" />
+                            </Items>
+                        </RadzenRadioButtonList>
+                        @if (saveJobUpdate)
+                        {
+                            <span class="instructions">Scheduled Tasks that run this Job use the new Parameters on their next Run</span>
+                        }
+                    </div>
+                }
+                @if (SelectedJob == null || !saveJobUpdate)
+                {
+                    <div class="form-field">
+                        <label>Name</label>
+                        <RadzenTextBox @bind-Value="@saveJobName" Immediate="true" Placeholder="ex. Nightly Cleanup" />
+                    </div>
+                    <div class="form-field">
+                        <label>Description</label>
+                        <RadzenTextBox @bind-Value="@saveJobDescription" Immediate="true" />
+                    </div>
+                }
+                <div class="form-field">
+                    <label>Parameters</label>
+                    <span class="instructions">@GetSaveJobParametersText()</span>
+                </div>
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => saveJobModalVisible = false" disabled="@savingJob"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="SaveJob" disabled="@savingJob"><span class="icon fa-solid fa-sharp @(savingJob ? "fa-loader spin" : "fa-check")"></span>Save</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+@code {
+
+    private const int LogsTab = 0;
+    private const int OutputTab = 1;
+
+    private const int cancelledStatusCode = 499;
+    private const int consumerDisposeDelay = 5000; // Keep the Status and Log streams open briefly after the Run completes to receive trailing entries
+    private const int maxRecentRuns = 5;
+    private const int scrolledToBottomThreshold = 30;
+
+    private static readonly TrakHoundLogLevel[] logLevels = Enum.GetValues<TrakHoundLogLevel>();
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private readonly List<ParameterEditor.ParameterItem> requestParameters = new List<ParameterEditor.ParameterItem>();
+    private List<TrakHound.Instance.Pages.Explorer.Functions.FunctionJob> jobs;
+    private string jobsFunctionId;
+    private string selectedJobId;
+
+    private TrakHound.Instance.Pages.Explorer.Functions.FunctionJob SelectedJob => selectedJobId != null ? jobs?.FirstOrDefault(o => o.Id == selectedJobId) : null;
+
+    private int selectedTab = LogsTab;
+    private string inputNote;
+    private bool inputNoteWarning;
+
+    private string previousFunctionId;
+    private string previousRerunId;
+    private string requestRunId;
+    private string requestStatus;
+    private TimeSpan? requestDuration;
+    private DateTime? requestStarted;
+    private DateTime? requestCompleted;
+    private double? requestCpuTime;
+    private bool runRecorded;
+    private bool useDirectRun; // The Functions API isn't installed, so Runs are started with client.Functions.Run (and aren't recorded)
+
+    private TrakHoundFunctionResponse response;
+    private string responseMessage;
+    private Dictionary<string, string> outputParameters;
+    private ITrakHoundStream<TrakHoundFunctionStatusResponse> responseStatusConsumer;
+    private ITrakHoundStream<IEnumerable<TrakHoundLogItem>> responseLogConsumer;
+    private readonly List<LogRow> responseLogs = new List<LogRow>();
+    private long logSequence;
+    private readonly List<RecentRun> recentRuns = new List<RecentRun>();
+    private readonly object _lock = new object();
+
+    private ElementReference logContainer;
+    private TrakHoundLogLevel logMinimumLevel = TrakHoundLogLevel.Trace;
+
+    private bool saveJobModalVisible;
+    private bool saveJobUpdate;
+    private string saveJobName;
+    private string saveJobDescription;
+    private bool savingJob;
+
+    private const string InputCollapsedStorageKey = "trakhound.admin.explorer.functions.run.inputCollapsed";
+    private const string InputWidthStorageKey = "trakhound.admin.explorer.functions.run.inputWidth";
+
+    private string pendingTimerId;
+    private bool inputCollapsed;
+    private ElementReference runPanel;
+    private ElementReference inputPane;
+    private ElementReference inputResizeHandle;
+    private bool highlightMissing;
+    private bool running;
+    private bool cancelling;
+    private bool disposed;
+
+
+    class RecentRun
+    {
+        public string RunId { get; set; }
+        public string Status { get; set; }
+        public DateTime Started { get; set; }
+        public TimeSpan Duration { get; set; }
+        public string Message { get; set; }
+        public bool Recorded { get; set; }
+        public string JobId { get; set; }
+        public string JobName { get; set; }
+        public Dictionary<string, string> Parameters { get; set; } // As shown in the Input (with the Job's)
+    }
+
+    class RerunInformation
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("jobId")]
+        public string JobId { get; set; }
+    }
+
+
+    [Parameter]
+    public string ServerId { get; set; }
+
+    [Parameter]
+    public TrakHoundFunctionInformation FunctionInformation { get; set; }
+
+    /// <summary>
+    /// A previous Run whose Job and Input Parameters are loaded into the Input (to run it again)
+    /// </summary>
+    [Parameter]
+    public string RerunId { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // The width is kept for every Function (like whether it's collapsed)
+            await javascriptService.AttachResizeHandle(inputResizeHandle, runPanel, inputPane, "--input-width", InputWidthStorageKey, "right", 300, 400);
+
+            try
+            {
+                if (await localStorage.GetItem<bool>(InputCollapsedStorageKey))
+                {
+                    inputCollapsed = true;
+                    StateHasChanged();
+                }
+            }
+            catch { }
+        }
+
+        // Start the Duration Timer once its element (shown while running) is rendered
+        var timerId = pendingTimerId;
+        if (timerId != null && running)
+        {
+            pendingTimerId = null;
+            await javascriptService.StartTimer(timerId, "request-duration");
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Only reset when the Function changes (the parent re-renders when switching tabs)
+        var functionId = FunctionInformation?.FunctionId;
+        if (functionId != previousFunctionId)
+        {
+            previousFunctionId = functionId;
+
+            requestParameters.Clear();
+            selectedJobId = null;
+            inputNote = null;
+            recentRuns.Clear();
+        }
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        // The Function's Jobs (to load their Parameters into the Input)
+        var functionId = FunctionInformation?.FunctionId;
+        if (functionId != null && functionId != jobsFunctionId)
+        {
+            jobsFunctionId = functionId;
+            await LoadJobs(functionId);
+        }
+
+        // Kept when the query is dropped (ex. switching tabs), so the Input isn't replaced again
+        if (functionId != null && !string.IsNullOrEmpty(RerunId) && RerunId != previousRerunId)
+        {
+            previousRerunId = RerunId;
+            await LoadRerun(functionId, RerunId);
+        }
+    }
+
+    private async Task LoadJobs(string functionId)
+    {
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            jobs = client != null ? (await client.Api.GetJson<IEnumerable<TrakHound.Instance.Pages.Explorer.Functions.FunctionJob>>(Url.Combine("functions", functionId, "jobs")))?.ToList() : null;
+        }
+        catch
+        {
+            jobs = null; // Jobs are optional (ex. the Functions Api isn't installed)
+        }
+    }
+
+    /// <summary>
+    /// Loads a previous Run's Job and Input Parameters (its Input includes the Job's Parameters at the time it ran)
+    /// </summary>
+    private async Task LoadRerun(string functionId, string runId)
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client == null) return;
+
+        try
+        {
+            var runRoute = Url.Combine("functions", functionId, "runs", runId);
+            var runTask = client.Api.GetJson<RerunInformation>(runRoute);
+            var inputTask = client.Api.GetJson<Dictionary<string, string>>(Url.Combine(runRoute, "input"));
+            await Task.WhenAll(runTask, inputTask);
+
+            if (runTask.Result == null)
+            {
+                SetInputNote($"Run Not Found : {runId}", true);
+                return;
+            }
+
+            var jobId = runTask.Result.JobId;
+            selectedJobId = jobId != null && jobs != null && jobs.Any(o => o.Id == jobId) ? jobId : null;
+
+            requestParameters.Clear();
+            if (inputTask.Result != null) requestParameters.AddRange(ParameterEditor.FromDictionary(inputTask.Result));
+
+            if (jobId != null && selectedJobId == null)
+            {
+                SetInputNote($"Loaded the Input Parameters of Run {runId}. It used Job {jobId}, which no longer exists", true);
+            }
+            else
+            {
+                SetInputNote(jobId != null ? $"Loaded the Job and Input Parameters of Run {runId}" : $"Loaded the Input Parameters of Run {runId}", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            SetInputNote($"Error Loading Run {runId} : {ex.Message}", true);
+        }
+    }
+
+    private async Task SetInputCollapsed(bool collapsed)
+    {
+        inputCollapsed = collapsed;
+
+        // Kept for every Function (the sidebar stays as it was left)
+        try
+        {
+            if (collapsed) await localStorage.SetItem(InputCollapsedStorageKey, true);
+            else await localStorage.RemoveItem(InputCollapsedStorageKey);
+        }
+        catch { }
+    }
+
+    private void ClearInput()
+    {
+        selectedJobId = null;
+        requestParameters.Clear();
+        inputNote = null;
+        highlightMissing = false;
+    }
+
+    private void SetInputNote(string note, bool warning)
+    {
+        inputNote = note;
+        inputNoteWarning = warning;
+    }
+
+    /// <summary>
+    /// Runs with the Job (the Run route uses the Job's current Parameters). Its Parameters are shown in the Input to edit as overrides
+    /// </summary>
+    private void JobSelected(string jobId)
+    {
+        selectedJobId = jobId;
+        inputNote = null;
+
+        var job = jobs?.FirstOrDefault(o => o.Id == jobId);
+        if (job != null)
+        {
+            requestParameters.Clear();
+            requestParameters.AddRange(ParameterEditor.FromDictionary(job.Parameters));
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        DisposeConsumers();
+
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeSafe(StateHasChanged);
+    }
+
+
+    #region "Input Parameters"
+
+    /// <summary>
+    /// The Input Parameters. With a Job, only the ones that differ from the Job's (the Run route reads the Job's when the Run starts)
+    /// </summary>
+    private Dictionary<string, string> GetRunParameters(bool withJob)
+    {
+        var jobParameters = withJob ? SelectedJob?.Parameters : null;
+
+        var parameters = new Dictionary<string, string>();
+        foreach (var parameter in ParameterEditor.ToDictionary(requestParameters))
+        {
+            if (jobParameters != null && jobParameters.TryGetValue(parameter.Key, out var jobValue) && (jobValue ?? string.Empty) == parameter.Value) continue;
+
+            parameters[parameter.Key] = parameter.Value;
+        }
+        return parameters;
+    }
+
+    #endregion
+
+    #region "Run"
+
+    private void RunRequest()
+    {
+        if (running || FunctionInformation == null) return;
+
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client == null)
+        {
+            requestStatus = TrakHoundFunctionStatusType.Error.ToString();
+            responseMessage = "Client Not Found";
+            return;
+        }
+
+        var allParameters = ParameterEditor.ToDictionary(requestParameters);
+
+        // The Instance refuses a Run whose Parameters don't fit the Function's described Parameters, so check them before Running
+        var parametersError = TrakHoundFunctionParameterInformation.Validate(FunctionInformation.Parameters, TrakHoundFunctionParameterInformation.ApplyDefaults(FunctionInformation.Parameters, allParameters));
+        if (parametersError != null)
+        {
+            SetInputNote(parametersError, true);
+            highlightMissing = true;
+            inputCollapsed = false; // Show where the problem is
+            return;
+        }
+
+        highlightMissing = false;
+
+        DisposeConsumers();
+
+        var functionId = FunctionInformation.FunctionId;
+        var runId = Guid.NewGuid().ToString();
+        var job = SelectedJob;
+
+        running = true;
+        cancelling = false;
+        response = default;
+        responseMessage = null;
+        outputParameters = null;
+        requestRunId = runId;
+        requestStatus = TrakHoundFunctionStatusType.Started.ToString();
+        requestStarted = DateTime.Now;
+        requestCompleted = null;
+        requestDuration = null;
+        requestCpuTime = null;
+        runRecorded = false;
+        inputNote = null;
+        selectedTab = LogsTab;
+        lock (_lock) responseLogs.Clear();
+        // The JS Timer starts after the render that adds its element (see OnAfterRenderAsync)
+        var timerId = Guid.NewGuid().ToString();
+        pendingTimerId = timerId;
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            var stpw = System.Diagnostics.Stopwatch.StartNew();
+            ITrakHoundStream<TrakHoundFunctionStatusResponse> statusConsumer = null;
+            ITrakHoundStream<IEnumerable<TrakHoundLogItem>> logConsumer = null;
+
+            try
+            {
+                // Subscribe to Status
+                statusConsumer = await client.Functions.SubscribeRunStatus(runId);
+                if (statusConsumer != null)
+                {
+                    statusConsumer.Received += StatusReceived;
+                    statusConsumer.Start();
+                }
+
+                // Subscribe to Logs
+                logConsumer = await client.Functions.SubscribeRunLog(runId);
+                if (logConsumer != null)
+                {
+                    logConsumer.Received += LogReceived;
+                    logConsumer.Start();
+                }
+
+                lock (_lock)
+                {
+                    responseStatusConsumer = statusConsumer;
+                    responseLogConsumer = logConsumer;
+                }
+
+                var runResponse = await StartRun(client, functionId, runId, job?.Id, allParameters);
+                if (runResponse != null)
+                {
+                    response = runResponse.Value;
+                    responseMessage = response.GetParameter("message");
+                    requestStatus = GetStatus(response.StatusCode);
+                    requestCpuTime = response.CpuTime;
+
+                    // The message is shown with the Status (the other Output Parameters in the Output tab)
+                    outputParameters = response.Parameters?.Where(o => o.Key != "message").ToDictionary(o => o.Key, o => o.Value);
+
+                    if (response.Started > 0 && response.Completed > 0)
+                    {
+                        // Started and Completed are Unix Nanoseconds
+                        requestCompleted = response.Completed.ToLocalDateTime();
+                        requestDuration = response.Completed.ToDateTime() - response.Started.ToDateTime();
+                    }
+
+                    // Show the Output of a successful Run (the Logs explain a failed one)
+                    if (response.Success && !outputParameters.IsNullOrEmpty()) selectedTab = OutputTab;
+                }
+            }
+            catch (Exception ex)
+            {
+                requestStatus = TrakHoundFunctionStatusType.Error.ToString();
+                responseMessage = ex.Message;
+            }
+            finally
+            {
+                stpw.Stop();
+                if (requestCompleted == null) requestCompleted = DateTime.Now;
+                if (requestDuration == null) requestDuration = stpw.Elapsed;
+
+                AddRecentRun(runId, job, allParameters);
+
+                running = false;
+                cancelling = false;
+                if (pendingTimerId == timerId) pendingTimerId = null; // Completed before the Timer started
+
+                _ = DisposeConsumersAfterDelay(statusConsumer, logConsumer);
+
+                await InvokeSafe(async () =>
+                {
+                    await javascriptService.StopTimer(timerId);
+                    StateHasChanged();
+                });
+            }
+        });
+    }
+
+    /// <summary>
+    /// Runs the Function with the Functions API's Run route, which records the Run. When that route isn't found
+    /// (the Functions API isn't installed), the Function is run directly and the Run isn't recorded
+    /// </summary>
+    private async Task<TrakHoundFunctionResponse?> StartRun(ITrakHoundClient client, string functionId, string runId, string jobId, Dictionary<string, string> allParameters)
+    {
+        if (!useDirectRun)
+        {
+            var runRoute = Url.Combine("functions", functionId, "run");
+            var queryParameters = new Dictionary<string, string>();
+            queryParameters.Add("runId", runId);
+            queryParameters.Add("trigger", "manual"); // Counted as a Manual Run in the Functions Summary
+            if (jobId != null) queryParameters.Add("jobId", jobId); // The Run route applies the Job's Parameters (then the Input overrides)
+
+            var apiResponse = await client.Api.Post(runRoute, GetRunParameters(jobId != null), queryParameters: queryParameters);
+            var content = apiResponse.GetContentUtf8String();
+
+            // Any Status Code (including the Function's own 404) has a Run in the body
+            var jsonResponse = Json.Convert<TrakHoundFunctionJsonResponse>(content);
+            if (jsonResponse?.Id != null)
+            {
+                runRecorded = true;
+                return jsonResponse.ToResponse();
+            }
+
+            // The Jobs list can only be shown with the Functions API, so with a Job a 404 is the Job (ex. deleted)
+            if (apiResponse.StatusCode != 404 || jobId != null)
+            {
+                requestStatus = TrakHoundFunctionStatusType.Error.ToString();
+                responseMessage = !string.IsNullOrEmpty(content) ? content : $"Run Failed : Status Code {apiResponse.StatusCode}";
+                return null;
+            }
+
+            useDirectRun = true;
+        }
+
+        AddLocalLog(TrakHoundLogLevel.Warning, "The Functions API isn't installed (at the \"functions\" route), so the Function is run directly and the Run isn't recorded");
+        return await client.Functions.Run(functionId, allParameters, runId);
+    }
+
+    private async Task CancelRequest()
+    {
+        if (!running || cancelling || FunctionInformation == null || requestRunId == null) return;
+
+        cancelling = true;
+
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        var cancelled = false;
+
+        try
+        {
+            if (client != null) cancelled = await client.Functions.CancelRun(FunctionInformation.FunctionId, requestRunId);
+        }
+        catch { }
+
+        if (!cancelled && running)
+        {
+            // The Run may have already completed, or the Function does not support cancellation
+            cancelling = false;
+            AddLocalLog(TrakHoundLogLevel.Warning, "Cancel Request Failed : The Run was not found or has already completed");
+        }
+    }
+
+    private static string GetStatus(int statusCode)
+    {
+        if (statusCode >= 200 && statusCode < 400) return TrakHoundFunctionStatusType.Completed.ToString();
+        if (statusCode == cancelledStatusCode) return TrakHoundFunctionStatusType.Stopped.ToString();
+        return TrakHoundFunctionStatusType.Error.ToString();
+    }
+
+    private string GetStatusIcon()
+    {
+        if (running) return "fa-regular fa-sharp fa-loader spin";
+
+        switch (requestStatus?.ConvertEnum<TrakHoundFunctionStatusType>())
+        {
+            case null: return "fa-regular fa-sharp fa-circle";
+            case TrakHoundFunctionStatusType.Completed: return "fa-sharp fa-solid fa-circle-check";
+            case TrakHoundFunctionStatusType.Started:
+            case TrakHoundFunctionStatusType.Running: return "fa-sharp fa-solid fa-play";
+            case TrakHoundFunctionStatusType.Wait: return "fa-sharp fa-solid fa-timer";
+            case TrakHoundFunctionStatusType.Stopped: return "fa-sharp fa-solid fa-stop";
+            default: return "fa-sharp fa-solid fa-triangle-exclamation";
+        }
+    }
+
+    private async void StatusReceived(object sender, TrakHoundFunctionStatusResponse status)
+    {
+        // The final Status is set from the Response
+        if (disposed || !running) return;
+
+        requestStatus = status.Status.ToString();
+        await InvokeSafe(StateHasChanged);
+    }
+
+    private async void LogReceived(object sender, IEnumerable<TrakHoundLogItem> items)
+    {
+        if (disposed || items.IsNullOrEmpty()) return;
+
+        lock (_lock)
+        {
+            foreach (var item in items)
+            {
+                InsertLog(LogRow.Create(item, ++logSequence));
+            }
+        }
+
+        await InvokeSafe(async () =>
+        {
+            // Only follow new Logs when already at the bottom (so reading earlier Logs isn't interrupted)
+            var atBottom = selectedTab == LogsTab && await javascriptService.IsScrolledToBottom(logContainer, scrolledToBottomThreshold);
+
+            StateHasChanged();
+
+            if (atBottom) await javascriptService.ScrollToBottom(logContainer);
+        });
+    }
+
+    /// <summary>
+    /// Keeps the Logs in Timestamp order. Logs nearly always arrive in order, so they're appended (or inserted near the end)
+    /// </summary>
+    private void InsertLog(LogRow log)
+    {
+        var index = responseLogs.Count;
+        while (index > 0 && responseLogs[index - 1].Timestamp > log.Timestamp) index--;
+        responseLogs.Insert(index, log);
+    }
+
+    private void AddLocalLog(TrakHoundLogLevel level, string message)
+    {
+        lock (_lock)
+        {
+            InsertLog(new LogRow { Key = ++logSequence, Level = level, Message = message, Timestamp = DateTime.Now });
+        }
+    }
+
+    private void AddRecentRun(string runId, TrakHound.Instance.Pages.Explorer.Functions.FunctionJob job, Dictionary<string, string> parameters)
+    {
+        var recentRun = new RecentRun();
+        recentRun.RunId = runId;
+        recentRun.Status = requestStatus;
+        recentRun.Started = requestStarted ?? DateTime.Now;
+        recentRun.Duration = requestDuration ?? TimeSpan.Zero;
+        recentRun.Message = responseMessage;
+        recentRun.Recorded = runRecorded;
+        recentRun.JobId = job?.Id;
+        recentRun.JobName = job?.Name;
+        recentRun.Parameters = parameters;
+
+        lock (_lock)
+        {
+            recentRuns.Insert(0, recentRun);
+            if (recentRuns.Count > maxRecentRuns) recentRuns.RemoveAt(recentRuns.Count - 1);
+        }
+    }
+
+    private void LoadRecentRun(RecentRun recentRun)
+    {
+        var jobExists = recentRun.JobId != null && jobs != null && jobs.Any(o => o.Id == recentRun.JobId);
+        selectedJobId = jobExists ? recentRun.JobId : null;
+
+        requestParameters.Clear();
+        requestParameters.AddRange(ParameterEditor.FromDictionary(recentRun.Parameters));
+
+        if (recentRun.JobId != null && !jobExists) SetInputNote($"Loaded the Input Parameters of the Run at {recentRun.Started:HH:mm:ss}. Its Job no longer exists", true);
+        else SetInputNote(recentRun.JobId != null ? $"Loaded the Job and Input Parameters of the Run at {recentRun.Started:HH:mm:ss}" : $"Loaded the Input Parameters of the Run at {recentRun.Started:HH:mm:ss}", false);
+    }
+
+    private async Task DisposeConsumersAfterDelay(ITrakHoundStream<TrakHoundFunctionStatusResponse> statusConsumer, ITrakHoundStream<IEnumerable<TrakHoundLogItem>> logConsumer)
+    {
+        await Task.Delay(consumerDisposeDelay);
+
+        // Only dispose if a new Run has not already replaced (and disposed) these consumers
+        lock (_lock)
+        {
+            if (statusConsumer != null && statusConsumer == responseStatusConsumer) responseStatusConsumer = null;
+            else statusConsumer = null;
+
+            if (logConsumer != null && logConsumer == responseLogConsumer) responseLogConsumer = null;
+            else logConsumer = null;
+        }
+
+        DisposeConsumer(statusConsumer, logConsumer);
+    }
+
+    private void DisposeConsumers()
+    {
+        ITrakHoundStream<TrakHoundFunctionStatusResponse> statusConsumer;
+        ITrakHoundStream<IEnumerable<TrakHoundLogItem>> logConsumer;
+
+        lock (_lock)
+        {
+            statusConsumer = responseStatusConsumer;
+            logConsumer = responseLogConsumer;
+            responseStatusConsumer = null;
+            responseLogConsumer = null;
+        }
+
+        DisposeConsumer(statusConsumer, logConsumer);
+    }
+
+    private void DisposeConsumer(ITrakHoundStream<TrakHoundFunctionStatusResponse> statusConsumer, ITrakHoundStream<IEnumerable<TrakHoundLogItem>> logConsumer)
+    {
+        if (statusConsumer != null)
+        {
+            statusConsumer.Received -= StatusReceived;
+            try { statusConsumer.Dispose(); } catch { }
+        }
+
+        if (logConsumer != null)
+        {
+            logConsumer.Received -= LogReceived;
+            try { logConsumer.Dispose(); } catch { }
+        }
+    }
+
+    private async Task InvokeSafe(Func<Task> action)
+    {
+        if (disposed) return;
+
+        try
+        {
+            await InvokeAsync(action);
+        }
+        catch
+        {
+            // The component or circuit may have been disposed
+        }
+    }
+
+    private Task InvokeSafe(Action action)
+    {
+        return InvokeSafe(() => { action(); return Task.CompletedTask; });
+    }
+
+    #endregion
+
+    #region "Save as Job"
+
+    private void SaveJobClicked()
+    {
+        saveJobUpdate = SelectedJob != null;
+        saveJobName = null;
+        saveJobDescription = null;
+        saveJobModalVisible = true;
+    }
+
+    private string GetSaveJobParametersText()
+    {
+        var parameters = ParameterEditor.ToDictionary(requestParameters);
+        if (parameters.Count == 0) return "No Parameters (the Input is empty)";
+        return $"The {parameters.Count} Input Parameter(s) : {string.Join(", ", parameters.Keys)}";
+    }
+
+    private async Task SaveJob()
+    {
+        var update = SelectedJob != null && saveJobUpdate;
+        var existingJob = update ? SelectedJob : null;
+
+        if (!update && string.IsNullOrWhiteSpace(saveJobName))
+        {
+            notificationService.AddNotification(NotificationType.Error, "Job Name is required");
+            return;
+        }
+
+        var job = new TrakHound.Instance.Pages.Explorer.Functions.FunctionJob
+        {
+            Name = update ? existingJob.Name : saveJobName.Trim(),
+            Description = update ? existingJob.Description : saveJobDescription,
+            Parameters = ParameterEditor.ToDictionary(requestParameters)
+        };
+
+        savingJob = true;
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client == null || FunctionInformation == null) return;
+
+            var functionId = FunctionInformation.FunctionId;
+            var route = update ? Url.Combine("functions", functionId, "jobs", existingJob.Id) : Url.Combine("functions", functionId, "jobs");
+            var saveResponse = await client.Api.Post(route, job);
+
+            if (saveResponse.Success)
+            {
+                // Select the saved Job (an added Job's ID is made by the API)
+                var savedJob = Json.Convert<TrakHound.Instance.Pages.Explorer.Functions.FunctionJob>(saveResponse.GetContentUtf8String());
+                await LoadJobs(functionId);
+                selectedJobId = update ? existingJob.Id : (savedJob?.Id ?? jobs?.FirstOrDefault(o => o.Name == job.Name)?.Id);
+
+                saveJobModalVisible = false;
+                SetInputNote(update ? $"Saved the Parameters to the {job.Name} Job" : $"Saved the {job.Name} Job", false);
+            }
+            else
+            {
+                // Keep the Modal open so the Job can be corrected
+                var message = saveResponse.GetContentUtf8String();
+                notificationService.AddNotification(NotificationType.Error, "Error Saving Job", !string.IsNullOrEmpty(message) ? message : $"Status Code {saveResponse.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Error Saving Job", ex.Message);
+        }
+        finally
+        {
+            savingJob = false;
+        }
+    }
+
+    #endregion
+
+
+    private List<LogRow> GetLogLines()
+    {
+        lock (_lock)
+        {
+            if (logMinimumLevel == TrakHoundLogLevel.Trace) return responseLogs.ToList();
+            return responseLogs.Where(o => o.Level <= logMinimumLevel).ToList();
+        }
+    }
+
+    private string GetLogCountText()
+    {
+        lock (_lock)
+        {
+            var warnings = responseLogs.Count(o => o.Level == TrakHoundLogLevel.Warning);
+            var errors = responseLogs.Count(o => o.Level <= TrakHoundLogLevel.Error);
+            return $"{responseLogs.Count} Logs · {warnings} Warnings · {errors} Errors";
+        }
+    }
+
+    private static string FormatCpuTime(double milliseconds)
+    {
+        if (milliseconds < 1000) return $"{milliseconds:0} ms";
+        return TimeSpan.FromMilliseconds(milliseconds).ToFormattedString(true);
+    }
+
+    private string GetRunLink(string runId)
+    {
+        if (FunctionInformation != null && runId != null)
+        {
+            return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions", FunctionInformation.FunctionId, "runs", runId);
+        }
+
+        return null;
+    }
+
+}

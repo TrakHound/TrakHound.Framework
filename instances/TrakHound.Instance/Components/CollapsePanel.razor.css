@@ -1,0 +1,34 @@
+.collapse-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+}
+
+.collapse-panel-toolbar {
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    border: 1px solid var(--borderColorLight);
+}
+
+.collapse-panel-toolbar-button {
+    border-right: 1px solid var(--borderColorLight);
+}
+
+    .collapse-panel-toolbar-button .btn .icon {
+        color: var(--textLight);
+    }
+
+    .collapse-panel-toolbar-button .btn:hover .icon {
+        color: var(--accentLight);
+    }
+
+.collapse-panel-toolbar-title {
+    font-size: 12px;
+    line-height: 30px;
+    padding: 0 20px;
+    color: var(--textMild);
+}
+
+.collapse-panel-content {
+    grid-row: 2;
+}

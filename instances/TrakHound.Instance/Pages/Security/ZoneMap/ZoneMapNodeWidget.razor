@@ -1,0 +1,119 @@
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@using TrakHound.Zones
+@implements IDisposable
+
+@{
+    var data = Node.Data;
+}
+
+@if (data.Kind == ZoneMapNodeKind.Zone)
+{
+    var zone = data.Zone;
+    var audit = zone?.Mode == TrakHoundZoneMode.Audit;
+    var drag = Context?.Drag;
+    var canDrop = drag != null && !string.Equals(drag.FromZoneId, zone?.Id, StringComparison.OrdinalIgnoreCase);
+    var dropClass = canDrop ? (Context.DropZoneId == zone?.Id ? "drop-target drop-over" : "drop-target") : "";
+
+    <div class="zone-map-node zone @dropClass"
+         @onpointerenter="() => { if (canDrop) Context.SetDropZone(zone.Id); }"
+         @onpointerleave="() => { if (Context?.DropZoneId == zone.Id) Context.SetDropZone(null); }"
+         @onpointerup="() => Drop(zone.Id)">
+        <div class="node-header">
+            <span class="node-icon @data.Icon"></span>
+            <div class="node-heading">
+                <a class="node-title" href="@configurationsService.GetLink(data.Link)" @onpointerdown:stopPropagation="true" title="Open the Zone">@data.Title</a>
+                <code class="node-subtitle">@data.Subtitle</code>
+            </div>
+            <span class="node-mode @(audit ? "audit" : "enforce")" title="@(audit ? "Calls the Rules don't allow are recorded, but still made" : "Calls the Rules don't allow are denied")">@(audit ? "Audit" : "Enforce")</span>
+        </div>
+
+        <div class="node-members">
+            @if (data.Members.Count == 0)
+            {
+                <span class="node-empty">@(canDrop ? "Drop here to add" : "No Members")</span>
+            }
+            @foreach (var member in data.Members)
+            {
+                var pattern = member.Pattern;
+                <div class="node-member @(member.IsMissing ? "missing" : "") @(drag?.Member == pattern && drag?.FromZoneId == zone.Id ? "dragging" : "")"
+                     title="@GetMemberTooltip(member)"
+                     @onpointerdown="() => Context?.StartDrag(pattern, zone.Id)"
+                     @onpointerdown:stopPropagation="true">
+                    <span class="member-grip fa-solid fa-sharp fa-grip-dots-vertical"></span>
+                    <span class="member-icon @member.Icon"></span>
+                    <span class="member-title">@member.Title</span>
+                    @if (member.Capabilities.Count > 0)
+                    {
+                        <span class="member-warning fa-solid fa-sharp fa-triangle-exclamation" title="@($"Reaches outside its Client: {string.Join(", ", member.Capabilities)}")"></span>
+                    }
+                    <button class="admin-write member-remove" title="Remove from the Zone" @onpointerdown:stopPropagation="true" @onclick="() => Remove(pattern, zone.Id)" @onclick:stopPropagation="true"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                </div>
+            }
+        </div>
+
+        @if (zone != null && !zone.AllowSameZone)
+        {
+            <div class="node-footer">Members need a Rule to call each other</div>
+        }
+    </div>
+}
+else
+{
+    <div class="zone-map-node @data.Kind.ToString().ToLowerInvariant()">
+        <span class="node-icon @data.Icon"></span>
+        <div class="node-heading">
+            @if (!string.IsNullOrEmpty(data.Link))
+            {
+                <a class="node-title" href="@configurationsService.GetLink(data.Link)" @onpointerdown:stopPropagation="true">@data.Title</a>
+            }
+            else
+            {
+                <span class="node-title">@data.Title</span>
+            }
+            <span class="node-subtitle">@data.Subtitle</span>
+        </div>
+    </div>
+}
+
+@code {
+
+    // Filled by the Diagram
+    [Parameter]
+    public ZoneMapNodeModel Node { get; set; } = null!;
+
+    [CascadingParameter]
+    public ZoneMapContext Context { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        if (Context != null) Context.Changed += ContextChanged;
+    }
+
+    public void Dispose()
+    {
+        if (Context != null) Context.Changed -= ContextChanged;
+    }
+
+    private void ContextChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task Drop(string zoneId)
+    {
+        if (Context?.Drag != null) await Context.Drop(zoneId);
+    }
+
+    private async Task Remove(string member, string zoneId)
+    {
+        if (Context?.MoveMember != null) await Context.MoveMember(member, zoneId, null);
+    }
+
+    private static string GetMemberTooltip(ZoneMapMember member)
+    {
+        var lines = new List<string> { member.Pattern };
+        if (member.Matches != null) lines.Add($"Matches {member.Matches}");
+        if (member.IsMissing) lines.Add("No Module matches");
+        lines.Add("Drag onto another Zone (or onto Not in a Zone) to move it");
+        return string.Join("\n", lines);
+    }
+
+}

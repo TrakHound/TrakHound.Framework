@@ -1,0 +1,61 @@
+// Copyright (c) 2025 TrakHound Inc., All Rights Reserved.
+// TrakHound Inc. licenses this file to you under the Apache License, Version 2.0.
+
+using System;
+
+namespace TrakHound.Apps
+{
+    public class TrakHoundAppInjectionServices : ITrakHoundAppInjectionServices
+    {
+        private readonly TrakHoundTransientAppInjectionServices _transientServices;
+        private readonly TrakHoundScopedAppInjectionServices _scopedServices;
+        private readonly TrakHoundSingletonAppInjectionServices _singletonServices;
+
+
+        public TrakHoundAppInjectionServices(TrakHoundTransientAppInjectionServices transientServices, TrakHoundScopedAppInjectionServices scopedServices, TrakHoundSingletonAppInjectionServices singletonServices)
+        {
+            _transientServices = transientServices;
+            _scopedServices = scopedServices;
+            _singletonServices = singletonServices;
+        }
+
+        public void Dispose()
+        {
+            _transientServices.Dispose();
+            _scopedServices.Dispose();
+            _singletonServices.Dispose();
+        }
+
+
+        public TService Get<TService>(string appId) where TService : class, ITrakHoundAppInjectionService
+        {
+            try
+            {
+                return (TService)Get(appId, typeof(TService));
+            }
+            catch { }
+
+            return null;
+        }
+
+        public object Get(string appId, Type serviceType)
+        {
+            try
+            {
+                object service = null;
+
+                if (typeof(ITrakHoundTransientAppInjectionService).IsAssignableFrom(serviceType)) service = _transientServices.Get(appId, serviceType);
+                if (typeof(ITrakHoundScopedAppInjectionService).IsAssignableFrom(serviceType)) service = _scopedServices.Get(appId, serviceType);
+                if (typeof(ITrakHoundSingletonAppInjectionService).IsAssignableFrom(serviceType)) service = _singletonServices.Get(appId, serviceType);
+
+                // Keep the Service's App Version while this Session is using it (the Scoped Services are per Browser connection)
+                if (service != null) _scopedServices.AddServiceSession(serviceType);
+
+                return service;
+            }
+            catch { }
+
+            return null;
+        }
+    }
+}

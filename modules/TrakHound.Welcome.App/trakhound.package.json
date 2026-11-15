@@ -1,0 +1,16 @@
+{
+  "id": "TrakHound.Welcome.App",
+  "category": "app",
+  "version": "0.2",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "A home page for development Instances that shows what is installed, where it is served, and how to get started",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Welcome.App",
+    ".defaultName": "Welcome",
+    ".defaultRoute": "/"
+  },
+  "dependencies": [
+    { "id": "TrakHound.ApiExplorer.App", "version": "0.*" }
+  ]
+}

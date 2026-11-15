@@ -1,0 +1,57 @@
+﻿.btn-command {
+    background: var(--buttonCommandBackground);
+    border: 1px solid var(--buttonCommandBorder);
+    color: var(--buttonCommandText);
+    transition: none;
+}
+
+    .btn-command:hover {
+        background: var(--buttonCommandBackgroundHover);
+        border: 1px solid var(--buttonCommandBorderHover);
+        color: var(--buttonCommandTextHover);
+        transition: none;
+    }
+
+    .btn-command:active {
+        box-shadow: none;
+        background: var(--buttonCommandBackgroundHighlight);
+        border: 1px solid var(--buttonCommandBorderHighlight);
+        color: var(--buttonCommandTextHighlight);
+    }
+
+    .btn-command.active {
+        color: #fff;
+        background: var(--accent);
+        border: 1px solid transparent;
+        transition: none;
+    }
+
+    .btn-command:disabled,
+    .btn-command.disabled {
+        transition: none;
+        background: var(--buttonCommandBackgroundDisabled);
+        border: 1px solid var(--buttonCommandBorderDisabled);
+        color: var(--buttonCommandTextDisabled);
+    }
+
+    .btn-command .icon {
+        color: var(--buttonCommandIcon);
+        transition: none;
+    }
+
+    .btn-command:hover .icon {
+        color: var(--buttonCommandIconHover);
+        transition: none;
+    }
+
+    .btn-command:active .icon {
+        color: var(--buttonCommandIconHighlight);
+        transition: none;
+    }
+
+    .btn-command:disabled .icon,
+    .btn-command.disabled .icon {
+        color: var(--buttonCommandIconDisabled);
+        transition: none;
+    }
+

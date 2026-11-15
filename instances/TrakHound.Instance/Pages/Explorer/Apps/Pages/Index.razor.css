@@ -1,0 +1,155 @@
+﻿.app-page-panel {
+    padding: 10px 20px 10px;
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel {
+    grid-row: 1;
+}
+
+    .header-panel .header-content {
+        display: grid;
+        grid-template-rows: 1fr max-content;
+        grid-template-columns: max-content max-content max-content 1fr;
+        grid-column-gap: 10px;
+        padding-left: 0px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid var(--borderColorLight);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .header-panel .header-icon-container {
+        grid-column: 1;
+        padding: 15px;
+    }
+
+    .header-panel .header-icon {
+        font-size: var(--fontSize3xl);
+        line-height: 20px;
+        color: var(--accent);
+    }
+
+    .header-panel .header-description-container {
+        grid-column: 2;
+        padding-right: 80px;
+    }
+
+        .header-panel .header-description-container .header-title {
+            display: block;
+            font-size: var(--fontSizeSm);
+            font-weight: bold;
+            color: var(--textMild);
+            color: var(--textMild);
+        }
+
+        .header-panel .header-description-container .header-id {
+            display: block;
+            font-size: var(--fontSizeXl);
+            font-weight: bold;
+            line-height: 26px;
+            color: var(--textDark);
+        }
+
+        .header-panel .header-description-container .header-description {
+            display: block;
+            font-size: var(--fontSizeSm);
+            color: var(--textLight);
+            color: var(--textMild);
+        }
+
+    .header-panel .header-package-icon-container {
+        grid-column: 3;
+        padding: 5px 10px;
+    }
+
+    .header-panel ::deep span.header-package-icon {
+        font-size: var(--fontSize3xl);
+        line-height: 30px;
+        color: var(--textLight);
+    }
+
+    .header-panel ::deep img.header-package-icon {
+        height: 50px;
+    }
+
+    .header-panel .header-package-container {
+        grid-column: 4;
+        border-left: 1px solid var(--borderColorLight);
+        border-left: 1px solid var(--borderColorLight);
+        padding: 0 20px;
+    }
+
+        .header-panel .header-package-container .header-title {
+            display: block;
+            font-size: var(--fontSizeSm);
+            font-weight: bold;
+            color: var(--textMild);
+            color: var(--textMild);
+        }
+
+        .header-panel .header-package-container .header-package {
+            display: block;
+            font-size: var(--fontSizeBase);
+            line-height: 20px;
+            color: var(--textDark);
+            color: var(--textDark);
+        }
+
+        .header-panel .header-package-container .header-version {
+            display: block;
+            font-size: var(--fontSizeSm);
+            line-height: 14px;
+            color: var(--textMild);
+            color: var(--textMild);
+        }
+
+
+.information-panel {
+    padding-top: 10px;
+}
+
+    .information-panel .table {
+        border: none;
+    }
+
+        .information-panel .table td {
+            font-size: var(--fontSizeSm);
+            padding: 5px 15px;
+        }
+
+            .information-panel .table td.label {
+                width: 200px;
+                font-weight: 600;
+                color: var(--textMild);
+            }
+
+
+.content-panel {
+    grid-row: 2;
+    height: 100%;
+}
+
+.content-panel {
+    grid-row: 2;
+    height: 100%;
+}
+
+    .content-panel ::deep .rz-tabview {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .content-panel ::deep .rz-tabview-panels {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .content-panel ::deep .rz-tabview-panel {
+        height: 100%;
+        overflow: hidden;
+        padding: 0;
+    }

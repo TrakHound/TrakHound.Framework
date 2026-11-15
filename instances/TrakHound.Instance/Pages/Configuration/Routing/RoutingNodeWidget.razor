@@ -1,0 +1,151 @@
+@using TrakHound.Blazor.Diagrams.Components.Renderers
+@using TrakHound.Services
+@implements IDisposable
+
+@{
+    var item = Node.Item;
+    var issues = Context?.GetIssues(item.Id) ?? Array.Empty<RoutingIssue>();
+    var hasErrors = issues.Any(o => o.Severity == RoutingIssueSeverity.Error);
+    var issueClass = hasErrors ? "has-errors" : issues.Count > 0 ? "has-warnings" : "";
+}
+
+<div class="routing-node @item.Kind.ToString().ToLowerInvariant() @issueClass">
+
+    <div class="node-header">
+        <span class="node-icon @GetIcon(item)"></span>
+        <span class="node-kind">@GetKindTitle(item)</span>
+        @if (item is TargetItem && item.Parent != null && item.Parent.Children.Count > 1)
+        {
+            var order = item.Parent.Children.ToList().IndexOf(item) + 1;
+            <span class="node-order" title="@($"Tried {GetOrdinal(order)} of {item.Parent.Children.Count}")">@order</span>
+        }
+        @if (issues.Count > 0)
+        {
+            <span class="node-issue fa-solid fa-sharp @(hasErrors ? "fa-circle-exclamation" : "fa-triangle-exclamation")" title="@string.Join("\n", issues.Select(o => o.Message))"></span>
+        }
+    </div>
+
+    @switch (item)
+    {
+        case RouterItem router:
+            <div class="node-title-row">
+                <span class="node-title @(string.IsNullOrWhiteSpace(router.Name) ? "missing" : "")">@(string.IsNullOrWhiteSpace(router.Name) ? "No Name" : router.Name)</span>
+                @if (string.Equals(router.Name?.Trim(), TrakHoundServiceRouter.Default, StringComparison.OrdinalIgnoreCase))
+                {
+                    <span class="node-badge" title="Used when a Request doesn't name a Router">Default</span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(router.Description))
+            {
+                <span class="node-subtitle" title="@router.Description">@router.Description</span>
+            }
+            var users = Context?.GetModules?.Invoke(router);
+            @if (users != null)
+            {
+                <span class="node-subtitle" title="@(users.Count > 0 ? string.Join("\n", users.Select(o => o.Title)) : "No Module sends its Service calls through this Router")"><span class="fa-solid fa-sharp fa-cubes"></span> Used by @users.Count Module@(users.Count != 1 ? "s" : "")</span>
+            }
+            break;
+
+        case RouteItem route:
+            <div class="node-chips">
+                @if (route.Patterns.Count == 0)
+                {
+                    <span class="node-empty">No Patterns</span>
+                }
+                @foreach (var pattern in route.Patterns.Take(MaxChips))
+                {
+                    <code class="node-chip" title="@pattern">@pattern</code>
+                }
+                @if (route.Patterns.Count > MaxChips)
+                {
+                    <span class="node-more" title="@string.Join("\n", route.Patterns.Skip(MaxChips))">+@(route.Patterns.Count - MaxChips)</span>
+                }
+            </div>
+            @if (route.Filters.Count > 0)
+            {
+                <span class="node-subtitle" title="@string.Join("\n", route.Filters)"><span class="fa-solid fa-sharp fa-filter"></span> @route.Filters.Count Filter@(route.Filters.Count != 1 ? "s" : "")</span>
+            }
+            break;
+
+        case TargetItem target:
+            var name = Context?.GetTargetName?.Invoke(target);
+            <span class="node-title @(name == null ? "missing" : "")" title="@target.Source">@(name ?? target.Source ?? "Not Selected")</span>
+            var package = Context?.GetTargetService?.Invoke(target)?.PackageId;
+            @if (!string.IsNullOrEmpty(package))
+            {
+                <span class="node-subtitle" title="@($"{package} {Context.GetTargetService(target).PackageVersion}")"><span class="fa-solid fa-sharp fa-box"></span> @package</span>
+            }
+            else
+            {
+                <span class="node-subtitle">@(target.IsRouter ? "Router" : target.IsService ? "Service" : target.Type)</span>
+            }
+            @if (target.FallbackOn != null)
+            {
+                <span class="node-subtitle" title="The results that send the Request on to the next Target">@(target.FallbackOn.Count > 0 ? $"Falls back on {string.Join(", ", target.FallbackOn)}" : "Never falls back")</span>
+            }
+            break;
+    }
+
+    @if (Node.InputPort != null)
+    {
+        <PortRenderer @key="Node.InputPort" Port="Node.InputPort" Class="routing-port input" />
+    }
+    @if (Node.OutputPort != null)
+    {
+        <PortRenderer @key="Node.OutputPort" Port="Node.OutputPort" Class="routing-port output" />
+    }
+
+</div>
+
+@code {
+
+    private const int MaxChips = 3;
+
+    // Filled by the Diagram
+    [Parameter]
+    public RoutingNode Node { get; set; } = null!;
+
+    [CascadingParameter]
+    public RoutingEditorContext Context { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        if (Context != null) Context.Changed += ContextChanged;
+    }
+
+    public void Dispose()
+    {
+        if (Context != null) Context.Changed -= ContextChanged;
+    }
+
+    private void ContextChanged() => _ = InvokeAsync(StateHasChanged);
+
+
+    public static string GetIcon(RoutingItem item)
+    {
+        switch (item)
+        {
+            case RouterItem: return "fa-regular fa-chart-network";
+            case RouteItem: return "fa-sharp fa-regular fa-filter";
+            case TargetItem target: return target.IsRouter ? "fa-regular fa-chart-network" : "fa-solid fa-sharp fa-right-left-large";
+            default: return null;
+        }
+    }
+
+    public static string GetKindTitle(RoutingItem item)
+    {
+        switch (item)
+        {
+            case TargetItem target: return target.IsRouter ? "Router Target" : "Service Target";
+            default: return item?.Kind.ToString();
+        }
+    }
+
+    public static string GetOrdinal(int number)
+    {
+        var suffix = (number % 100) is 11 or 12 or 13 ? "th" : (number % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" };
+        return $"{number}{suffix}";
+    }
+
+}

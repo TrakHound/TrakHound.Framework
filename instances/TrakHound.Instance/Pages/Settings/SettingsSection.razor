@@ -1,0 +1,60 @@
+@* A group of related Settings, shown as a card with a title and description *@
+
+<section class="settings-section @Class">
+    <div class="settings-section-header">
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <span class="settings-section-icon @Icon"></span>
+        }
+        <div class="settings-section-text">
+            <span class="settings-section-title">@Title</span>
+            @if (!string.IsNullOrEmpty(Description))
+            {
+                <span class="settings-section-description">@Description</span>
+            }
+        </div>
+        @if (HeaderContent != null || !string.IsNullOrEmpty(HelpLink))
+        {
+            <div class="settings-section-actions">
+                @HeaderContent
+
+                @if (!string.IsNullOrEmpty(HelpLink))
+                {
+                    <a class="settings-section-help" href="@HelpLink" target="_blank" rel="noopener" title="@($"About {Title} (opens the TrakHound docs)")" aria-label="@($"About {Title}")"><span class="icon fa-solid fa-sharp fa-circle-question"></span></a>
+                }
+            </div>
+        }
+    </div>
+    <div class="settings-section-body">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+
+    [Parameter]
+    public string Title { get; set; }
+
+    [Parameter]
+    public string Description { get; set; }
+
+    /// <summary>
+    /// Font Awesome classes (ex. "fa-solid fa-sharp fa-database")
+    /// </summary>
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string Class { get; set; }
+
+    // The section's docs page (TrakHoundWebsite.Docs), when it's about a different topic than the page's own help link
+    [Parameter]
+    public string HelpLink { get; set; }
+
+    [Parameter]
+    public RenderFragment HeaderContent { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+}

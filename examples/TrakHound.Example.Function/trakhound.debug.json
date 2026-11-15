@@ -1,0 +1,16 @@
+{
+  // Settings for the local debug host (Program.cs). Left out of the package
+  "instanceUrl": "http://localhost:8472",
+  "apiKey": "",
+
+  // The examples share the "volume" folder in examples/ when debugging, like they share the "trakhound.example" Volume on an Instance
+  "volumePath": "../../../../volume",
+
+  // Configuration Parameters (as set in the Function's Configuration on an Instance)
+  "parameters": {},
+
+  // The input Parameters the Function is run with when none are passed to dotnet run
+  "input": {
+    "minutes": "10"
+  }
+}

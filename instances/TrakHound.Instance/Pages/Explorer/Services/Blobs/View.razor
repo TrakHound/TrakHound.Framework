@@ -1,0 +1,535 @@
+@page "/_admin/explorer/{instanceId}/services/blobs/{configurationId}/collection/{collection}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject JavascriptService javascriptService
+@using TrakHound.Blazor.Services
+@using TrakHound.Services
+@using TrakHound.Services.Blobs
+
+<TrakHoundPageTitle Text="@($"{Collection} - {(!string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId)} - Blobs")" />
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="blob-view-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-folder-open"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name" title="@Collection">@Collection</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <button class="admin-write btn @(showUpload ? "btn-secondary" : "btn-light")" @onclick="ToggleUpload"><span class="icon fa-solid fa-sharp fa-upload"></span>Upload</button>
+
+        <div class="filter">
+            <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" placeholder="Filter by key or content type" aria-label="Filter Blobs" value="@filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+            @if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            }
+        </div>
+
+    </div>
+
+    <div class="upload-container">
+        @if (showUpload)
+        {
+            <UploadPanel InstanceId="@InstanceId" ConfigurationId="@ConfigurationId" Collection="@Collection" Uploaded="BlobUploaded" UploadFailed="BlobUploadFailed" Cancelled="() => showUpload = false" />
+        }
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (errorMessage != null)
+            {
+                <div class="empty-panel error">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <span class="empty-title">Blobs could not be Loaded</span>
+                    <span class="empty-description">@errorMessage</span>
+                </div>
+            }
+            else if (blobs.Count > 0)
+            {
+                var items = GetItems();
+
+                // Only show the Metadata column when a Blob has Metadata
+                var showMetadataColumn = blobs.Any(o => !o.Metadata.IsNullOrEmpty());
+
+                <div class="table-layout">
+                    @if (!items.IsNullOrEmpty())
+                    {
+                        <div class="table-panel">
+                            <RadzenDataGrid Data="@items" TItem="TrakHoundBlob" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true" AllowVirtualization="true">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="TrakHoundBlob" Property="Key" Title="Key" MinWidth="240px" CssClass="key-cell">
+                                        <Template Context="item">
+                                            <a href="@GetDownloadLink(item)" target="_blank" class="item-link key" title="Open @item.Key">@item.Key</a>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="TrakHoundBlob" Property="ContentType" Title="Content Type" Width="200px">
+                                        <Template Context="item">
+                                            <span class="content-type" title="@item.ContentType">
+                                                <span class="icon @GetContentTypeIcon(item.ContentType)"></span>@item.ContentType
+                                            </span>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="TrakHoundBlob" Property="Size" Title="Size" Width="100px" TextAlign="TextAlign.Right">
+                                        <Template Context="item">
+                                            <span class="number" title="@item.Size.ToString("N0") bytes">@item.Size.ToFileSize()</span>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="TrakHoundBlob" Property="Created" Title="Created" Width="160px">
+                                        <Template Context="item">
+                                            @if (item.Created > 0)
+                                            {
+                                                <span class="number" title="@item.Created.ToLocalDateTime().ToString("o")">@FormatTimestamp(item.Created.ToLocalDateTime())</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="value-null">-</span>
+                                            }
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    @if (showMetadataColumn)
+                                    {
+                                        <RadzenDataGridColumn TItem="TrakHoundBlob" Title="Metadata" Width="95px" Sortable="false" TextAlign="TextAlign.Right">
+                                            <Template Context="item">
+                                                @if (!item.Metadata.IsNullOrEmpty())
+                                                {
+                                                    <span class="metadata" title="@GetMetadataTitle(item)">@item.Metadata.Count <span class="fa-regular fa-sharp fa-tags"></span></span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="value-null">-</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    }
+                                    <RadzenDataGridColumn TItem="TrakHoundBlob" CssClass="buttons actions-cell" Width="250px" Sortable="false">
+                                        <Template Context="item">
+                                            @if (deletingKey == item.Key)
+                                            {
+                                                <span class="deleting"><span class="icon fa-regular fa-sharp fa-loader spin"></span>Deleting..</span>
+                                            }
+                                            else if (confirmDeleteKey == item.Key)
+                                            {
+                                                <span class="confirm-delete">
+                                                    <span class="confirm-text">Delete?</span>
+                                                    <button class="admin-write btn btn-sm btn-danger" @onclick="() => Delete(item)">Delete</button>
+                                                    <button class="btn btn-sm btn-light" @onclick="() => confirmDeleteKey = null">Cancel</button>
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <a href="@GetDownloadLink(item)" download="@GetFileName(item)" class="btn btn-sm btn-link" title="Download @item.Key"><span class="icon fa-regular fa-sharp fa-download"></span>Download</a>
+                                                <button class="btn btn-sm btn-link" title="Copy Link" @onclick="() => CopyLink(item)">
+                                                    @if (copiedKey == item.Key)
+                                                    {
+                                                        <span class="icon fa-solid fa-sharp fa-check copied"></span><span>Copied</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="icon fa-regular fa-sharp fa-link"></span><span>Link</span>
+                                                    }
+                                                </button>
+                                                <button class="admin-write btn btn-sm btn-link btn-delete" title="Delete @item.Key" @onclick="() => confirmDeleteKey = item.Key" disabled="@(deletingKey != null)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                                            }
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                </Columns>
+                            </RadzenDataGrid>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-panel">
+                            <span class="empty-title">No matching Blobs</span>
+                            <span class="empty-description">No loaded Blobs match "@filter?.Trim()"</span>
+                        </div>
+                    }
+
+                    @if (hasMore)
+                    {
+                        <div class="more-panel">
+                            <span class="more-text">Showing the first @blobs.Count.ToString("N0") Blobs</span>
+                            @if (!loadingMore)
+                            {
+                                <button class="btn btn-sm btn-light" @onclick="LoadMore"><span class="icon fa-solid fa-sharp fa-angles-down"></span>Load More</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-light" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Loading..</button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-folder-open"></span>
+                    <span class="empty-title">No Blobs</span>
+                    <span class="empty-description">The @Collection Collection does not contain any Blobs</span>
+                    @if (!showUpload)
+                    {
+                        <button class="admin-write btn btn-light btn-empty-action" @onclick="() => showUpload = true"><span class="icon fa-solid fa-sharp fa-upload"></span>Upload</button>
+                    }
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Blobs.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _pageSize = 1000;
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private List<TrakHoundBlob> blobs = new List<TrakHoundBlob>();
+    private TrakHoundServiceInformation service;
+    private CancellationTokenSource copiedReset;
+    private string previousKey;
+    private string filter;
+    private string errorMessage;
+    private string confirmDeleteKey;
+    private string deletingKey;
+    private string copiedKey;
+    private bool hasMore;
+    private bool showUpload;
+    private bool loading = true;
+    private bool loadingMore;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    [Parameter]
+    public string Collection { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        copiedReset?.Cancel();
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        // Only reload when navigating to a different Collection
+        var key = $"{InstanceId}:{ConfigurationId}:{Collection}";
+        if (key != previousKey)
+        {
+            previousKey = key;
+            filter = null;
+            showUpload = false;
+            confirmDeleteKey = null;
+
+            await explorerService.LoadInstance(InstanceId);
+            service = explorerService.GetServices(InstanceId, ConfigurationId);
+
+            SetBreadcrumbs();
+
+            await Load();
+        }
+    }
+
+    private void SetBreadcrumbs()
+    {
+        var serviceName = !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+        breadcrumbItems.Add(new BreadcrumbItem("Blobs", Url.Combine("_admin/explorer", InstanceId, "services", "blobs")));
+        breadcrumbItems.Add(new BreadcrumbItem(serviceName, Url.Combine("_admin/explorer", InstanceId, "services", "blobs", ConfigurationId)));
+        breadcrumbItems.Add(new BreadcrumbItem(Collection, null));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        // Replace the full list (so Blobs that were removed don't remain)
+        blobs = new List<TrakHoundBlob>();
+        hasMore = false;
+        errorMessage = await LoadPage(0);
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadMore()
+    {
+        if (loadingMore) return;
+
+        loadingMore = true;
+        await InvokeAsync(StateHasChanged);
+
+        var error = await LoadPage(blobs.Count);
+        if (error != null)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Load More Failed", error);
+        }
+
+        loadingMore = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Load a page of Blobs and add them to the list. Returns an error message if the request failed
+    /// </summary>
+    private async Task<string> LoadPage(int skip)
+    {
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null) return $"Instance {InstanceId} is not available";
+
+        try
+        {
+            var response = await client.Services.Blobs.List(Collection, skip, _pageSize, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                var page = response.Result?.Where(o => o != null && !string.IsNullOrEmpty(o.Key)).ToList() ?? new List<TrakHoundBlob>();
+
+                // Skip Blobs that are already loaded (ex. a Blob was added between pages)
+                var loadedKeys = blobs.Select(o => o.Key).ToHashSet();
+                blobs.AddRange(page.Where(o => !loadedKeys.Contains(o.Key)));
+
+                hasMore = page.Count >= _pageSize;
+                return null;
+            }
+            else if (response.StatusCode == 404)
+            {
+                // Not Found is returned when there are no (more) Blobs
+                hasMore = false;
+                return null;
+            }
+            else
+            {
+                return !string.IsNullOrEmpty(response.Message) ? response.Message : $"Status Code {response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private IEnumerable<TrakHoundBlob> GetItems()
+    {
+        var items = blobs.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(filter)) return items.ToList();
+
+        var value = filter.Trim();
+        return items.Where(o => o.Key.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+            (o.ContentType?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+    }
+
+    private async Task Delete(TrakHoundBlob blob)
+    {
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null || deletingKey != null) return;
+
+        confirmDeleteKey = null;
+        deletingKey = blob.Key;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await client.Services.Blobs.Delete(blob.Collection ?? Collection, blob.Key, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                // Remove from the list (instead of reloading every page)
+                blobs.Remove(blob);
+                notificationService.AddNotification(NotificationType.Success, "Blob Deleted", blob.Key);
+            }
+            else
+            {
+                var message = !string.IsNullOrEmpty(response.Message) ? response.Message : $"Status Code {response.StatusCode}";
+                notificationService.AddNotification(NotificationType.Error, "Delete Failed", $"{blob.Key} : {message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Delete Failed", $"{blob.Key} : {ex.Message}");
+        }
+
+        deletingKey = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CopyLink(TrakHoundBlob blob)
+    {
+        var link = GetDownloadLink(blob);
+        if (link == null) return;
+
+        await javascriptService.CopyClipboard(link);
+
+        // Show the "Copied" check briefly, then return to the Link icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copiedKey = blob.Key;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            copiedKey = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        filter = null;
+    }
+
+    private async Task RefreshClicked()
+    {
+        confirmDeleteKey = null;
+        await Load();
+    }
+
+    private void ToggleUpload()
+    {
+        showUpload = !showUpload;
+    }
+
+    private async Task BlobUploaded(UploadPanel.BlobUploadResult result)
+    {
+        if (result.Collection == Collection)
+        {
+            notificationService.AddNotification(NotificationType.Success, "Blob Uploaded", $"{result.Key} ({result.Size.ToFileSize()})");
+            await Load();
+        }
+        else
+        {
+            notificationService.AddNotification(NotificationType.Success, "Blob Uploaded", $"{result.Collection} / {result.Key} ({result.Size.ToFileSize()})");
+        }
+    }
+
+    private void BlobUploadFailed(UploadPanel.BlobUploadResult result)
+    {
+        notificationService.AddNotification(NotificationType.Error, "Upload Failed", $"{result.Collection} / {result.Key} : {result.Message}");
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    private string GetDescription()
+    {
+        var serviceName = !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+        var description = $"Blob Collection · {serviceName}";
+
+        if (!loading && errorMessage == null)
+        {
+            var count = blobs.Count.ToString("N0") + (hasMore ? "+" : "");
+            description += blobs.Count == 1 ? " · 1 Blob" : $" · {count} Blobs";
+            if (blobs.Count > 0) description += $" · {blobs.Sum(o => o.Size).ToFileSize()}";
+        }
+
+        return description;
+    }
+
+    private string GetDownloadLink(TrakHoundBlob blob)
+    {
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client != null)
+        {
+            var route = "_services/blobs/download";
+            route = Url.AddQueryParameter(route, "collection", blob.Collection ?? Collection);
+            route = Url.AddQueryParameter(route, "key", blob.Key);
+            route = Url.AddQueryParameter(route, "routerId", ConfigurationId);
+
+            return client.GetLink(route);
+        }
+
+        return null;
+    }
+
+    private static string GetFileName(TrakHoundBlob blob)
+    {
+        // Use the last segment of the Key (Keys may be paths)
+        var key = blob.Key?.TrimEnd('/', '\\');
+        var index = key?.LastIndexOfAny(new[] { '/', '\\' }) ?? -1;
+        return index >= 0 ? key.Substring(index + 1) : key;
+    }
+
+    private static string GetMetadataTitle(TrakHoundBlob blob)
+    {
+        return string.Join("\n", blob.Metadata.Select(o => $"{o.Key} = {o.Value}"));
+    }
+
+    private static string GetContentTypeIcon(string contentType)
+    {
+        var value = contentType?.ToLower() ?? "";
+        if (value.StartsWith("image/")) return "fa-regular fa-sharp fa-file-image";
+        if (value.StartsWith("video/")) return "fa-regular fa-sharp fa-file-video";
+        if (value.StartsWith("audio/")) return "fa-regular fa-sharp fa-file-audio";
+        if (value.Contains("pdf")) return "fa-regular fa-sharp fa-file-pdf";
+        if (value.Contains("zip") || value.Contains("compressed") || value.Contains("tar")) return "fa-regular fa-sharp fa-file-zipper";
+        if (value.Contains("json") || value.Contains("xml") || value.Contains("yaml") || value.Contains("javascript")) return "fa-regular fa-sharp fa-file-code";
+        if (value.StartsWith("text/")) return "fa-regular fa-sharp fa-file-lines";
+        return "fa-regular fa-sharp fa-file";
+    }
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        return timestamp.Date == DateTime.Now.Date ? timestamp.ToString("HH:mm:ss") : timestamp.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

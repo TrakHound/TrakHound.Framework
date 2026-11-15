@@ -1,0 +1,35 @@
+﻿@using TrakHound.Workers
+
+@if (WorkerInformation != null)
+{
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon-container">
+                <span class="header-icon fa-solid fa-sharp fa-gear"></span>
+            </div>
+            <div class="header-description-container">
+                <span class="header-title">Worker</span>
+                <span class="header-id">@WorkerInformation.Name</span>
+                <span class="header-description">@WorkerInformation.Description</span>
+            </div>
+            <div class="header-package-icon-container">
+
+                <PackageIcon Src="@WorkerInformation.PackageIcon" Class="header-package-icon" />
+
+            </div>
+            <div class="header-package-container">
+                <span class="header-title">Package</span>
+                <span class="header-package">@WorkerInformation.PackageId</span>
+                <span class="header-version">@WorkerInformation.PackageVersion</span>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+
+    [Parameter]
+    public TrakHoundWorkerInformation WorkerInformation { get; set; }
+
+}

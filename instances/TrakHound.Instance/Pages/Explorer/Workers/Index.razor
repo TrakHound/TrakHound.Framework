@@ -1,0 +1,376 @@
+﻿@page "/_admin/explorer/{instanceId}/workers"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Workers
+
+<TrakHoundPageTitle Text="Workers" />
+
+<div class="workers-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-gear"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Workers</span>
+                <span class="header-description">Long lived processes</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="status-panel">
+
+            @{
+                var workers = GetWorkers();
+                if (!workers.IsNullOrEmpty())
+                {
+                    <RadzenDataGrid Data="@workers" TItem="TrakHoundWorkerInformation" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TrakHoundWorkerInformation" Property="Name" Title="Worker" CssClass="name-cell" MinWidth="240px">
+                                <Template Context="context">
+                                    <a href="@GetViewLink(context)" class="worker-name" title="View Worker">@context.Name</a>
+                                    @if (!string.IsNullOrEmpty(context.Description))
+                                    {
+                                        <span class="worker-description" title="@context.Description">@context.Description</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundWorkerInformation" Property="Status" Title="Status" CssClass="status-cell" Width="150px">
+                                <Template Context="context">
+                                    <span class="status-badge @context.Status.ToString().ToLower()">
+                                        <span class="status-dot"></span>@context.Status
+                                    </span>
+                                    @{
+                                        var uptime = GetLastUpdatedAgo(context);
+                                    }
+                                    @if (uptime.HasValue)
+                                    {
+                                        <span class="status-uptime" title="Time since the Worker Started">@uptime.Value.ToFormattedString()</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundWorkerInformation" Property="CpuUsage" Title="CPU" CssClass="cpu-cell" Width="170px">
+                                <Template Context="context">
+                                    <CpuUsageBar Value="@context.CpuUsage" />
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundWorkerInformation" Property="PackageVersion" Title="Version" CssClass="version-cell" Width="100px" />
+                            <RadzenDataGridColumn TItem="TrakHoundWorkerInformation" Property="LastUpdated" Title="Last Updated" CssClass="updated-cell" Width="170px">
+                                <Template Context="context">
+                                    <span>@context.LastUpdated.ToLocalTime()</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundWorkerInformation" Title="Actions" CssClass="actions-cell" HeaderCssClass="actions-header" Width="100px" Sortable="false">
+                                <Template Context="context">
+
+                                    @{
+                                        var canStart = WorkerActions.CanStart(context.Status);
+                                        var canStop = WorkerActions.CanStop(context.Status);
+                                    }
+
+                                    <button class="admin-write btn btn-sm btn-light btn-action btn-start" title="Start Worker" disabled="@(!canStart)" @onclick="() => StartClicked(context.Id)"><span class="fa-solid fa-sharp fa-play"></span></button>
+                                    <button class="admin-write btn btn-sm btn-light btn-action btn-stop" title="Stop Worker" disabled="@(!canStop)" @onclick="() => StopClicked(context.Id)"><span class="fa-solid fa-sharp fa-stop"></span></button>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <span class="empty-state-icon fa-solid fa-sharp fa-gear"></span>
+                        <span class="empty-state-title">No Workers</span>
+                        <span class="empty-state-description">Install a Worker package and add a configuration to see it here</span>
+                    </div>
+                }
+            }
+
+        </div>
+    }
+    else
+    {
+        <Loading Message="@loadingMessage" />
+    }
+
+</div>
+
+@code {
+
+    private readonly Dictionary<string, TrakHoundWorkerInformation> _workers = new Dictionary<string, TrakHoundWorkerInformation>();
+    private readonly object _lock = new object();
+    private const int _cpuUpdateInterval = 2000;
+    private const int _updateInterval = 1000;
+
+    private System.Timers.Timer updateTimer;
+    private DateTime lastCpuUpdate;
+    private int cpuUpdating;
+    private ITrakHoundStream<TrakHoundWorkerStatusResponse> workerConsumer;
+    private string previousInstanceId;
+
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    
+
+
+    protected override void OnInitialized()
+    {
+        // Polls CPU Usage and ticks the uptime shown for Started Workers (shown in whole seconds)
+        updateTimer = new System.Timers.Timer();
+        updateTimer.Interval = _updateInterval;
+        updateTimer.Elapsed += UpdateTimerElapsed;
+        updateTimer.Start();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    void IDisposable.Dispose()
+    {
+        try
+        {
+            if (updateTimer != null)
+            {
+                updateTimer.Elapsed -= UpdateTimerElapsed;
+                updateTimer.Dispose();
+            }
+
+            if (workerConsumer != null)
+            {
+                workerConsumer.Received -= WorkerStatusUpdated;
+                workerConsumer.Dispose();
+            }
+        }
+        catch { }
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            _workers.Clear();
+            if (workerConsumer != null) 
+            {
+                workerConsumer.Received -= WorkerStatusUpdated;
+                workerConsumer.Dispose();
+            }
+
+            loading = true;
+            loadingMessage = "Loading Workers..";
+            await InvokeAsync(StateHasChanged);
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Workers", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+            if (client != null)
+            {
+                // Get full list of Workers
+                var workers = await client.Workers.GetInformation();
+                if (!workers.IsNullOrEmpty())
+                {
+                    lock (_lock)
+                    {
+                        foreach (var worker in workers)
+                        {
+                            if (worker.Id != null)
+                            {
+                                _workers.Remove(worker.Id);
+                                _workers.Add(worker.Id, worker);
+                            }
+                        }
+                    }
+                }
+
+                // Subscribe to any new Updates
+                workerConsumer = await client.Workers.SubscribeStatus();
+                if (workerConsumer != null)
+                {
+                    workerConsumer.Received += WorkerStatusUpdated;
+                    workerConsumer.Start();
+                }
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void WorkerStatusUpdated(object sender, TrakHoundWorkerStatusResponse status)
+    {
+        if (status.WorkerId != null)
+        {
+            lock (_lock)
+            {
+                var worker = _workers.GetValueOrDefault(status.WorkerId);
+                if (worker != null)
+                {
+                    worker.Status = status.Status;
+                    worker.LastUpdated = status.Timestamp.ToDateTime();
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void UpdateTimerElapsed(object sender, System.Timers.ElapsedEventArgs args)
+    {
+        if (loading) return;
+
+        // Allow for timer jitter so a 2s interval isn't stretched to 3 ticks
+        var changed = false;
+        if ((DateTime.UtcNow - lastCpuUpdate).TotalMilliseconds >= _cpuUpdateInterval - (_updateInterval / 2))
+        {
+            changed = await UpdateCpuUsage();
+        }
+
+        // Only re-render when the CPU Usage changed or an uptime is shown (it changes every second)
+        if (changed || HasStartedWorkers())
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool HasStartedWorkers()
+    {
+        lock (_lock) return _workers.Values.Any(o => o.Status == TrakHoundWorkerStatusType.Started);
+    }
+
+    /// <summary>
+    /// Returns true if the CPU Usage of any Worker changed
+    /// </summary>
+    private async Task<bool> UpdateCpuUsage()
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref cpuUpdating, 1) == 1) return false;
+
+        var changed = false;
+
+        try
+        {
+            lastCpuUpdate = DateTime.UtcNow;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+            if (client != null)
+            {
+                var workers = await client.Workers.GetInformation();
+                if (!workers.IsNullOrEmpty())
+                {
+                    lock (_lock)
+                    {
+                        foreach (var information in workers)
+                        {
+                            var worker = information.Id != null ? _workers.GetValueOrDefault(information.Id) : null;
+                            if (worker != null)
+                            {
+                                if (worker.CpuUsage != information.CpuUsage) changed = true;
+                                worker.CpuUsage = information.CpuUsage;
+                                worker.CpuTime = information.CpuTime;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref cpuUpdating, 0);
+        }
+
+        return changed;
+    }
+
+    private IEnumerable<TrakHoundWorkerInformation> GetWorkers()
+    {
+        IEnumerable<TrakHoundWorkerInformation> workers;
+        lock (_lock) workers = _workers.Values.ToList();
+        return workers.OrderBy(o => o.Name);
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private async void StartClicked(string workerId)
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+        if (client != null)
+        {
+            TrakHoundWorkerInformation worker;
+            lock (_lock) worker = _workers.GetValueOrDefault(workerId);
+            if (worker != null)
+            {
+                await client.Workers.StartWorker(worker.Id);
+            }
+        }
+    }
+
+    private async void StopClicked(string workerId)
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+        if (client != null)
+        {
+            TrakHoundWorkerInformation service;
+            lock (_lock) service = _workers.GetValueOrDefault(workerId);
+            if (service != null)
+            {
+                await client.Workers.StopWorker(service.Id);
+            }
+        }
+    }
+
+    private string GetViewLink(TrakHoundWorkerInformation worker)
+    {
+        if (worker != null)
+        {
+            return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "workers", worker.Id);
+        }
+
+        return null;
+    }
+
+    private TimeSpan? GetLastUpdatedAgo(TrakHoundWorkerInformation worker)
+    {
+        if (worker.Status == TrakHoundWorkerStatusType.Started)
+        {
+            return DateTime.UtcNow - worker.LastUpdated;
+        }
+
+        return null;
+    }
+
+}

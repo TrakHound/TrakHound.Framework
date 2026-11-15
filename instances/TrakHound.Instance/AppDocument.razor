@@ -1,0 +1,80 @@
+@using TrakHound.Instances
+@inject TrakHoundInstanceConfiguration instanceConfiguration
+
+@* The document for App pages (InstanceApp renders it when the Endpoint is the App Host). The App's Page is prerendered, and the
+   Outlets that the App adds its Stylesheets, Scripts and Theme to are rendered statically (see below) *@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="@InstanceAssets.GetBasePath(instanceConfiguration.BasePath)" />
+
+    @* Fonts (otherwise not discovered until the stylesheet is parsed and an icon is rendered) *@
+    @foreach (var font in InstanceAssets.IconFonts)
+    {
+        <link rel="preload" as="font" type="font/woff2" crossorigin href="@font" />
+    }
+
+    @* Package Stylesheets *@
+    @foreach (var stylesheet in InstanceAssets.IconStylesheets)
+    {
+        <link rel="stylesheet" href="@stylesheet" />
+    }
+
+    @* Radzen Stylesheets *@
+    <link rel="stylesheet" href="@InstanceAssets.RadzenStylesheet" />
+
+    @* TrakHound Stylesheets *@
+    <link rel="stylesheet" href="@InstanceAssets.TrakHoundStylesheet" />
+
+    @* Application Stylesheet *@
+    <link rel="stylesheet" href="@InstanceAssets.TokensStylesheet" />
+    <link rel="stylesheet" href="@InstanceAssets.GetInstanceAsset("css/app.css")" />
+    <link rel="stylesheet" href="@InstanceAssets.InstanceStylesheet" />
+
+    @* The Title changes as the App navigates, so it is interactive. The Favicon is Static so its link isn't replaced when the Circuit attaches *@
+    <TrakHoundHeadOutlet @rendermode="InteractiveServer" RenderFavicon="false" />
+    <TrakHoundHeadOutlet RenderTitle="false" />
+
+    @* Static, so the Stylesheet links stay in place when the Circuit attaches (an interactive Outlet replaces its prerendered links,
+       which cancels Stylesheets that are still loading and leaves the page unstyled until the App renders). The Theme is changed
+       by TrakHoundTheme through JavaScript, and the Router loads the page from the server when navigating to a different App *@
+    <TrakHoundThemeOutlet />
+
+    @* Applies the user's stored Theme before the first paint (TrakHoundTheme only reads it from storage after the Circuit connects,
+       so the App's default Theme would show until then) *@
+    <script>
+        (function () {
+            try {
+                var link = document.getElementById('trakhound-theme');
+                var key = link && link.getAttribute('data-theme-key');
+                var value = key && localStorage.getItem(key);
+                if (!value) return;
+                try { value = JSON.parse(value); } catch (e) { }
+                var href = link.getAttribute('data-theme-' + String(value).toLowerCase());
+                if (href && link.getAttribute('href') !== href) link.setAttribute('href', href);
+            } catch (e) { }
+        })();
+    </script>
+
+    <TrakHoundAppHeadOutlet />
+
+</head>
+<body>
+
+    <TrakHound.Instance.Pages.AppRoutes @rendermode="InteractiveServer" />
+
+    <ReconnectionPanel />
+
+    <script src="@InstanceAssets.RadzenScript"></script>
+    <script src="@InstanceAssets.BlazorScript" autostart="false"></script>
+    <script src="@InstanceAssets.TrakHoundBlazorScript"></script>
+    <script src="@InstanceAssets.TrakHoundScript"></script>
+
+    @* Static, so the App's Scripts are part of the page and run (Scripts added by an interactive render are not run) *@
+    <TrakHoundAppBodyOutlet />
+
+</body>
+</html>

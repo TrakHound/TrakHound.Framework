@@ -1,0 +1,676 @@
+@page "/_admin/explorer/{instanceId}/api/{apiId}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject ITrakHoundInstance localInstance
+@using TrakHound.Instances
+@using TrakHound.Api
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using static TrakHound.Instance.Pages.Explorer.Api.ApiMetricsHelper
+
+<TrakHoundPageTitle Text="@($"{GetRoute()} - Api")" />
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+@if (loading)
+{
+    <div class="api-page-loading">
+        <Loading Message="Loading Api.." />
+    </div>
+}
+else if (apiInformation == null)
+{
+    <div class="api-not-found">
+        <span class="icon fa-solid fa-sharp fa-circle-location-arrow"></span>
+        <span class="empty-title">Api Not Found</span>
+        <span class="empty-description">No Api with the ID "@ApiId" is configured in this Instance</span>
+        <a class="btn btn-light" href="@GetListLink()"><span class="icon fa-solid fa-sharp fa-arrow-left"></span>Back to Apis</a>
+    </div>
+}
+else
+{
+    <div class="api-page">
+
+        <div class="header-panel">
+            <div class="header-content">
+                <div class="header-icon-container">
+                    <span class="header-icon fa-solid fa-sharp fa-circle-location-arrow"></span>
+                </div>
+                <div class="header-description-container">
+                    <span class="header-title">API</span>
+                    <span class="header-id" title="@GetRoute()">@GetRoute()</span>
+                    <span class="header-description">@apiInformation.Id</span>
+                </div>
+                <div class="header-package-icon-container">
+
+                    <PackageIcon Src="@apiInformation.PackageIcon" Class="header-package-icon" />
+
+                </div>
+                <div class="header-package-container">
+                    <span class="header-title">Package</span>
+                    <span class="header-package">@apiInformation.PackageId</span>
+                    <span class="header-version">@apiInformation.PackageVersion</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="information-panel">
+            @* The tables wrap below each other; the Requests stay beside them *@
+            <div class="information-tables">
+                <div>
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td class="label">ID</td>
+                                <td class="value">@apiInformation.Id</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Package ID</td>
+                                <td class="value">@apiInformation.PackageId</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Package Version</td>
+                                <td class="value">@apiInformation.PackageVersion</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Package Build Date</td>
+                                <td class="value">@(apiInformation.PackageBuildDate > DateTime.MinValue ? apiInformation.PackageBuildDate.ToLocalTime().ToString() : "-")</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Package Hash</td>
+                                <td class="value">@apiInformation.PackageHash</td>
+                            </tr>
+                            <tr>
+                                <td class="label">TrakHound Version</td>
+                                <td class="value">@apiInformation.TrakHoundVersion</td>
+                            </tr>
+                            @{
+                                var informationLink = ApiLinks.GetInformationLink(localInstance, explorerService, apiInformation.Id);
+                                var openApiLink = ApiLinks.GetOpenApiLink(localInstance, explorerService, apiInformation.Id);
+                            }
+                            @if (informationLink != null || openApiLink != null)
+                            {
+                                <tr>
+                                    <td class="label">Documents</td>
+                                    <td class="value">
+                                        <span class="document-links">
+                                            @if (informationLink != null)
+                                            {
+                                                <a href="@informationLink" target="_blank" rel="noopener" title="The Api's Controllers, Endpoints and Parameters (JSON, from the System API)"><span class="icon fa-solid fa-sharp fa-circle-info"></span>Api Information</a>
+                                            }
+                                            @if (openApiLink != null)
+                                            {
+                                                <a href="@openApiLink" target="_blank" rel="noopener" title="OpenAPI 3.1 document describing the Api's Endpoints (JSON, from the System API)"><span class="icon fa-solid fa-sharp fa-file-code"></span>OpenAPI</a>
+                                            }
+                                            @if (ApiLinks.IsSystemApiEnabled(localInstance, explorerService) == false)
+                                            {
+                                                <span class="document-warning" title="The documents are served by the System API, which is disabled on this Instance"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>System API disabled</span>
+                                                <a class="settings-link" href="_admin/configuration/settings?section=interfaces">Settings</a>
+                                            }
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (!string.IsNullOrEmpty(apiInformation.Repository))
+                {
+                    <div>
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td class="label">Repository</td>
+                                    <td class="value"><a href="@apiInformation.Repository" target="_blank" rel="noopener">@apiInformation.Repository</a></td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Repository Branch</td>
+                                    <td class="value">@RepositoryLink(apiInformation.RepositoryBranch, GetRepositoryBranchLink(apiInformation))</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Repository Directory</td>
+                                    <td class="value">@RepositoryLink(apiInformation.RepositoryDirectory, GetRepositoryDirectoryLink(apiInformation))</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Repository Commit</td>
+                                    <td class="value">@RepositoryLink(apiInformation.RepositoryCommit, GetRepositoryCommitLink(apiInformation))</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+
+            @* Request Metrics (since the Instance started; rates over the last few seconds) *@
+            <div class="metrics-container">
+                <div class="metrics-header">
+                    <span class="metrics-title">Requests</span>
+                    <a class="metrics-link" href="@GetMetricsLink()">View Metrics<span class="icon fa-solid fa-sharp fa-arrow-right"></span></a>
+                </div>
+                <div class="metrics-tiles">
+                    <div class="metric">
+                        <span class="metric-label">Total</span>
+                        <span class="metric-value">@((metrics?.TotalRequestCount ?? 0).ToString("N0"))</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Req/s</span>
+                        <span class="metric-value">@FormatRate(metrics?.RequestRate ?? 0)</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Errors</span>
+                        <span class="metric-value">@((metrics?.TotalErrorCount ?? 0).ToString("N0")) <span class="metric-unit">@GetErrorPercent()</span></span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Avg Time</span>
+                        <span class="metric-value">@(metrics?.RequestRate > 0 ? FormatDuration(metrics.AverageDuration) : "-")</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Max Time</span>
+                        <span class="metric-value">@(metrics?.RequestRate > 0 ? FormatDuration(metrics.MaxDuration) : "-")</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Last Request</span>
+                        <span class="metric-value">@FormatLastRequested(metrics?.LastRequested)</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="toolbar-panel">
+
+            @if (!reloading)
+            {
+                <button class="admin-write btn btn-light" title="Reload the Api Configuration" @onclick="Reload"><span class="icon fa-sharp fa-solid fa-rotate"></span>Reload</button>
+            }
+            else
+            {
+                <button class="admin-write btn btn-light btn-loading" disabled><span class="icon fa-regular fa-loader spin"></span>Reloading..</button>
+            }
+
+            @* Shown instead of the Requests panel on narrow pages *@
+            <a class="btn btn-light toolbar-metrics-link" href="@GetMetricsLink()" title="View the Api's Request Metrics"><span class="icon fa-solid fa-sharp fa-chart-line"></span>Metrics</a>
+
+            <div class="filter">
+                <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                <input type="text" placeholder="Filter Endpoints" aria-label="Filter Endpoints" value="@endpointFilter" @oninput="EndpointFilterChanged" @onkeydown="EndpointFilterKeyDown" />
+                @if (!string.IsNullOrWhiteSpace(endpointFilter))
+                {
+                    <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearEndpointFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                }
+            </div>
+
+        </div>
+
+        <div class="tabs-panel">
+            <RadzenTabs>
+                <Tabs>
+                    <RadzenTabsItem Text="@($"Endpoints ({endpoints.Count:N0})")">
+
+                        @{
+                            var endpointItems = GetEndpointItems();
+                            if (!endpointItems.IsNullOrEmpty())
+                            {
+                                <div class="endpoints-panel">
+                                    <RadzenDataGrid Data="@endpointItems" TItem="EndpointItem" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true">
+                                        <Columns>
+                                            <RadzenDataGridColumn TItem="EndpointItem" CssClass="buttons view-cell" Width="80px" Sortable="false">
+                                                <Template Context="item">
+                                                    <a href="@item.Link" class="btn btn-sm btn-link"><span class="icon fa-regular fa-sharp fa-circle-info"></span>View</a>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="Type" Title="Type" Width="95px" />
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="Method" Title="Method" Width="95px" />
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="Route" Title="Route" MinWidth="180px">
+                                                <Template Context="item">
+                                                    <a href="@item.Link" class="route-link">@item.Route</a>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="Controller" Title="Controller" MinWidth="120px" />
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="TotalRequests" Title="Requests" Width="100px" TextAlign="TextAlign.Right">
+                                                <Template Context="item">
+                                                    <span class="number">@item.TotalRequests.ToString("N0")</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="TotalErrors" Title="Errors" Width="85px" TextAlign="TextAlign.Right">
+                                                <Template Context="item">
+                                                    <span class="number">@item.TotalErrors.ToString("N0")</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                                <Template Context="item">
+                                                    <span class="number">@(item.TotalRequests > 0 ? FormatDuration(item.AverageDuration) : "-")</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="LastRequested" Title="Last Request" Width="130px">
+                                                <Template Context="item">
+                                                    <span class="number">@FormatLastRequested(item.LastRequested)</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="EndpointItem" Property="Description" Title="Description" MinWidth="150px" />
+                                        </Columns>
+                                    </RadzenDataGrid>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="endpoints-empty">
+                                    @(endpoints.Count > 0 ? $"No Endpoints match \"{endpointFilter?.Trim()}\"" : "This Api has no Endpoints")
+                                </div>
+                            }
+                        }
+
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Volume">
+                        <TrakHound.Instance.Pages.Explorer.VolumeExplorer VolumeId="@apiInformation.VolumeId" Client="@client" />
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Logs">
+                        <Log ApiInformation="@apiInformation" />
+                    </RadzenTabsItem>
+
+                    @if (!string.IsNullOrEmpty(apiInformation.PackageReadMe))
+                    {
+                        <RadzenTabsItem Text="ReadMe">
+                            <div class="readme-panel">
+                                <MarkdownContent Markdown="@apiInformation.PackageReadMe" />
+                            </div>
+                        </RadzenTabsItem>
+                    }
+
+                </Tabs>
+            </RadzenTabs>
+        </div>
+
+    </div>
+}
+
+@code {
+
+    private const int _metricsInterval = 2000;
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private TrakHoundApiInformation apiInformation;
+    private List<TrakHoundApiEndpointInformation> endpoints = new List<TrakHoundApiEndpointInformation>();
+    private TrakHoundApiMetrics metrics;
+    private int? metricsSignature;
+    private List<EndpointItem> cachedEndpointItems; // Rendered Items (null when they need to be rebuilt)
+    private ITrakHoundClient client;
+    private System.Threading.Timer metricsTimer;
+    private int updatingMetrics;
+    private string previousApiId;
+    private string previousInstanceId;
+    private string endpointFilter;
+    private bool loading = true;
+    private bool reloading;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ApiId { get; set; }
+
+
+    public class EndpointItem
+    {
+        public string Id { get; set; }
+        public string Type { get; set; }
+        public string Method { get; set; }
+        public string Route { get; set; }
+        public string Controller { get; set; }
+        public string Description { get; set; }
+        public string Link { get; set; }
+        public string Key { get; set; } // Endpoint Metrics Key (see ApiMetricsHelper.GetKey)
+
+        // Request Metrics (since the Instance started)
+        public long TotalRequests { get; set; }
+        public long TotalErrors { get; set; }
+        public double AverageDuration { get; set; }
+        public DateTime? LastRequested { get; set; }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        metricsTimer?.Dispose();
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (ApiId != previousApiId || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            previousApiId = ApiId;
+            previousInstanceId = explorerService.SelectedInstanceId;
+            endpointFilter = null;
+
+            await Load();
+        }
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        metricsTimer?.Dispose();
+        metrics = null;
+        metricsSignature = null;
+        cachedEndpointItems = null;
+
+        await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+        client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+
+        apiInformation = explorerService.GetApiRoutes(explorerService.SelectedInstanceId)?.FirstOrDefault(o => o.Id == ApiId);
+        endpoints = GetEndpoints(apiInformation);
+        cachedEndpointItems = null;
+
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Api", GetListLink()));
+        breadcrumbItems.Add(new BreadcrumbItem(apiInformation != null ? GetRoute() : ApiId, null));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+
+        if (apiInformation != null && client != null)
+        {
+            ApplyMetrics(await GetMetrics(client));
+
+            // Poll Request Metrics
+            metricsTimer = new System.Threading.Timer(MetricsTimerElapsed, client, _metricsInterval, _metricsInterval);
+        }
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<TrakHoundApiMetrics> GetMetrics(ITrakHoundClient metricsClient)
+    {
+        try
+        {
+            return await metricsClient.Api.GetMetrics(ApiId);
+        }
+        catch
+        {
+            // Metrics are optional (ex. a remote Instance with the System API disabled)
+            return null;
+        }
+    }
+
+    // Returns whether the Metrics changed (unchanged polls are skipped so the grid isn't rebuilt and re-rendered)
+    private bool ApplyMetrics(TrakHoundApiMetrics updatedMetrics)
+    {
+        if (updatedMetrics == null) return false;
+
+        var signature = GetMetricsSignature(updatedMetrics);
+        if (signature == metricsSignature) return false;
+
+        metricsSignature = signature;
+        metrics = updatedMetrics;
+
+        // Update the existing Items in place (the Endpoints and Filter haven't changed)
+        if (cachedEndpointItems != null)
+        {
+            var endpointMetrics = GetEndpointLookup(metrics);
+            foreach (var item in cachedEndpointItems) SetMetrics(item, endpointMetrics);
+        }
+
+        return true;
+    }
+
+    private static int GetMetricsSignature(TrakHoundApiMetrics value)
+    {
+        var hash = new HashCode();
+        hash.Add(value.TotalRequestCount);
+        hash.Add(value.TotalErrorCount);
+        hash.Add(value.RequestRate);
+        hash.Add(value.AverageDuration);
+        hash.Add(value.MaxDuration);
+        hash.Add(value.LastRequested);
+
+        if (value.Endpoints != null)
+        {
+            foreach (var endpoint in value.Endpoints)
+            {
+                hash.Add(endpoint.Route);
+                hash.Add(endpoint.TotalRequestCount);
+                hash.Add(endpoint.TotalErrorCount);
+                hash.Add(endpoint.AverageDuration);
+                hash.Add(endpoint.LastRequested);
+            }
+        }
+
+        return hash.ToHashCode();
+    }
+
+    private async void MetricsTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updatingMetrics, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient metricsClient)
+            {
+                var updatedMetrics = await GetMetrics(metricsClient);
+
+                // Apply on the Renderer's thread (the Items are read while rendering)
+                await InvokeAsync(() =>
+                {
+                    if (ApplyMetrics(updatedMetrics)) StateHasChanged();
+                });
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updatingMetrics, 0);
+        }
+    }
+
+    private async Task Reload()
+    {
+        var reloadClient = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+        if (reloadClient == null) return;
+
+        reloading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (await reloadClient.Api.ReloadConfiguration(ApiId))
+            {
+                notificationService.AddNotification(NotificationType.Success, "Api Reloaded", GetRoute());
+
+                // Show the reloaded Api Information (Endpoints may have changed)
+                await Load(true);
+            }
+            else
+            {
+                notificationService.AddNotification(NotificationType.Error, "Api Reload Failed", "The Api Configuration could not be reloaded");
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Api Reload Failed", ex.Message);
+        }
+        finally
+        {
+            reloading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    private static List<TrakHoundApiEndpointInformation> GetEndpoints(TrakHoundApiInformation information)
+    {
+        var endpointInformations = new List<TrakHoundApiEndpointInformation>();
+        if (information?.Controllers == null) return endpointInformations;
+
+        foreach (var controllerInformation in information.Controllers.OrderBy(o => o.Route))
+        {
+            if (!controllerInformation.EndPoints.IsNullOrEmpty())
+            {
+                foreach (var endpointInformation in controllerInformation.EndPoints.OrderBy(o => o.Route))
+                {
+                    endpointInformation.Api = information;
+                    endpointInformation.Controller = controllerInformation;
+                    endpointInformations.Add(endpointInformation);
+                }
+            }
+        }
+
+        return endpointInformations;
+    }
+
+    private IEnumerable<EndpointItem> GetEndpointItems()
+    {
+        if (cachedEndpointItems != null) return cachedEndpointItems;
+
+        // Endpoint Metrics are keyed by Type, Method, and full Route ("/" + Controller Route + Endpoint Route)
+        var endpointMetrics = GetEndpointLookup(metrics);
+
+        var items = new List<EndpointItem>();
+        foreach (var endpoint in endpoints)
+        {
+            var route = GetEndpointRoute(endpoint.Controller, endpoint);
+
+            var item = new EndpointItem
+            {
+                Id = endpoint.Id,
+                Type = endpoint.Type.ToString(),
+                Method = endpoint.Method?.ToString(),
+                Route = route,
+                Controller = endpoint.Controller?.Name,
+                Description = endpoint.Description,
+                Link = GetViewLink(endpoint.Controller, endpoint),
+                Key = GetKey(endpoint.Controller, endpoint)
+            };
+
+            if (!MatchesFilter(item)) continue;
+
+            SetMetrics(item, endpointMetrics);
+            items.Add(item);
+        }
+
+        cachedEndpointItems = items;
+        return cachedEndpointItems;
+    }
+
+    private static void SetMetrics(EndpointItem item, Dictionary<string, TrakHoundApiEndpointMetrics> endpointMetrics)
+    {
+        if (endpointMetrics.TryGetValue(item.Key, out var endpointMetric))
+        {
+            item.TotalRequests = endpointMetric.TotalRequestCount;
+            item.TotalErrors = endpointMetric.TotalErrorCount;
+            item.AverageDuration = endpointMetric.AverageDuration;
+            item.LastRequested = endpointMetric.LastRequested;
+        }
+        else
+        {
+            item.TotalRequests = 0;
+            item.TotalErrors = 0;
+            item.AverageDuration = 0;
+            item.LastRequested = null;
+        }
+    }
+
+    private bool MatchesFilter(EndpointItem item)
+    {
+        if (string.IsNullOrWhiteSpace(endpointFilter)) return true;
+
+        var value = endpointFilter.Trim();
+        return (item.Route?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (item.Method?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (item.Controller?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (item.Description?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (item.Id?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void EndpointFilterChanged(ChangeEventArgs args)
+    {
+        endpointFilter = args.Value?.ToString();
+        cachedEndpointItems = null;
+    }
+
+    private void EndpointFilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearEndpointFilter();
+    }
+
+    private void ClearEndpointFilter()
+    {
+        endpointFilter = null;
+        cachedEndpointItems = null;
+    }
+
+
+    private string GetRoute()
+    {
+        return !string.IsNullOrEmpty(apiInformation?.Route) ? apiInformation.Route : "/";
+    }
+
+    private string GetListLink()
+    {
+        return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "api");
+    }
+
+    private string GetMetricsLink()
+    {
+        var url = Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "diagnostics/api");
+        return Url.AddQueryParameter(url, "apiId", ApiId);
+    }
+
+    private string GetViewLink(TrakHoundApiControllerInformation controller, TrakHoundApiEndpointInformation endpoint)
+    {
+        if (controller != null && endpoint != null)
+        {
+            return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "api", ApiId, controller.Id, endpoint.Id);
+        }
+
+        return null;
+    }
+
+    private string GetErrorPercent() => FormatErrorPercent(metrics?.TotalErrorCount ?? 0, metrics?.TotalRequestCount ?? 0);
+
+    private static RenderFragment RepositoryLink(string text, string link) =>
+        @<text>
+            @if (!string.IsNullOrEmpty(text))
+            {
+                <a href="@link" target="_blank" rel="noopener">@text</a>
+            }
+            else
+            {
+                <span>-</span>
+            }
+        </text>;
+
+    private static string GetRepositoryBranchLink(TrakHoundApiInformation information)
+    {
+        return Url.Combine(information.Repository, "tree", information.RepositoryBranch); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryDirectoryLink(TrakHoundApiInformation information)
+    {
+        return Url.Combine(information.Repository, "tree", information.RepositoryBranch, information.RepositoryDirectory); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryCommitLink(TrakHoundApiInformation information)
+    {
+        return Url.Combine(information.Repository, "commit", information.RepositoryCommit); // May need to revise this as this might only be valid for GitHub
+    }
+
+}

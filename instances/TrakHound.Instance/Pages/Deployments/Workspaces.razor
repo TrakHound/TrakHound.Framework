@@ -1,0 +1,875 @@
+@implements IDisposable
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationWorkspaces workspaces
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject DeploymentsService deploymentsService
+@inject TrakHound.Blazor.Services.TrakHoundDownloadService downloadService
+@using TrakHound.Blazor.Services
+@using TrakHound.Deployments
+@using TrakHound.Instance.Pages.Configuration
+@using TrakHound.Instance.Pages.Packages
+
+<div class="workspaces-panel">
+    <div class="workspaces-content">
+
+        <p class="workspaces-description muted">
+            A workspace holds the configurations and settings for another Instance. Edit it with the same pages as this Instance's configuration,
+            then <strong>Export</strong> it as a deployment to install on that Instance. Nothing in a workspace is applied to this Instance or installed here.
+            <br />Workspaces are kept in <code>@workspaces.Path</code>
+        </p>
+
+        @* New *@
+        <div class="workspace-new">
+            <input class="rz-textbox" placeholder="Workspace ID (ex. site-b)" @bind="newId" @bind:event="oninput" spellcheck="false" @onkeydown="NewKeyDown" />
+            <button class="admin-write btn btn-primary" @onclick="Create" disabled="@string.IsNullOrWhiteSpace(newId)"><span class="icon fa-solid fa-sharp fa-plus"></span>New Workspace</button>
+        </div>
+        @if (createError != null)
+        {
+            <div class="workspace-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@createError</div>
+        }
+
+        @if (ids.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-regular fa-sharp fa-layer-group"></span>
+                <span class="empty-title">No workspaces</span>
+                <span class="empty-description">Create a workspace to put together the configurations for another Instance.</span>
+            </div>
+        }
+        else
+        {
+            <table class="workspaces-table">
+                <thead>
+                    <tr>
+                        <th>Workspace</th>
+                        <th>Edit</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var id in ids)
+                    {
+                        <tr>
+                            <td><a class="workspace-name" href="@ConfigurationsService.GetLink("_admin/configuration", id)">@id</a></td>
+                            <td class="workspace-links">
+                                <a href="@ConfigurationsService.GetLink("_admin/configuration", id)">Configuration</a>
+                                <a href="@ConfigurationsService.GetLink("_admin/configuration/zones", id)">Zones</a>
+                                <a href="@ConfigurationsService.GetLink("_admin/configuration/settings", id)">Settings</a>
+                            </td>
+                            <td class="col-actions">
+                                <button class="btn btn-sm btn-command" @onclick="() => OpenDevices(id)"><span class="icon fa-solid fa-sharp fa-microchip"></span>Devices</button>
+                                <button class="btn btn-sm btn-command" @onclick="() => OpenLicenses(id)"><span class="icon fa-solid fa-sharp fa-key"></span>Licenses</button>
+                                <button class="admin-write btn btn-sm btn-command" @onclick="() => OpenExport(id)"><span class="icon fa-solid fa-sharp fa-box-archive"></span>Export</button>
+                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => deleteId = id"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+    </div>
+
+    @* Export *@
+    <Modal Class="packages-modal export-modal" Visible="@(exportId != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-box-archive"></span>
+            <span class="modal-header-title">Export @exportId</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (exportDeviceResults != null)
+            {
+                <div class="export-done">
+                    <span class="icon fa-solid fa-sharp fa-circle-check"></span>
+                    <span>Created <strong>@exportDeviceResults.Count</strong> deployments of <strong>@exportDeploymentId v@(exportVersion)</strong>, one for each device, in one file (@PackagesContext.FormatSize(exportDeviceZipSize)). The download works for 1 hour.</span>
+                </div>
+                <ul class="export-package-list">
+                    @foreach (var item in exportDeviceResults)
+                    {
+                        <li>
+                            <span class="package-id">@item.Label</span>
+                            <span class="package-source">@item.Filename</span>
+                            <span class="package-version">@item.LicenseCount.ToString("N0") licenses</span>
+                        </li>
+                    }
+                </ul>
+                <a class="btn btn-primary btn-download" href="@($"_download/{downloadKey}")" download="@downloadFilename"><span class="icon fa-solid fa-sharp fa-download"></span>Download @downloadFilename</a>
+            }
+            else if (exportResult?.Success == true)
+            {
+                <div class="export-done">
+                    <span class="icon fa-solid fa-sharp fa-circle-check"></span>
+                    <span>Created <strong>@exportDeploymentId v@(exportVersion)</strong> (@PackagesContext.FormatSize(exportResult.FileSize)) : @exportResult.Contents.ConfigurationFileCount.ToString("N0") configuration files, @exportResult.Contents.PackageCount.ToString("N0") package versions and @exportResult.Contents.LicenseCount.ToString("N0") licenses. The download works for 1 hour.</span>
+                </div>
+                <a class="btn btn-primary btn-download" href="@($"_download/{downloadKey}")" download="@downloadFilename"><span class="icon fa-solid fa-sharp fa-download"></span>Download @downloadFilename</a>
+            }
+            else
+            {
+                <div class="export-field">
+                    <label for="export-profile">Target Profile</label>
+                    <input id="export-profile" class="form-control" @bind="exportProfileName" @bind:event="oninput" spellcheck="false" disabled="@exporting" />
+                    <span class="field-hint">The configuration profile the workspace replaces on the target Instance (usually <code>default</code>)</span>
+                </div>
+                <div class="export-row">
+                    <div class="export-field">
+                        <label for="export-id">Deployment ID</label>
+                        <input id="export-id" class="form-control" @bind="exportDeploymentId" @bind:event="oninput" spellcheck="false" disabled="@exporting" />
+                    </div>
+                    <div class="export-field">
+                        <label for="export-version">Version</label>
+                        <input id="export-version" class="form-control" @bind="exportVersion" @bind:event="oninput" spellcheck="false" disabled="@exporting" />
+                    </div>
+                </div>
+                <div class="export-field">
+                    <label for="export-description">Description</label>
+                    <input id="export-description" class="form-control" @bind="exportDescription" placeholder="Optional" disabled="@exporting" />
+                </div>
+                @if (exportDevices.Count > 0)
+                {
+                    <div class="export-mode">
+                        <label class="export-check">
+                            <input type="radio" name="export-mode" checked="@(!exportForDevices)" @onchange="() => exportForDevices = false" disabled="@exporting" />
+                            <span>One deployment</span>
+                        </label>
+                        <label class="export-check">
+                            <input type="radio" name="export-mode" checked="@exportForDevices" @onchange="() => exportForDevices = true" disabled="@exporting" />
+                            <span>A deployment for each device (@exportDevices.Count)</span>
+                        </label>
+                    </div>
+                }
+
+                @if (exportForDevices)
+                {
+                    <div class="export-field">
+                        <label>Devices</label>
+                        <ul class="export-package-list">
+                            @foreach (var device in exportDevices)
+                            {
+                                var deviceLicenses = WorkspaceExport.GetDeviceLicenses(exportLicenses, device.DeviceId);
+                                var missingProducts = GetLicensedProducts().Where(o => !deviceLicenses.Any(l => l.ProductId == o)).ToList();
+
+                                <li class="@(missingProducts.Count > 0 ? "missing" : null)">
+                                    <label class="export-device-check">
+                                        <input type="checkbox" checked="@exportSelectedDevices.Contains(device.Label)" @onchange="e => ToggleExportDevice(device.Label, (bool)e.Value)" disabled="@exporting" />
+                                        <span class="package-id">@device.Label</span>
+                                    </label>
+                                    <span class="package-source" title="@device.DeviceId">@ShortDeviceId(device.DeviceId)</span>
+                                    <span class="package-version">@deviceLicenses.Count.ToString("N0") licenses@(device.Variables.Count > 0 ? $" · {device.Variables.Count} variables" : "")</span>
+                                    @if (missingProducts.Count > 0)
+                                    {
+                                        <span class="field-hint field-error">No license for @string.Join(", ", missingProducts)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        <span class="field-hint">Each deployment is for its device's ID, with its licenses and its values for the workspace's Variables (Devices). They're downloaded together in one .zip file.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="export-field">
+                        <label for="export-device">Target Device ID</label>
+                        <input id="export-device" class="form-control" @bind="exportTargetDeviceId" @bind:event="oninput" placeholder="Optional (any device)" spellcheck="false" disabled="@exporting" />
+                        <span class="field-hint">
+                            @if (string.IsNullOrWhiteSpace(exportTargetDeviceId))
+                            {
+                                @:For any device. To include licenses, enter the device's ID (<code>TrakHound.Instance device-id</code> shows it).
+                            }
+                            else if (ExportTargetDeviceId == null)
+                            {
+                                <span class="field-error">This isn't a Device ID</span>
+                            }
+                            else
+                            {
+                                @:Can only be installed on this device.
+                            }
+                        </span>
+                        @{
+                            var (included, excluded) = GetExportLicenses();
+                        }
+                        @if (exportLicenses.Licenses.Count > 0)
+                        {
+                            <span class="field-hint">
+                                @included.Count.ToString("N0") of the workspace's @exportLicenses.Licenses.Count.ToString("N0") licenses are included@(included.Count > 0 ? $" ({string.Join(", ", included.Select(o => o.ProductId).Distinct())})" : "").
+                                @if (excluded > 0 && ExportTargetDeviceId != null)
+                                {
+                                    @: The others are for other devices.
+                                }
+                            </span>
+                        }
+                    </div>
+                }
+
+                <p class="field-hint">
+                    @if (exportHasSettings)
+                    {
+                        @:The workspace's Instance Settings are included and replace the target's, including its port and address. Use Variables for settings that differ on each device (Settings page, Variable).
+                    }
+                    else
+                    {
+                        @:The workspace has no Instance Settings (they are saved on its Settings page), so the target keeps its own.
+                    }
+                </p>
+                <label class="export-check">
+                    <input type="checkbox" @bind="exportIncludeSecrets" disabled="@exporting" />
+                    <span>
+                        Include Secrets
+                        <span class="field-hint">Passwords and other secret values. Without them, the target keeps its own values. Store and send the file securely if they are included.</span>
+                    </span>
+                </label>
+
+                <div class="export-packages">
+                    <span class="export-section-title">Packages</span>
+                    @if (exportPackages == null)
+                    {
+                        <span class="muted"><span class="icon fa-solid fa-sharp fa-loader spin"></span> Finding packages..</span>
+                    }
+                    else if (exportPackages.Count == 0)
+                    {
+                        <span class="muted">The workspace's configurations don't use any packages.</span>
+                    }
+                    else
+                    {
+                        <ul class="export-package-list">
+                            @foreach (var package in exportPackages)
+                            {
+                                <li class="@(package.Source == WorkspacePackageSource.Missing ? "missing" : null)" title="@string.Join(", ", package.UsedBy)">
+                                    <span class="package-id">@package.PackageId</span>
+                                    <span class="package-version">@(package.Version != null ? $"v{package.Version}" : package.RequestedVersion.StartsWith("*") ? "latest" : $"v{package.RequestedVersion}")</span>
+                                    <span class="package-source">@GetSourceText(package.Source)</span>
+                                </li>
+                            }
+                        </ul>
+                        <span class="field-hint">Their dependencies are added when exported. Packages the target already has are kept.</span>
+                    }
+                </div>
+
+                @if (exportErrors.Count > 0)
+                {
+                    <ul class="export-errors">
+                        @foreach (var error in exportErrors)
+                        {
+                            <li><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</li>
+                        }
+                    </ul>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            @if (exportResult?.Success == true || exportDeviceResults != null)
+            {
+                <button class="btn btn-secondary" @onclick="CloseExport"><span class="icon fa-solid fa-sharp fa-xmark"></span>Close</button>
+            }
+            else
+            {
+                @if (exporting)
+                {
+                    <span class="export-progress muted"><span class="icon fa-solid fa-sharp fa-loader spin"></span>@exportProgress</span>
+                }
+                <button class="btn btn-secondary" @onclick="CloseExport" disabled="@exporting"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="admin-write btn btn-primary" @onclick="Export" disabled="@(!CanExport)" title="@GetExportHint()"><span class="icon fa-solid fa-sharp fa-box-archive"></span>Export</button>
+            }
+        </FooterContent>
+    </Modal>
+
+    @* Devices *@
+    <Modal Class="packages-modal export-modal" Visible="@(devicesId != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-microchip"></span>
+            <span class="modal-header-title">Devices for @devicesId</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="field-hint">
+                The devices this workspace is exported for. Export can create a deployment for each one, for its Device ID (<code>TrakHound.Instance device-id</code> shows it),
+                with its licenses and its own values for the workspace's Variables. An empty value uses the workspace's.
+            </p>
+
+            @foreach (var device in editDevices)
+            {
+                <div class="device-card">
+                    <div class="export-row">
+                        <div class="export-field">
+                            <label>Label</label>
+                            <input class="form-control" @bind="device.Label" @bind:event="oninput" placeholder="ex. Line 3 Press" />
+                        </div>
+                        <div class="export-field device-id-field">
+                            <label>Device ID</label>
+                            <input class="form-control" @bind="device.DeviceId" @bind:event="oninput" spellcheck="false" />
+                        </div>
+                        <button class="admin-write btn btn-link btn-icon btn-remove-device" title="Remove the device" @onclick="() => editDevices.Remove(device)"><span class="fa-regular fa-sharp fa-trash-can"></span></button>
+                    </div>
+
+                    @if (workspaceVariables.Count > 0 || device.Variables.Count > 0)
+                    {
+                        <div class="device-variables">
+                            @foreach (var name in workspaceVariables.Keys.Union(device.Variables.Keys).OrderBy(o => o, StringComparer.OrdinalIgnoreCase))
+                            {
+                                var isSecret = TrakHound.Configurations.TrakHoundSecrets.IsSecretKey(name);
+                                var value = device.Variables.GetValueOrDefault(name);
+                                var isEncrypted = TrakHound.Configurations.TrakHoundSecrets.IsEncrypted(value);
+                                var inWorkspace = workspaceVariables.ContainsKey(name);
+
+                                <code class="device-variable-name" title="@(inWorkspace ? null : "Not a Variable of the workspace")">@name@(inWorkspace ? "" : " (not in the workspace)")</code>
+                                <input class="form-control" type="@(isSecret ? "password" : "text")" value="@(isEncrypted ? "" : value)"
+                                       placeholder="@(isEncrypted ? "Saved (encrypted). Type to replace it." : isSecret ? "The workspace's value" : workspaceVariables.GetValueOrDefault(name))"
+                                       @oninput="e => SetDeviceVariable(device, name, e.Value?.ToString())" autocomplete="@(isSecret ? "new-password" : "off")" spellcheck="false" />
+                                <button class="btn btn-link btn-icon" title="Use the workspace's value" disabled="@(value == null)" @onclick="() => device.Variables.Remove(name)"><span class="fa-solid fa-sharp fa-rotate-left"></span></button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <button class="admin-write btn btn-light btn-sm" @onclick="AddDevice"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Device</button>
+
+            @if (devicesErrors.Count > 0)
+            {
+                <ul class="export-errors">
+                    @foreach (var error in devicesErrors)
+                    {
+                        <li><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</li>
+                    }
+                </ul>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => devicesId = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="SaveDevices"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span>Save</button>
+        </FooterContent>
+    </Modal>
+
+    @* Licenses *@
+    <Modal Class="packages-modal export-modal" Visible="@(licensesId != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-key"></span>
+            <span class="modal-header-title">Licenses for @licensesId</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="field-hint">
+                Licenses for the devices this workspace is exported for. An export for a Target Device ID includes that device's licenses, and installing it adds them to the device's own.
+                They aren't used on this Instance.
+            </p>
+
+            @if (licenses.Licenses.Count == 0)
+            {
+                <p class="muted">No licenses. Import the license files you received for the devices.</p>
+            }
+            else
+            {
+                <ul class="export-package-list">
+                    @foreach (var license in licenses.Licenses)
+                    {
+                        var code = TrakHound.Licenses.TrakHoundLicenseCode.Parse(license.LicenseCode);
+                        var device = code?.IsAnyDevice == true ? "Any device" : license.DeviceId ?? licenses.DeviceId;
+
+                        <li title="@license.LicenseCode">
+                            <span class="package-id">@license.ProductId</span>
+                            <span class="package-source">@(license.PublisherId ?? licenses.PublisherId ?? TrakHound.Licenses.TrakHoundLicenseManagers.DefaultPublisherId)</span>
+                            <span class="package-version" title="@device">@(device == null ? "Device not named" : device.Length > 14 ? device.Substring(0, 12) + ".." : device)</span>
+                            <button class="admin-write btn btn-link btn-icon" title="Remove" @onclick="() => RemoveLicense(license.LicenseCode)"><span class="fa-regular fa-sharp fa-trash-can"></span></button>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <div class="export-field license-import">
+                <label for="license-text">Import</label>
+                <textarea id="license-text" class="form-control" rows="4" @bind="licenseText" @bind:event="oninput" placeholder='Paste a license file, or one "ProductId LicenseCode" per line' spellcheck="false"></textarea>
+                <div class="license-import-actions">
+                    <InputFile OnChange="LicenseFileSelected" accept=".json,.txt" />
+                    <button class="admin-write btn btn-primary btn-sm" @onclick="ImportLicenses" disabled="@string.IsNullOrWhiteSpace(licenseText)"><span class="icon fa-solid fa-sharp fa-file-import"></span>Import</button>
+                </div>
+                @if (licenseMessage != null)
+                {
+                    <span class="field-hint">@licenseMessage</span>
+                }
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => licensesId = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Close</button>
+        </FooterContent>
+    </Modal>
+
+    @* Delete *@
+    <Modal Class="packages-modal" Visible="@(deleteId != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Delete Workspace?</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="modal-description">Permanently delete the workspace <strong>@deleteId</strong> and its configurations and settings? This can't be undone. This Instance isn't changed.</p>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => deleteId = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="ConfirmDelete"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete Workspace</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private List<string> ids = new List<string>();
+    private string newId;
+    private string createError;
+    private string deleteId;
+
+    // Export
+    private string exportId;
+    private string exportProfileName;
+    private string exportDeploymentId;
+    private string exportVersion;
+    private string exportDescription;
+    private bool exportHasSettings;
+    private bool exportIncludeSettings;
+    private bool exportIncludeSecrets;
+    private List<WorkspacePackage> exportPackages;
+    private readonly List<string> exportErrors = new List<string>();
+    private bool exporting;
+    private string exportProgress;
+    private TrakHoundDeploymentCreateFileResult exportResult;
+    private string downloadKey;
+    private string downloadFilename;
+    private string exportTargetDeviceId;
+    private TrakHound.Licenses.TrakHoundLicenseFile exportLicenses = new TrakHound.Licenses.TrakHoundLicenseFile();
+
+    // Export for each Device
+    private record DeviceExportItem(string Label, string Filename, int LicenseCount);
+    private List<WorkspaceDevice> exportDevices = new List<WorkspaceDevice>();
+    private readonly HashSet<string> exportSelectedDevices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private bool exportForDevices;
+    private List<DeviceExportItem> exportDeviceResults;
+    private long exportDeviceZipSize;
+
+    // Devices
+    private string devicesId;
+    private List<WorkspaceDevice> editDevices = new List<WorkspaceDevice>();
+    private Dictionary<string, string> workspaceVariables = new Dictionary<string, string>();
+    private List<string> devicesErrors = new List<string>();
+
+    // Licenses
+    private string licensesId;
+    private TrakHound.Licenses.TrakHoundLicenseFile licenses = new TrakHound.Licenses.TrakHoundLicenseFile();
+    private string licenseText;
+    private string licenseMessage;
+
+    // The Target Device ID as Device IDs are written (null if it isn't set or isn't a Device ID)
+    private string ExportTargetDeviceId => !string.IsNullOrWhiteSpace(exportTargetDeviceId) ? TrakHound.Licenses.TrakHoundDeviceId.Normalize(exportTargetDeviceId) : null;
+
+
+    [CascadingParameter]
+    public PackagesContext Notifications { get; set; }
+
+
+    private bool CanExport => exportId != null && !exporting && exportPackages != null &&
+        !exportPackages.Any(o => o.Source == WorkspacePackageSource.Missing) &&
+        WorkspaceExport.IsValidProfileName(exportProfileName?.Trim()) &&
+        (exportForDevices ? exportSelectedDevices.Count > 0 : string.IsNullOrWhiteSpace(exportTargetDeviceId) || ExportTargetDeviceId != null) &&
+        !string.IsNullOrWhiteSpace(exportDeploymentId) && !string.IsNullOrWhiteSpace(exportVersion) &&
+        !deploymentsService.IsBusy;
+
+
+    protected override void OnInitialized() => Load();
+
+    public void Dispose()
+    {
+        // A download that wasn't used is removed (which deletes its file)
+        if (downloadKey != null) downloadService.RemoveItem(downloadKey);
+    }
+
+    private void Load()
+    {
+        ids = workspaces.GetIds().ToList();
+    }
+
+    private void NewKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") Create();
+    }
+
+    private void Create()
+    {
+        var id = newId?.Trim();
+        if (string.IsNullOrEmpty(id)) return;
+
+        createError = workspaces.Create(id);
+        if (createError == null)
+        {
+            Notifications?.Notify(PackageNotificationType.Success, "Workspace Created", id);
+            newId = null;
+        }
+
+        Load();
+    }
+
+    private void ConfirmDelete()
+    {
+        var id = deleteId;
+        deleteId = null;
+        if (id == null) return;
+
+        var error = workspaces.Delete(id);
+        if (error == null) Notifications?.Notify(PackageNotificationType.Success, "Workspace Deleted", id);
+        else Notifications?.Notify(PackageNotificationType.Error, "Delete Workspace Failed", error);
+
+        Load();
+    }
+
+
+    #region "Export"
+
+    private async Task OpenExport(string id)
+    {
+        var workspace = workspaces.Get(id);
+        if (workspace == null) return;
+
+        exportId = id;
+        exportProfileName = "default";
+        exportDeploymentId = id;
+        exportVersion = "1.0.0";
+        exportDescription = null;
+        exportHasSettings = WorkspaceExport.HasSettings(workspace);
+        exportIncludeSettings = true; // A deployment configures the whole Instance (a device may have no Admin interface). Values that differ per device are Variables
+        exportIncludeSecrets = false;
+        exportTargetDeviceId = null;
+        exportLicenses = workspaces.GetLicenses(id);
+        exportDevices = workspaces.GetDevices(id);
+        exportSelectedDevices.Clear();
+        foreach (var device in exportDevices) exportSelectedDevices.Add(device.Label);
+        exportForDevices = exportDevices.Count > 0;
+        exportDeviceResults = null;
+        exportPackages = null;
+        exportErrors.Clear();
+        exportResult = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Packages that aren't installed here come from the Package Source
+            await configurationsService.InitializeSource();
+            exportPackages = await CreateExport().GetPackages(workspace);
+        }
+        catch (Exception ex)
+        {
+            exportPackages = new List<WorkspacePackage>();
+            exportErrors.Add($"The packages couldn't be found : {ex.Message}");
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private WorkspaceExport CreateExport() => new WorkspaceExport(configurationsService.PackageManager, configurationsService.PackageClient);
+
+    private async Task Export()
+    {
+        var workspace = workspaces.Get(exportId);
+        if (workspace == null || !CanExport) return;
+
+        exporting = true;
+        exportErrors.Clear();
+        exportProgress = "Preparing..";
+        await InvokeAsync(StateHasChanged);
+
+        var progress = new Progress<string>(message =>
+        {
+            exportProgress = message;
+            _ = InvokeAsync(StateHasChanged);
+        });
+
+        var profileName = exportProfileName.Trim();
+        var stagingPath = Path.Combine(deploymentsService.OutputPath, "staging", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            if (exportForDevices)
+            {
+                await ExportDevices(workspace, profileName, stagingPath, progress);
+                return;
+            }
+
+            // The workspace and its packages are copied to a staging directory, which is deployed like an Instance's directories
+            var errors = await CreateExport().Stage(workspace, exportPackages, stagingPath, profileName, exportIncludeSettings, progress);
+            if (errors.Count > 0)
+            {
+                exportErrors.AddRange(errors);
+                return;
+            }
+
+            var deployment = new TrakHoundDeployment
+            {
+                ProfileId = exportDeploymentId.Trim(),
+                Version = exportVersion.Trim(),
+                Description = string.IsNullOrWhiteSpace(exportDescription) ? null : exportDescription.Trim(),
+                BuildDate = DateTime.UtcNow
+            };
+
+            var options = new TrakHoundDeploymentCreateOptions
+            {
+                ConfigurationPath = WorkspaceExport.GetConfigurationPath(stagingPath),
+                PackagesPath = WorkspaceExport.GetPackagesPath(stagingPath),
+                Profiles = new[] { profileName },
+                Categories = WorkspaceExport.GetCategories(stagingPath, profileName),
+                IncludeSecrets = exportIncludeSecrets,
+                TargetDeviceId = ExportTargetDeviceId,
+                Licenses = exportLicenses,
+                Progress = progress
+            };
+
+            var result = await deploymentsService.Create(deployment, options);
+            if (result.Success)
+            {
+                // Downloaded from disk and deleted after an hour
+                downloadFilename = Path.GetFileName(result.FilePath);
+                downloadKey = downloadService.AddItem(new TrakHoundDownloadItem
+                {
+                    Filename = downloadFilename,
+                    ContentType = "application/zip",
+                    FilePath = result.FilePath,
+                    DeleteFileWhenRemoved = true
+                }, TimeSpan.FromHours(1));
+
+                exportResult = result;
+                Notifications?.Notify(PackageNotificationType.Success, $"Exported {deployment.ProfileId} v{deployment.Version}", $"{PackagesContext.FormatSize(result.FileSize)}. Use the Download button to save it.");
+            }
+            else
+            {
+                exportErrors.AddRange(result.Errors.Count > 0 ? result.Errors : new List<string> { "The deployment couldn't be created" });
+            }
+        }
+        catch (Exception ex)
+        {
+            exportErrors.Add(ex.Message);
+        }
+        finally
+        {
+            try { if (Directory.Exists(stagingPath)) Directory.Delete(stagingPath, true); } catch { }
+
+            exporting = false;
+            exportProgress = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // A Deployment for each selected Device, downloaded together in one .zip file
+    private async Task ExportDevices(WorkspaceConfigurationTarget workspace, string profileName, string stagingPath, IProgress<string> progress)
+    {
+        var devices = exportDevices.Where(o => exportSelectedDevices.Contains(o.Label)).ToList();
+        var deployment = new TrakHoundDeployment
+        {
+            ProfileId = exportDeploymentId.Trim(),
+            Version = exportVersion.Trim(),
+            Description = string.IsNullOrWhiteSpace(exportDescription) ? null : exportDescription.Trim(),
+            BuildDate = DateTime.UtcNow
+        };
+
+        var outputPath = Path.Combine(deploymentsService.OutputPath, Guid.NewGuid().ToString("N"));
+        var filesPath = Path.Combine(outputPath, "files");
+        var zipPath = Path.Combine(outputPath, WorkspaceExport.GetDevicesFilename(deployment));
+
+        var items = await deploymentsService.RunExclusive(async () =>
+        {
+            // The Packages are staged once and shared by every Device's Deployment
+            var errors = await CreateExport().StagePackages(exportPackages, WorkspaceExport.GetPackagesPath(stagingPath), progress);
+            if (errors.Count > 0)
+            {
+                exportErrors.AddRange(errors);
+                return null;
+            }
+
+            var options = new WorkspaceDeviceExportOptions { ProfileName = profileName, IncludeSettings = exportIncludeSettings, IncludeSecrets = exportIncludeSecrets, Licenses = exportLicenses };
+            var results = await Task.Run(() => WorkspaceExport.CreateDeviceDeployments(workspace, devices, deployment, options, stagingPath, filesPath, progress));
+
+            foreach (var failed in results.Where(o => !o.Result.Success))
+            {
+                exportErrors.AddRange(failed.Result.Errors.Select(o => $"{failed.Device.Label} : {o}"));
+            }
+            if (exportErrors.Count > 0) return null;
+
+            progress.Report("Creating the .zip file..");
+            await Task.Run(() => System.IO.Compression.ZipFile.CreateFromDirectory(filesPath, zipPath));
+            return results.Select(o => new DeviceExportItem(o.Device.Label, Path.GetFileName(o.FilePath), o.Result.Contents.LicenseCount)).ToList();
+        });
+
+        try { if (Directory.Exists(filesPath)) Directory.Delete(filesPath, true); } catch { }
+
+        if (items == null)
+        {
+            if (exportErrors.Count == 0) exportErrors.Add("Another deployment operation is running");
+            try { if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true); } catch { }
+            return;
+        }
+
+        // Downloaded from disk and deleted after an hour
+        downloadFilename = Path.GetFileName(zipPath);
+        downloadKey = downloadService.AddItem(new TrakHoundDownloadItem
+        {
+            Filename = downloadFilename,
+            ContentType = "application/zip",
+            FilePath = zipPath,
+            DeleteFileWhenRemoved = true
+        }, TimeSpan.FromHours(1));
+
+        exportDeviceZipSize = new System.IO.FileInfo(zipPath).Length;
+        exportDeviceResults = items;
+        Notifications?.Notify(PackageNotificationType.Success, $"Exported {deployment.ProfileId} v{deployment.Version} for {items.Count} devices", $"{PackagesContext.FormatSize(exportDeviceZipSize)}. Use the Download button to save it.");
+    }
+
+    private void ToggleExportDevice(string label, bool selected)
+    {
+        if (selected) exportSelectedDevices.Add(label);
+        else exportSelectedDevices.Remove(label);
+    }
+
+    // The Products the workspace has Licenses for (a Device without one is flagged)
+    private List<string> GetLicensedProducts() => exportLicenses.Licenses.Select(o => o.ProductId).Distinct().OrderBy(o => o).ToList();
+
+    private static string ShortDeviceId(string deviceId) => deviceId != null && deviceId.Length > 14 ? deviceId.Substring(0, 12) + ".." : deviceId;
+
+    private void CloseExport()
+    {
+        exportId = null;
+        exportResult = null;
+        exportDeviceResults = null;
+
+        // The download is kept for its hour (it was offered), so it isn't removed with the dialog
+        downloadKey = null;
+    }
+
+    private string GetExportHint()
+    {
+        if (exportPackages == null) return "Finding packages..";
+        if (exportPackages.Any(o => o.Source == WorkspacePackageSource.Missing)) return "Some packages aren't installed here or on the Package Source";
+        if (!WorkspaceExport.IsValidProfileName(exportProfileName?.Trim())) return "Enter the target Profile (a folder name)";
+        if (!string.IsNullOrWhiteSpace(exportTargetDeviceId) && ExportTargetDeviceId == null) return "The Target Device ID isn't a Device ID";
+        if (string.IsNullOrWhiteSpace(exportDeploymentId)) return "Enter a Deployment ID";
+        if (string.IsNullOrWhiteSpace(exportVersion)) return "Enter a Version";
+        if (deploymentsService.IsBusy) return "Another deployment operation is running";
+        return null;
+    }
+
+    // The workspace's Licenses an export for the Target Device ID includes (the same check the deployment makes), and how many it leaves out
+    private (List<TrakHound.Licenses.TrakHoundLicenseFileEntry> Included, int Excluded) GetExportLicenses()
+    {
+        var deviceId = ExportTargetDeviceId;
+        var included = deviceId != null
+            ? exportLicenses.Licenses.Where(o => TrakHound.Licenses.TrakHoundLicenseCode.Parse(o.LicenseCode)?.IsForDevice(deviceId) == true).ToList()
+            : new List<TrakHound.Licenses.TrakHoundLicenseFileEntry>();
+
+        return (included, exportLicenses.Licenses.Count - included.Count);
+    }
+
+    private static string GetSourceText(WorkspacePackageSource source)
+    {
+        switch (source)
+        {
+            case WorkspacePackageSource.Installed: return "Installed here";
+            case WorkspacePackageSource.PackageSource: return "From the Package Source";
+            default: return "Not found";
+        }
+    }
+
+    #endregion
+
+    #region "Devices"
+
+    private void OpenDevices(string id)
+    {
+        var workspace = workspaces.Get(id);
+        if (workspace == null) return;
+
+        devicesId = id;
+        editDevices = workspaces.GetDevices(id).Select(o => o.Clone()).ToList();
+        workspaceVariables = TrakHound.Configurations.TrakHoundConfigurationVariables.Read(workspace.Path);
+        devicesErrors = new List<string>();
+    }
+
+    private void AddDevice()
+    {
+        editDevices.Add(new WorkspaceDevice());
+    }
+
+    private void SetDeviceVariable(WorkspaceDevice device, string name, string value)
+    {
+        // Erasing a new value for a saved secret keeps the saved value (use the reset button to use the workspace's)
+        if (string.IsNullOrEmpty(value))
+        {
+            if (!TrakHound.Configurations.TrakHoundSecrets.IsEncrypted(device.Variables.GetValueOrDefault(name))) device.Variables.Remove(name);
+        }
+        else
+        {
+            device.Variables[name] = value;
+        }
+    }
+
+    private void SaveDevices()
+    {
+        devicesErrors = workspaces.SaveDevices(devicesId, editDevices);
+        if (devicesErrors.Count == 0)
+        {
+            Notifications?.Notify(PackageNotificationType.Success, "Devices Saved", $"{devicesId} : {editDevices.Count} devices");
+            devicesId = null;
+        }
+    }
+
+    #endregion
+
+    #region "Licenses"
+
+    private void OpenLicenses(string id)
+    {
+        licensesId = id;
+        licenses = workspaces.GetLicenses(id);
+        licenseText = null;
+        licenseMessage = null;
+    }
+
+    private async Task LicenseFileSelected(InputFileChangeEventArgs args)
+    {
+        try
+        {
+            using var reader = new StreamReader(args.File.OpenReadStream(1024 * 1024));
+            licenseText = await reader.ReadToEndAsync();
+            licenseMessage = null;
+        }
+        catch (Exception ex)
+        {
+            licenseMessage = $"Could not read '{args.File.Name}' : {ex.Message}";
+        }
+    }
+
+    private void ImportLicenses()
+    {
+        var file = TrakHound.Licenses.TrakHoundLicenseFile.Parse(licenseText);
+
+        // The file's Publisher and Device apply to the entries that don't name their own
+        var entries = file.Licenses.Select(o => new TrakHound.Licenses.TrakHoundLicenseFileEntry
+        {
+            PublisherId = o.PublisherId ?? file.PublisherId,
+            DeviceId = o.DeviceId ?? file.DeviceId,
+            ProductId = o.ProductId,
+            LicenseCode = o.LicenseCode
+        }).ToList();
+
+        try
+        {
+            var added = workspaces.AddLicenses(licensesId, entries);
+            var skipped = entries.Count - added;
+            licenseMessage = $"{added:N0} added" + (skipped > 0 ? $", {skipped:N0} skipped (already here, or not a License Code)" : "") + (file.Errors.Count > 0 ? $". {string.Join(" ", file.Errors)}" : "");
+            licenseText = null;
+        }
+        catch (Exception ex)
+        {
+            licenseMessage = ex.Message;
+        }
+
+        licenses = workspaces.GetLicenses(licensesId);
+    }
+
+    private void RemoveLicense(string licenseCode)
+    {
+        workspaces.RemoveLicense(licensesId, licenseCode);
+        licenses = workspaces.GetLicenses(licensesId);
+    }
+
+    #endregion
+
+}

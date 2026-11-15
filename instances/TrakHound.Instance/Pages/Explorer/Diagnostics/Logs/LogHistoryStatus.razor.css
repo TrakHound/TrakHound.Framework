@@ -1,0 +1,19 @@
+.log-history-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .log-history-status .icon {
+        color: var(--textLight);
+    }
+
+    .log-history-status .error {
+        color: var(--colorRed);
+    }
+
+    .log-history-status a {
+        text-decoration: none;
+    }

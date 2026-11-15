@@ -1,0 +1,118 @@
+@using TrakHound.Services
+@implements IDisposable
+
+@{
+    var data = Node.Data;
+    var faded = Context?.IsFaded(data.Key) == true;
+    var stateClass = data.Problem != null || data.Kind == RoutingMapNodeKind.MissingRouter ? "has-problem" : data.IsUnused ? "unused" : "";
+}
+
+<div class="map-node @data.Kind.ToString().ToLowerInvariant() @stateClass @(faded ? "faded" : "")">
+
+    <div class="node-header">
+        <span class="node-icon @GetIcon(data)"></span>
+        <span class="node-kind">@GetKindTitle(data)</span>
+        @if (data.Item is TargetItem target && target.Parent != null && target.Parent.Children.Count > 1)
+        {
+            var order = target.Parent.Children.ToList().IndexOf(target) + 1;
+            <span class="node-order" title="@($"Tried {RoutingNodeWidget.GetOrdinal(order)} of {target.Parent.Children.Count}")">@order</span>
+        }
+        @if (data.IsUnused)
+        {
+            <span class="node-badge" title="@(data.Kind == RoutingMapNodeKind.Router ? "No Module or Router Target sends Requests to this Router" : "No Target sends Requests to this Service")">Not used</span>
+        }
+        @if (data.Problem != null)
+        {
+            <span class="node-problem fa-solid fa-sharp fa-triangle-exclamation" title="@data.Problem"></span>
+        }
+    </div>
+
+    <span class="node-title" title="@data.Title">@data.Title</span>
+
+    @if (data.Kind == RoutingMapNodeKind.Modules)
+    {
+        <div class="node-modules">
+            @foreach (var module in data.Modules.Take(MaxModules))
+            {
+                <span class="node-module" title="@(module.IsZoneRouter ? $"Uses this Router because it is in the Zone {module.ZoneId}" : module.IsGroupRouter ? $"Uses this Router because it is in the Group {module.GroupId}" : module.Title)">
+                    @module.Name
+                    @if (module.IsZoneRouter)
+                    {
+                        <span class="node-zone fa-solid fa-sharp fa-shield-halved"></span>
+                    }
+                    else if (module.IsGroupRouter)
+                    {
+                        <span class="node-zone fa-solid fa-sharp fa-layer-group"></span>
+                    }
+                </span>
+            }
+            @if (data.Modules.Count > MaxModules)
+            {
+                <span class="node-more">+@(data.Modules.Count - MaxModules) more</span>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(data.Subtitle))
+    {
+        <span class="node-subtitle" title="@data.Subtitle">@data.Subtitle</span>
+    }
+
+    @if (data.Item is TargetItem fallbackTarget && fallbackTarget.FallbackOn != null)
+    {
+        <span class="node-subtitle" title="The results that send the Request on to the next Target">@(fallbackTarget.FallbackOn.Count > 0 ? $"Falls back on {string.Join(", ", fallbackTarget.FallbackOn)}" : "Never falls back")</span>
+    }
+
+</div>
+
+@code {
+
+    private const int MaxModules = 5;
+
+    // Filled by the Diagram
+    [Parameter]
+    public RoutingMapNodeModel Node { get; set; } = null!;
+
+    [CascadingParameter]
+    public RoutingMapContext Context { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        if (Context != null) Context.Changed += ContextChanged;
+    }
+
+    public void Dispose()
+    {
+        if (Context != null) Context.Changed -= ContextChanged;
+    }
+
+    private void ContextChanged() => _ = InvokeAsync(StateHasChanged);
+
+
+    public static string GetIcon(RoutingMapNode node)
+    {
+        switch (node.Kind)
+        {
+            case RoutingMapNodeKind.Modules: return node.Category?.Icon;
+            case RoutingMapNodeKind.Router:
+            case RoutingMapNodeKind.MissingRouter: return "fa-regular fa-chart-network";
+            case RoutingMapNodeKind.Service: return "fa-solid fa-sharp fa-server";
+            case RoutingMapNodeKind.Lane: return "fa-solid fa-sharp fa-code-branch";
+            default: return RoutingNodeWidget.GetIcon(node.Item);
+        }
+    }
+
+    public static string GetKindTitle(RoutingMapNode node)
+    {
+        switch (node.Kind)
+        {
+            case RoutingMapNodeKind.Modules: return "Modules";
+            case RoutingMapNodeKind.MissingRouter: return "Missing Router";
+            case RoutingMapNodeKind.Service: return "Service";
+            case RoutingMapNodeKind.Router: return "Router";
+            case RoutingMapNodeKind.Lane: return "Requests";
+            default: return RoutingNodeWidget.GetKindTitle(node.Item);
+        }
+    }
+
+}

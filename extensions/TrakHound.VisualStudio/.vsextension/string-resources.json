@@ -1,0 +1,6 @@
+{
+  "TrakHound.VisualStudio.PublishPackageCommand.DisplayName": "Publish TrakHound Package",
+  "TrakHound.VisualStudio.PublishPackagesCommand.DisplayName": "Publish TrakHound Packages...",
+  "TrakHound.VisualStudio.ShowPublishToolWindowCommand.DisplayName": "TrakHound Publish",
+  "TrakHound.VisualStudio.Toolbar.DisplayName": "TrakHound"
+}

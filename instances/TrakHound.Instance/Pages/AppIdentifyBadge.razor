@@ -1,0 +1,94 @@
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@using TrakHound.Apps
+@using TrakHound.Instances
+
+@* Shows the connection Code in the lower right corner for a few seconds when Identify is requested (to match a screen to its connection) *@
+@if (visible && Connection != null)
+{
+    <div class="app-identify-badge" role="status" title="Click to hide" @onclick="Hide">
+        <span class="app-identify-code">@Connection.Code</span>
+        <span class="app-identify-details">
+            <span class="app-identify-app">@(!string.IsNullOrEmpty(AppName) ? AppName : !string.IsNullOrEmpty(PackageId) ? PackageId : AppId)</span>
+            <span class="app-identify-client">@(!string.IsNullOrEmpty(Connection.ClientHostname) ? Connection.ClientHostname : Connection.ClientAddress)</span>
+        </span>
+    </div>
+}
+
+@code {
+
+    private TrakHoundAppProvider appProvider;
+    private CancellationTokenSource hideCancellation;
+    private bool visible;
+
+
+    [Parameter]
+    public string AppId { get; set; }
+
+    [Parameter]
+    public string AppName { get; set; }
+
+    /// <summary>
+    /// Shown when the App Configuration has no Name
+    /// </summary>
+    [Parameter]
+    public string PackageId { get; set; }
+
+    /// <summary>
+    /// The page's Connection (its Code is shown)
+    /// </summary>
+    [Parameter]
+    public TrakHoundAppConnection Connection { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        appProvider = instance.AppProvider as TrakHoundAppProvider;
+        if (appProvider != null) appProvider.IdentifyRequested += IdentifyRequested;
+    }
+
+    public void Dispose()
+    {
+        if (appProvider != null) appProvider.IdentifyRequested -= IdentifyRequested;
+        hideCancellation?.Cancel();
+    }
+
+    private async void IdentifyRequested(object sender, TrakHoundAppIdentifyRequest request)
+    {
+        if (request == null || Connection == null) return;
+
+        var matches = request.ConnectionId != null
+            ? request.ConnectionId == Connection.ConnectionId
+            : !string.IsNullOrEmpty(AppId) && request.AppId == AppId;
+        if (!matches) return;
+
+        // Restart the timer when Identify is requested again while showing
+        hideCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        hideCancellation = cancellation;
+
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                visible = true;
+                StateHasChanged();
+            });
+
+            await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, request.Seconds)), cancellation.Token);
+
+            await InvokeAsync(() =>
+            {
+                visible = false;
+                StateHasChanged();
+            });
+        }
+        catch { } // Cancelled (requested again, hidden, or the page closed)
+    }
+
+    private void Hide()
+    {
+        hideCancellation?.Cancel();
+        visible = false;
+    }
+}

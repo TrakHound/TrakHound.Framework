@@ -1,0 +1,84 @@
+@* Renders an ExplorerTreeNode (and its visible Children) as a TreeItem *@
+@inject ExplorerTreeViewService explorerTreeViewService
+
+@if (Node != null && Node.IsVisible)
+{
+    var isExpanded = Node.IsForcedExpanded || explorerTreeViewService.IsExpanded(Node.Id);
+    var icon = Node.IsFolder ? ExplorerTreeViewService.GetFolderIcon(isExpanded) : Node.Icon;
+    var cssClass = Node.IsFolder ? $"folder {Node.CssClass}" : Node.CssClass;
+
+    <TreeItem Id="@Node.Id"
+              Title="@Node.Title"
+              Subtitle="@Node.Subtitle"
+              Icon="@icon"
+              IconLabel="@Node.IconLabel"
+              CssClass="@cssClass"
+              Link="@Node.Link"
+              MatchLinkQueryParameters="@Node.MatchLinkQueryParameters"
+              IsCurrent="@Node.IsCurrent"
+              HeaderTemplate="@Node.Header"
+              IsExpandable="@Node.IsExpandable"
+              IsExpanded="@isExpanded"
+              IsLoading="@(Node.IsLoading || explorerTreeViewService.IsLoading(Node.Id))"
+              Expanded="Expand"
+              Collapsed="Collapse"
+              Selected="@(Node.Link != null ? Selected : default)"
+              ChildContent="@(Node.IsExpandable ? (isExpanded ? RenderChildren(Node.Children.Where(o => o.IsVisible).ToList()) : _collapsedChildren) : null)" />
+}
+
+@code {
+
+    [Parameter]
+    public ExplorerTreeNode Node { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Selected { get; set; }
+
+    // Collapsed Children aren't rendered (they're hidden anyway), which keeps large trees (ex. Api Routes, Logs) light.
+    // Non-null so that the TreeItem still shows the Expand button
+    private static readonly RenderFragment _collapsedChildren = builder => { };
+
+
+    private RenderFragment RenderChildren(IEnumerable<ExplorerTreeNode> children) =>
+        @<text>
+            @foreach (var child in children)
+            {
+                @* No @key : sibling IDs / Links are not guaranteed to be unique (ex. an App with duplicate Page routes) *@
+                <ExplorerTreeNodeItem Node="@child" Selected="@Selected" />
+            }
+        </text>;
+
+    private async Task Expand(string id)
+    {
+        if (Node.Load != null)
+        {
+            // Load the Children (ex. Service Tables) before showing them
+            explorerTreeViewService.SetLoading(Node.Id, true);
+            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                await Node.Load();
+            }
+            finally
+            {
+                explorerTreeViewService.SetLoading(Node.Id, false);
+            }
+
+            explorerTreeViewService.SetExpanded(Node.Id, true);
+            explorerTreeViewService.NotifyChanged();
+        }
+        else
+        {
+            explorerTreeViewService.SetExpanded(Node.Id, true);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task Collapse(string id)
+    {
+        explorerTreeViewService.SetExpanded(Node.Id, false);
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

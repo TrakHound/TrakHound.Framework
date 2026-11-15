@@ -1,0 +1,114 @@
+@inject ITrakHoundInstance instance
+@using TrakHound.Instances
+
+<div class="settings-metrics">
+
+    @if (PendingRestart)
+    {
+        <div class="restart-notice">
+            <span class="icon fa-solid fa-sharp fa-rotate"></span>
+            <span>The saved Metrics settings are different from the ones the Instance is running with. They are applied when the Instance is restarted.</span>
+        </div>
+    }
+
+    <SettingsSection Title="Metrics" Description="Diagnostics shown in the Explorer under Diagnostics > Metrics. Totals are kept in memory since the Instance started." Icon="fa-solid fa-sharp fa-chart-simple">
+        <SettingsField Label="Collect Metrics" Description="When disabled, no Metrics are collected (regardless of the settings below)" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsEnabled" @bind-Value:after="EditContext.Changed" />
+                <span class="switch-label">@(Model.MetricsEnabled ? "Enabled" : "Disabled")</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+
+    <SettingsSection Title="Collected Metrics" Description="API and Service Metrics are recorded on every request; the others only when something happens (a Run, a Status change, a Page view)" Icon="fa-solid fa-sharp fa-list-check" Class="@(Model.MetricsEnabled ? "" : "disabled")">
+        <SettingsField Label="API" Description="Request rate, errors, response time, endpoints and sources for each API" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsApi" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsApi)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Services" Description="Request rate, errors, response time, operations and routers for each Service" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsServices" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsServices)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Functions" Description="Runs, results, durations and recent runs for each Function" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsFunctions" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsFunctions)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Workers" Description="Uptime, restarts, errors and recent Status changes for each Worker" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsWorkers" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsWorkers)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Apps" Description="Page views and time on page for each App and Client Connection" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsApps" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsApps)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="HTTP" Description="Request rate, errors, response time and data for every HTTP Request, by area, endpoint, status code and client" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsHttp" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsHttp)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Streams" Description="Open connections, messages, data and errors for the HTTP WebSocket and Server-Sent Events streams (API, Workers, Functions, Logs and Messages)" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsStreams" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsStreams)</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="MCP" Description="Tool calls, errors, denied calls and durations, and the Clients that connect to the MCP Server" RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsMcp" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsMcp)</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+
+    <SettingsSection Title="Recent Requests" Description="Shown in the Explorer under Diagnostics > Connections. Kept in memory (even when Metrics are not collected). Sensitive Query parameter values (ex. token, apiKey) are replaced with ***." Icon="fa-solid fa-sharp fa-arrow-right-arrow-left">
+        <SettingsField Label="HTTP Requests to Keep" Description="The most recent HTTP Requests to keep, up to 10,000 (0 keeps none)" RequiresRestart="true">
+            <RadzenNumeric TValue="int" @bind-Value="@Model.HttpRequestHistory" @bind-Value:after="EditContext.Changed" Min="0" Max="@TrakHound.Http.TrakHoundHttpRequestHistory.MaxCapacity" Step="100" />
+        </SettingsField>
+        <SettingsField Label="API Requests to Keep" Description="The most recent API Requests to keep (for all APIs together), up to 10,000 (0 keeps none)" RequiresRestart="true">
+            <RadzenNumeric TValue="int" @bind-Value="@Model.ApiRequestHistory" @bind-Value:after="EditContext.Changed" Min="0" Max="@TrakHound.Instance.Api.TrakHoundApiConnectionManager.MaxRequestHistory" Step="100" />
+        </SettingsField>
+        <SettingsField Label="Closed API Streams to Keep" Description="The most recently closed API Streams to keep, with their duration, messages and close reason, up to 10,000 (0 keeps none). Open Streams are always shown." RequiresRestart="true">
+            <RadzenNumeric TValue="int" @bind-Value="@Model.ApiStreamHistory" @bind-Value:after="EditContext.Changed" Min="0" Max="@TrakHound.Instance.Api.TrakHoundApiStreamManager.MaxClosedHistory" Step="100" />
+        </SettingsField>
+    </SettingsSection>
+
+    <SettingsSection Title="CPU Monitoring" Description="Measures the CPU used by each Worker, Function Run, API, App and the Admin Interface (the time is read on every async context switch in their code)" Icon="fa-solid fa-sharp fa-microchip" Class="@(Model.MetricsEnabled ? "" : "disabled")">
+        <SettingsField Label="Measure CPU Usage" Description="Shown on the Workers pages, in Worker, Function, API and App Metrics, and as CPU by Module on the Instance Monitor tab. Disable to remove the overhead from code that awaits frequently." RequiresRestart="true">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.MetricsCpu" @bind-Value:after="EditContext.Changed" Disabled="@(!Model.MetricsEnabled)" />
+                <span class="switch-label">@GetLabel(Model.MetricsCpu)</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+
+</div>
+
+@code {
+
+    [Parameter]
+    public InstanceSettingsModel Model { get; set; }
+
+    /// <summary>
+    /// The saved settings (the Instance Configuration) are different from the ones the Runtime is using
+    /// </summary>
+    [Parameter]
+    public bool PendingRestart { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    private string GetLabel(bool value) => !Model.MetricsEnabled ? "Disabled (all Metrics)" : value ? "Enabled" : "Disabled";
+
+}

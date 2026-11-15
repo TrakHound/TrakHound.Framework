@@ -1,0 +1,59 @@
+@* Where a Request would go: the Targets in the order they are tried (a Router Target shows its Router's path inside it) *@
+@using TrakHound.Services
+
+@if (Path == null || Path.Targets.Count == 0)
+{
+    <span class="path-empty">No Route matches <code>@Path?.Route</code>, so these Requests aren't routed</span>
+}
+else
+{
+    <ol class="path-list">
+        @foreach (var target in Path.Targets)
+        {
+            var isRouter = string.Equals(target.Type, "Router", StringComparison.OrdinalIgnoreCase);
+            <li class="path-step @(target.Problem != null ? "skipped" : "")">
+                <div class="step-heading">
+                    <span class="step-icon @(isRouter ? "fa-regular fa-chart-network" : "fa-solid fa-sharp fa-server")"></span>
+                    @if (isRouter)
+                    {
+                        <span class="step-title">Router · @target.SourceName</span>
+                    }
+                    else if (target.Services.Count > 0)
+                    {
+                        <span class="step-title">@string.Join(", then ", target.Services.Select(GetServiceName))</span>
+                    }
+                    else
+                    {
+                        <span class="step-title">@(target.Source == TrakHoundServiceRoutes.Wildcard ? "Every matching Service" : target.SourceName)</span>
+                    }
+                </div>
+                @if (target.Problem != null)
+                {
+                    <span class="step-problem">@target.Problem</span>
+                }
+                else if (target != Path.Targets.Last())
+                {
+                    <span class="step-fallback">@(target.FallbackOn.Count > 0 ? $"Moves on after {string.Join(", ", target.FallbackOn)}" : "Never moves on")</span>
+                }
+                @if (target.Router != null)
+                {
+                    <RoutingPathView Path="target.Router" />
+                }
+            </li>
+        }
+    </ol>
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundServiceRoutePath Path { get; set; }
+
+
+    private static string GetServiceName(TrakHoundServiceRouteService service)
+    {
+        var name = !string.IsNullOrEmpty(service.Name) ? service.Name : service.Id;
+        return service.Routes == null ? $"{name} (kinds unknown)" : name;
+    }
+
+}

@@ -1,0 +1,394 @@
+@implements IDisposable
+@inject ExplorerService explorerService
+@using System.Text.Json.Serialization
+@using TrakHound.Api
+@using TrakHound.Blazor.Components
+@using TrakHound.Clients
+@using TrakHound.Functions
+
+<div class="information-panel">
+
+	<div class="header-panel">
+		<span class="icon fa-regular fa-sharp fa-list-check"></span>
+		<span class="title">Jobs</span>
+		<span class="subtitle">Named sets of Parameters to run the Function with (Scheduled Tasks run a Job)</span>
+	</div>
+
+	<div class="toolbar-panel">
+		<button class="admin-write btn btn-primary btn-add" @onclick="AddClicked" disabled="@(_loading || _saving)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Job</button>
+		<button class="btn btn-light btn-refresh" @onclick="RefreshClicked" disabled="@_loading"><span class="icon fa-solid fa-sharp fa-rotate @(_loading ? "spin" : null)"></span></button>
+	</div>
+
+	@if (!_loading)
+	{
+		<div class="table-panel">
+			@if (_jobs == null)
+			{
+				<div class="empty-panel">Jobs are unavailable (is the TrakHound.Functions.Api package installed?)</div>
+			}
+			else
+			{
+				<RadzenDataGrid Data="@_jobs" TItem="FunctionJob" Density="Density.Default" AllowSorting="true" AllowColumnResize="true" EmptyText="No Jobs : add a Job to save Parameters for this Function">
+					<Columns>
+						<RadzenDataGridColumn TItem="FunctionJob" Property="Name" Title="Name" Width="240px">
+							<Template Context="job">
+								<span class="job-name">@job.Name</span>
+								<span class="job-id" title="Job ID (the same on every Instance : Scheduled Tasks reference the Job by it)">@job.Id</span>
+							</Template>
+						</RadzenDataGridColumn>
+						<RadzenDataGridColumn TItem="FunctionJob" Property="Description" Title="Description" />
+						<RadzenDataGridColumn TItem="FunctionJob" Title="Parameters" Width="130px" Sortable="false">
+							<Template Context="job">
+								@if (job.Parameters?.Count > 0)
+								{
+									<span class="job-parameters" title="@job.ParametersText"><span class="icon fa-solid fa-sharp fa-sliders"></span>@job.Parameters.Count</span>
+								}
+								else
+								{
+									<span class="muted">None</span>
+								}
+							</Template>
+						</RadzenDataGridColumn>
+						<RadzenDataGridColumn TItem="FunctionJob" Title="Schedules" Width="110px" Sortable="false">
+							<Template Context="job">
+								@{ var count = GetScheduleCount(job); }
+								<span class="@(count > 0 ? null : "muted")" title="Scheduled Tasks that run this Job">@count</span>
+							</Template>
+						</RadzenDataGridColumn>
+						<RadzenDataGridColumn TItem="FunctionJob" Property="Updated" Title="Updated" Width="170px">
+							<Template Context="job">
+								<span class="muted">@job.Updated.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span>
+							</Template>
+						</RadzenDataGridColumn>
+						<RadzenDataGridColumn TItem="FunctionJob" CssClass="buttons" Width="130px" Sortable="false">
+							<Template Context="job">
+								<button class="admin-write btn btn-sm btn-link" @onclick="() => EditClicked(job)">Edit</button>
+								<button class="admin-write btn btn-sm btn-link" @onclick="() => DeleteClicked(job)">Delete</button>
+							</Template>
+						</RadzenDataGridColumn>
+					</Columns>
+				</RadzenDataGrid>
+			}
+		</div>
+	}
+	else
+	{
+		<div class="loading-panel">
+			<Loading Message="Loading Jobs.." />
+		</div>
+	}
+
+	<Modal Class="job-modal" Visible="@_editModalVisible">
+		<HeaderContent>
+			<span class="modal-header-icon fa-regular fa-sharp fa-list-check"></span>
+			<span class="modal-header-title">@(_editJobId == null ? "Add Job" : "Edit Job")</span>
+		</HeaderContent>
+		<BodyContent>
+			<div class="configuration-panel">
+				<div class="form-field">
+					<label>Name</label>
+					<RadzenTextBox @bind-Value=@_editName Immediate="true" Placeholder="ex. Nightly Cleanup" />
+				</div>
+				<div class="form-field">
+					<label>ID</label>
+					@if (_editJobId == null)
+					{
+						<RadzenTextBox @bind-Value=@_editId Immediate="true" Placeholder="@GetIdPlaceholder()" />
+						<span class="instructions">Scheduled Tasks reference the Job by its ID (an imported Task finds its Job by it). It can't be changed later</span>
+					}
+					else
+					{
+						<span class="job-id-value">@_editJobId</span>
+					}
+				</div>
+				<div class="form-field">
+					<label>Description</label>
+					<RadzenTextBox @bind-Value=@_editDescription Immediate="true" />
+				</div>
+				<div class="form-field">
+					<label>Parameters</label>
+					<ParameterEditor Items="@_editParameters" Definitions="@FunctionInformation?.Parameters" />
+					@if (_editJobId != null && GetScheduleCount(_editJobId) > 0)
+					{
+						<span class="instructions">@GetScheduleCount(_editJobId) Scheduled Task(s) run this Job : their next Run uses the new Parameters</span>
+					}
+				</div>
+			</div>
+		</BodyContent>
+		<FooterContent>
+			<button class="btn btn-secondary" @onclick="ModalCancelClicked" disabled="@_saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+			<button class="admin-write btn btn-primary" @onclick="SaveClicked" disabled="@_saving"><span class="icon fa-solid fa-sharp @(_saving ? "fa-loader spin" : "fa-check")"></span>@(_editJobId == null ? "Add" : "Save")</button>
+		</FooterContent>
+	</Modal>
+
+	<Modal Class="delete-job-modal" Visible="@_deleteModalVisible">
+		<HeaderContent>
+			<span class="modal-header-icon fa-solid fa-sharp fa-trash"></span>
+			<span class="modal-header-title">Confirm Delete</span>
+		</HeaderContent>
+		<BodyContent>
+			@{ var scheduleCount = _deleteJob != null ? GetScheduleCount(_deleteJob) : 0; }
+			@if (scheduleCount > 0)
+			{
+				<span class="delete-modal-message">This Job can't be deleted : @scheduleCount Scheduled Task(s) run it. Delete them on the Schedule tab first.</span>
+			}
+			else
+			{
+				<span class="delete-modal-message">Delete this Job? It can't be restored.</span>
+			}
+			<div class="delete-modal-items">
+				<span class="delete-item-name">@_deleteJob?.Name</span>
+				@if (!string.IsNullOrEmpty(_deleteJob?.Description))
+				{
+					<span class="delete-item-description">@_deleteJob.Description</span>
+				}
+				<span class="delete-item-id">@(_deleteJob?.Parameters?.Count ?? 0) Parameters</span>
+			</div>
+		</BodyContent>
+		<FooterContent>
+			<button class="btn btn-secondary" @onclick="ModalCancelClicked" disabled="@_saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+			<button class="admin-write btn btn-danger" @onclick="ConfirmDeleteClicked" disabled="@(_saving || GetScheduleCount(_deleteJob) > 0)"><span class="icon fa-solid fa-sharp fa-trash"></span>Delete</button>
+		</FooterContent>
+	</Modal>
+
+</div>
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+
+@code {
+
+	private string _previousFunctionId;
+	private List<FunctionJob> _jobs;
+	private List<ScheduledTask> _tasks;
+
+	private bool _loading;
+	private bool _saving;
+
+	private bool _editModalVisible;
+	private string _editJobId;
+	private string _editId;
+	private string _editName;
+	private string _editDescription;
+	private List<ParameterEditor.ParameterItem> _editParameters = new List<ParameterEditor.ParameterItem>();
+
+	private bool _deleteModalVisible;
+	private FunctionJob _deleteJob;
+
+	private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+
+	private class ScheduledTask
+	{
+		[JsonPropertyName("id")]
+		public string Id { get; set; }
+
+		[JsonPropertyName("jobId")]
+		public string JobId { get; set; }
+	}
+
+
+	[Parameter]
+	public string ServerId { get; set; }
+
+	[Parameter]
+	public TrakHoundFunctionInformation FunctionInformation { get; set; }
+
+
+	protected override void OnInitialized()
+	{
+		notificationService.Updated += NotificationsUpdated;
+	}
+
+	protected async override Task OnParametersSetAsync()
+	{
+		if (FunctionInformation?.FunctionId != _previousFunctionId)
+		{
+			_previousFunctionId = FunctionInformation?.FunctionId;
+			await Load();
+		}
+	}
+
+	void IDisposable.Dispose()
+	{
+		notificationService.Updated -= NotificationsUpdated;
+		notificationService.Dispose();
+	}
+
+	private async void NotificationsUpdated(object sender, EventArgs args)
+	{
+		try { await InvokeAsync(StateHasChanged); } catch { }
+	}
+
+	private ITrakHoundClient GetClient() => explorerService.GetClient(explorerService.SelectedInstanceId);
+
+	private async Task Load()
+	{
+		if (FunctionInformation == null) return;
+
+		_loading = true;
+		await InvokeAsync(StateHasChanged);
+
+		try
+		{
+			var client = GetClient();
+			if (client != null) await LoadJobs(client);
+		}
+		catch (Exception ex)
+		{
+			notificationService.AddNotification(NotificationType.Error, "Error Loading Jobs", ex.Message);
+		}
+		finally
+		{
+			_loading = false;
+			await InvokeAsync(StateHasChanged);
+		}
+	}
+
+	private async Task LoadJobs(ITrakHoundClient client)
+	{
+		var functionId = FunctionInformation.FunctionId;
+
+		// Null when the TrakHound.Functions.Api package isn't installed
+		_jobs = (await client.Api.GetJson<IEnumerable<FunctionJob>>(Url.Combine("functions", functionId, "jobs")))?.ToList();
+		_tasks = (await client.Api.GetJson<IEnumerable<ScheduledTask>>(Url.Combine("functions", functionId, "tasks")))?.ToList();
+	}
+
+	private int GetScheduleCount(FunctionJob job) => GetScheduleCount(job?.Id);
+
+	private int GetScheduleCount(string jobId) => jobId != null ? _tasks?.Count(o => o.JobId == jobId) ?? 0 : 0;
+
+	private async Task RefreshClicked() => await Load();
+
+
+	private void AddClicked()
+	{
+		_editJobId = null;
+		_editId = null;
+		_editName = null;
+		_editDescription = null;
+		_editParameters = new List<ParameterEditor.ParameterItem>();
+		_editModalVisible = true;
+	}
+
+	private string GetIdPlaceholder() => !string.IsNullOrWhiteSpace(_editName) ? $"{IdFromName(_editName)} (from the Name)" : "From the Name when empty";
+
+	// Same as the Functions Api (which adds "-2", "-3", .. when the ID is already used)
+	private static string IdFromName(string name)
+	{
+		var builder = new System.Text.StringBuilder();
+		foreach (var c in name.Trim().ToLowerInvariant())
+		{
+			if (c < 128 && char.IsLetterOrDigit(c)) builder.Append(c);
+			else if (builder.Length > 0 && builder[builder.Length - 1] != '-') builder.Append('-');
+		}
+		var id = builder.ToString().Trim('-');
+		return id.Length > 0 ? id : "job";
+	}
+
+	private void EditClicked(FunctionJob job)
+	{
+		_editJobId = job.Id;
+		_editName = job.Name;
+		_editDescription = job.Description;
+		_editParameters = ParameterEditor.FromDictionary(job.Parameters);
+		_editModalVisible = true;
+	}
+
+	private async Task SaveClicked()
+	{
+		if (string.IsNullOrWhiteSpace(_editName))
+		{
+			notificationService.AddNotification(NotificationType.Error, "Job Name is required");
+			return;
+		}
+
+		var job = new FunctionJob
+		{
+			Id = _editJobId == null && !string.IsNullOrWhiteSpace(_editId) ? _editId.Trim() : null, // Made from the Name when empty
+			Name = _editName.Trim(),
+			Description = _editDescription,
+			Parameters = ParameterEditor.ToDictionary(_editParameters)
+		};
+
+		_saving = true;
+		try
+		{
+			var client = GetClient();
+			if (client == null) return;
+
+			var route = _editJobId == null ? Url.Combine("functions", FunctionInformation.FunctionId, "jobs") : Url.Combine("functions", FunctionInformation.FunctionId, "jobs", _editJobId);
+			var response = await client.Api.Post(route, job);
+
+			if (response.Success)
+			{
+				_editModalVisible = false;
+				await LoadJobs(client);
+			}
+			else
+			{
+				// Keep the Modal open so the Job can be corrected
+				notificationService.AddNotification(NotificationType.Error, "Error Saving Job", GetErrorMessage(response));
+			}
+		}
+		catch (Exception ex)
+		{
+			notificationService.AddNotification(NotificationType.Error, "Error Saving Job", ex.Message);
+		}
+		finally
+		{
+			_saving = false;
+		}
+	}
+
+	private void DeleteClicked(FunctionJob job)
+	{
+		_deleteJob = job;
+		_deleteModalVisible = true;
+	}
+
+	private async Task ConfirmDeleteClicked()
+	{
+		if (_deleteJob == null) return;
+
+		_saving = true;
+		try
+		{
+			var client = GetClient();
+			if (client == null) return;
+
+			var response = await client.Api.Delete(Url.Combine("functions", FunctionInformation.FunctionId, "jobs", _deleteJob.Id));
+			if (response.Success)
+			{
+				_deleteModalVisible = false;
+				_deleteJob = null;
+				await LoadJobs(client);
+			}
+			else
+			{
+				notificationService.AddNotification(NotificationType.Error, "Error Deleting Job", GetErrorMessage(response));
+			}
+		}
+		catch (Exception ex)
+		{
+			notificationService.AddNotification(NotificationType.Error, "Error Deleting Job", ex.Message);
+		}
+		finally
+		{
+			_saving = false;
+		}
+	}
+
+	private void ModalCancelClicked()
+	{
+		_editModalVisible = false;
+		_deleteModalVisible = false;
+		_deleteJob = null;
+	}
+
+	private static string GetErrorMessage(TrakHoundApiResponse response)
+	{
+		var message = response.GetContentUtf8String();
+		return !string.IsNullOrEmpty(message) ? message : $"Status Code {response.StatusCode}";
+	}
+}

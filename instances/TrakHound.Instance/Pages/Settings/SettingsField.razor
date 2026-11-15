@@ -1,0 +1,104 @@
+@* A single Setting : the label and description on the left and the control on the right (stacked on narrow screens) *@
+
+<div class="settings-field @Class">
+    <div class="settings-field-label">
+        <span class="settings-field-title">
+            @Label
+            @if (RequiresRestart)
+            {
+                <span class="settings-badge restart" title="Applied after the Instance is restarted"><span class="icon fa-solid fa-sharp fa-rotate"></span>Restart</span>
+            }
+            @if (CanReference)
+            {
+                <button class="settings-reference-toggle @(IsReference ? "active" : null)" type="button" @onclick="ToggleReference"
+                        title="@(IsReference ? "Use a value instead of a Variable" : "Use a Variable (ex. a value that is different on each device)")">
+                    <span class="icon fa-solid fa-sharp fa-brackets-curly"></span>Variable
+                </button>
+            }
+        </span>
+        @if (!string.IsNullOrEmpty(Description))
+        {
+            <span class="settings-field-description">@Description</span>
+        }
+        @if (DescriptionContent != null)
+        {
+            <span class="settings-field-description">@DescriptionContent</span>
+        }
+    </div>
+    <div class="settings-field-control">
+        @if (IsReference)
+        {
+            var reference = References[ReferencePath];
+            <input class="rz-textbox settings-reference-input" value="@reference" placeholder="${name}" spellcheck="false" @oninput="e => SetReference(e.Value?.ToString())" />
+            @if (!TrakHound.Configurations.TrakHoundConfigurationVariables.IsReference(reference?.Trim()))
+            {
+                <span class="field-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Enter one Variable, ex. ${port} or ${env:PORT}</span>
+            }
+            else
+            {
+                <span class="settings-reference-hint">Set by the Variable (or Environment Variable) on each Instance. Without it, the default is used.</span>
+            }
+        }
+        else
+        {
+            @ChildContent
+        }
+    </div>
+</div>
+
+@code {
+
+    [Parameter]
+    public string Label { get; set; }
+
+    [Parameter]
+    public string Description { get; set; }
+
+    [Parameter]
+    public RenderFragment DescriptionContent { get; set; }
+
+    /// <summary>
+    /// Show a badge indicating the Setting is applied after a restart
+    /// </summary>
+    [Parameter]
+    public bool RequiresRestart { get; set; }
+
+    [Parameter]
+    public string Class { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    /// <summary>
+    /// The Setting's YAML path (ex. "httpPort"). With References, the Setting can be a Variable reference (ex. "${port}")
+    /// </summary>
+    [Parameter]
+    public string ReferencePath { get; set; }
+
+    /// <summary>
+    /// The Settings that are Variable references (see <see cref="InstanceSettingsModel.References"/>)
+    /// </summary>
+    [Parameter]
+    public Dictionary<string, string> References { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    private bool CanReference => ReferencePath != null && References != null;
+
+    private bool IsReference => CanReference && References.ContainsKey(ReferencePath);
+
+    private void ToggleReference()
+    {
+        if (!References.Remove(ReferencePath)) References[ReferencePath] = "${}";
+        EditContext?.Changed();
+    }
+
+    private void SetReference(string value)
+    {
+        References[ReferencePath] = value ?? "";
+        EditContext?.Changed();
+    }
+
+}

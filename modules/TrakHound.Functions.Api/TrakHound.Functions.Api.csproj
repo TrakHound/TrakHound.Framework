@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- CRON parser shared with the Scheduled Task Worker (for the Next Run / Missed Runs in the summary) -->
+		<Compile Include="..\TrakHound.ScheduledTasks.Worker\Cron\*.cs" Link="Cron\%(Filename)%(Extension)" />
+		<!-- Job and Task ID rules shared with the Scheduled Tasks Api (IDs are the same on every Instance) -->
+		<Compile Include="..\TrakHound.ScheduledTasks.Api\ConfigurationId.cs" Link="ScheduledTasks\ConfigurationId.cs" />
+		<!-- Scheduled Tasks Export / Import Documents and Results (the Schedules Import sends the Tasks to the Scheduled Tasks Api) -->
+		<Compile Include="..\TrakHound.ScheduledTasks.Api\ScheduledTaskConfiguration.cs" Link="ScheduledTasks\ScheduledTaskConfiguration.cs" />
+		<Compile Include="..\TrakHound.ScheduledTasks.Api\ScheduledTaskExport.cs" Link="ScheduledTasks\ScheduledTaskExport.cs" />
+		<Compile Include="..\TrakHound.ScheduledTasks.Api\ScheduledTaskImport.cs" Link="ScheduledTasks\ScheduledTaskImport.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="TrakHound.Functions.Api.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\debug\TrakHound.Debug.AspNetCore\TrakHound.Debug.AspNetCore.csproj" />
+	</ItemGroup>
+
+</Project>

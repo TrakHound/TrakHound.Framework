@@ -1,0 +1,35 @@
+.switch-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.switch-label {
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}
+
+.field-warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .field-warning .icon {
+        color: var(--bs-warning, #ffc107);
+    }
+
+.field-link {
+    display: block;
+    margin-top: 6px;
+    font-size: var(--fontSizeSm);
+}
+
+.trusted-proxies ::deep .list-input {
+    width: 100%;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm);
+}

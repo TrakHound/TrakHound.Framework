@@ -1,0 +1,46 @@
+.workspace-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background-color: var(--accentLight);
+    color: var(--textDark);
+    font-size: var(--fontSizeSm);
+}
+
+    .workspace-banner .icon {
+        color: var(--accent);
+    }
+
+    .workspace-banner .text {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .workspace-banner .btn {
+        flex: none;
+        white-space: nowrap;
+    }
+
+.workspace-missing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .workspace-missing .icon {
+        font-size: 2rem;
+    }
+
+    .workspace-missing .title {
+        color: var(--textDark);
+        font-size: var(--fontSizeMd);
+        font-weight: 600;
+    }

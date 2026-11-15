@@ -1,0 +1,155 @@
+@inject ExplorerService explorerService
+
+<div class="publish-panel">
+    <div class="publish-fields">
+
+        <div class="field">
+            <label>Queue<span class="required" title="Required">*</span></label>
+            <input type="text" placeholder="Queue" aria-label="Queue" @bind="@queue" @bind:event="oninput" disabled="@publishing" />
+        </div>
+
+        <div class="field">
+            <label>Content Type</label>
+            <input type="text" placeholder="text/plain; charset=utf-8" aria-label="Content Type" @bind="@contentType" @bind:event="oninput" disabled="@publishing" />
+        </div>
+
+        <div class="field field-content">
+            <label>Content</label>
+            <textarea placeholder="Content" aria-label="Content" rows="@GetContentRows()" @bind="@content" @bind:event="oninput" disabled="@publishing"></textarea>
+        </div>
+
+    </div>
+
+    <div class="publish-buttons">
+        @if (!publishing)
+        {
+            <button class="admin-write btn btn-primary" @onclick="Publish" disabled="@(!CanPublish())"><span class="icon fa-solid fa-sharp fa-paper-plane"></span>Publish</button>
+            <button class="btn btn-light" @onclick="Cancel">Cancel</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary btn-loading" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Publishing..</button>
+        }
+
+        @if (string.IsNullOrWhiteSpace(queue))
+        {
+            <span class="publish-note">Enter a Queue</span>
+        }
+        else
+        {
+            <span class="publish-note">Published as a persistent Message (the Queue is created if it doesn't exist)</span>
+        }
+    </div>
+</div>
+
+@code {
+
+    private string queue;
+    private string content;
+    private string contentType;
+    private bool publishing;
+    private string previousQueue;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    /// <summary>
+    /// The default Queue (ex. the Queue that is currently selected)
+    /// </summary>
+    [Parameter]
+    public string Queue { get; set; }
+
+    [Parameter]
+    public EventCallback<PublishResult> Published { get; set; }
+
+    [Parameter]
+    public EventCallback<PublishResult> PublishFailed { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+
+    public class PublishResult
+    {
+        public string Queue { get; set; }
+        public int Size { get; set; }
+        public string MessageId { get; set; }
+        public string Message { get; set; }
+    }
+
+
+    protected override void OnParametersSet()
+    {
+        // Only reset the Queue when the parameter changes (so a typed Queue is not overwritten on re-render)
+        if (Queue != previousQueue)
+        {
+            previousQueue = Queue;
+            queue = Queue;
+        }
+    }
+
+    private bool CanPublish()
+    {
+        // Empty Content publishes an empty Message
+        return !string.IsNullOrWhiteSpace(queue);
+    }
+
+    private int GetContentRows()
+    {
+        var lines = content?.Split('\n').Length ?? 1;
+        return Math.Clamp(lines, 1, 12);
+    }
+
+    private async Task Publish()
+    {
+        if (!CanPublish() || publishing) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null) return;
+
+        var result = new PublishResult
+        {
+            Queue = queue.Trim(),
+            Size = System.Text.Encoding.UTF8.GetByteCount(content ?? "")
+        };
+
+        publishing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var options = !string.IsNullOrWhiteSpace(contentType) ? new TrakHound.Services.MessageQueues.TrakHoundQueuePublishOptions { ContentType = contentType.Trim() } : null;
+            var response = await client.Services.MessageQueues.Publish(result.Queue, content ?? "", options, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                result.MessageId = response.Result?.MessageId;
+                // Keep the Queue and Content so the same Message can be published again
+                await Published.InvokeAsync(result);
+            }
+            else
+            {
+                result.Message = Index.GetErrorMessage(response.StatusCode, response.Message);
+                await PublishFailed.InvokeAsync(result);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Message = ex.Message;
+            await PublishFailed.InvokeAsync(result);
+        }
+
+        publishing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Cancel()
+    {
+        content = null;
+        await Cancelled.InvokeAsync();
+    }
+
+}

@@ -1,0 +1,232 @@
+/* Styled like the Api Run tab's Request Parameters table */
+.parameter-editor {
+    width: 100%;
+}
+
+.parameter-table {
+    border-top: 1px solid var(--tableBorderColor);
+    border-left: 1px solid var(--tableBorderColor);
+}
+
+    .parameter-table .table {
+        margin: 0;
+        border-top: none !important;
+    }
+
+    .parameter-table thead {
+        border: none !important;
+        border-bottom: 1px solid var(--tableHeaderBorderColor) !important;
+    }
+
+    /* The wrapper draws the top border (.table-bordered would add a second one, in the text color) */
+    .parameter-table thead tr {
+        border-top: none;
+    }
+
+    .parameter-table th {
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        border: none !important;
+        border-bottom: 1px solid var(--tableHeaderBorderColor) !important;
+        padding: 2px 8px;
+        background: var(--tableHeaderBackground) !important;
+        color: var(--tableHeaderText) !important;
+    }
+
+    .parameter-table td {
+        font-size: var(--fontSizeMd);
+        line-height: 20px;
+        padding: 4px 8px;
+        height: auto;
+        vertical-align: top;
+    }
+
+.name-cell {
+    white-space: nowrap;
+    cursor: help;
+}
+
+    .name-cell .parameter-name {
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .name-cell .required {
+        margin-left: 3px;
+        font-weight: bold;
+        color: var(--colorRed);
+    }
+
+    /* A Parameter the Function doesn't describe (its Name is edited) */
+    .parameter-table td.name-cell.editable {
+        width: 35%;
+        padding: 2px;
+        cursor: auto;
+    }
+
+.type-cell {
+    width: 1%;
+    font-size: var(--fontSizeSm) !important;
+    color: var(--textMild);
+    white-space: nowrap;
+}
+
+.parameter-table td.value-cell {
+    width: 100%;
+    min-width: 120px;
+    padding: 2px;
+}
+
+.value-cell ::deep .text-box,
+.name-cell ::deep .text-box {
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+}
+
+    .value-cell ::deep .text-box .form-group,
+    .name-cell ::deep .text-box .form-group {
+        padding: 0;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    .value-cell ::deep .text-box input,
+    .name-cell ::deep .text-box input {
+        width: 100%;
+        font-size: var(--fontSizeMd) !important;
+        border-radius: 0;
+        border: 1px solid var(--inputPrimaryBorder) !important;
+        padding: 0px 8px !important;
+        height: 26px !important;
+        background: var(--inputPrimaryBackground) !important;
+        color: var(--inputPrimaryText) !important;
+    }
+
+        .value-cell ::deep .text-box input::placeholder,
+        .name-cell ::deep .text-box input::placeholder {
+            color: var(--inputPrimaryPlaceholder);
+            font-size: var(--fontSizeSm) !important;
+            font-style: normal;
+        }
+
+        .value-cell ::deep .text-box input:focus,
+        .name-cell ::deep .text-box input:focus {
+            outline: none;
+            box-shadow: var(--focusRing);
+        }
+
+/* Lined up with the text fields (dropdown-sm makes it as tall) */
+.value-cell ::deep .rz-dropdown {
+    display: flex;
+    flex-direction: row !important; /* Radzen's column direction would center the label horizontally */
+    align-items: center;
+    width: 100%;
+    min-height: 0;
+    padding: 0 22px 0 8px !important;
+    border-radius: 0;
+    font-size: var(--fontSizeMd);
+}
+
+    .value-cell ::deep .rz-dropdown .rz-dropdown-label {
+        flex: 1 1 auto;
+        padding: 0 !important;
+        line-height: 28px;
+        text-align: left;
+    }
+
+        /* Radzen's hidden select would otherwise take space in the row, before the label */
+        .value-cell ::deep .rz-dropdown .rz-helper-hidden-accessible {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+        }
+
+        .value-cell ::deep .rz-dropdown .rz-dropdown-label.rz-placeholder {
+            font-size: var(--fontSizeSm);
+            color: var(--inputPrimaryPlaceholder);
+        }
+
+.value-cell ::deep .rz-textarea {
+    display: block;
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
+    font-family: var(--fontMono, monospace);
+    font-size: var(--fontSizeSm) !important;
+    border-radius: 0;
+    border: 1px solid var(--inputPrimaryBorder) !important;
+    background: var(--inputPrimaryBackground) !important;
+    margin: 0;
+    padding: 5px 10px !important;
+    color: var(--inputPrimaryText) !important;
+}
+
+    .value-cell ::deep .rz-textarea:focus {
+        outline: none;
+        box-shadow: var(--focusRing);
+    }
+
+/* A JSON Parameter's row and the full width row with its editor below it read as one */
+.parameter-table tr.continued td {
+    border-bottom: none;
+}
+
+/* A Required Parameter without a value, or a value that doesn't fit */
+tr.missing .parameter-name {
+    color: var(--colorRed);
+}
+
+tr.missing ::deep .text-box input,
+tr.missing ::deep .rz-textarea,
+tr.missing ::deep .rz-dropdown {
+    border-color: var(--colorRed) !important;
+    background: color-mix(in srgb, var(--colorRed) 12%, var(--inputPrimaryBackground)) !important;
+}
+
+.buttons-cell {
+    width: 1%;
+    text-align: center;
+}
+
+.btn-remove {
+    border: none;
+    background: none;
+    padding: 0 4px;
+    line-height: 22px;
+    color: var(--textLight);
+    cursor: pointer;
+}
+
+    .btn-remove:hover {
+        color: var(--colorRed);
+    }
+
+.parameter-empty {
+    display: block;
+    margin-bottom: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+.btn-add-parameter {
+    margin-top: 8px;
+    padding: 0;
+    text-decoration: none;
+}
+
+.parameter-warning {
+    display: block;
+    margin-top: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--colorOrange);
+}
+
+    .parameter-warning.error {
+        color: var(--colorRed);
+    }
+
+    .parameter-warning .icon {
+        margin-right: 6px;
+    }

@@ -1,0 +1,26 @@
+.browse-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.browser-panel {
+    height: 100%;
+    overflow: hidden;
+}
+
+.updates-hint {
+    margin-left: auto;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .updates-hint .icon {
+        margin-right: 6px;
+        color: var(--accentLight);
+    }
+
+    .updates-hint a {
+        color: var(--accentLight);
+    }

@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Remove="trakhound.package.json" />
+	  <Content Include="trakhound.package.publish.json" Condition="Exists('trakhound.package.publish.json')">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	    <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+	    <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+	  </Content>
+	  <None Include="trakhound.package.json" />
+	</ItemGroup>
+
+</Project>

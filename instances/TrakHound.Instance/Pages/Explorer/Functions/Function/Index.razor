@@ -1,0 +1,216 @@
+﻿@page "/_admin/explorer/{instanceId}/functions/{functionId}"
+@page "/_admin/explorer/{instanceId}/functions/{functionId}/{page}"
+@inject ExplorerService explorerService
+@inject NavigationManager navigationManager
+@using TrakHound.Clients
+@using TrakHound.Functions
+
+<TrakHoundPageTitle Text="@($"{FunctionId} - Functions")" />
+
+@if (!loading)
+{
+    if (functionInformation != null)
+    {
+        <div class="endpoint-panel">
+
+            <div class="header-panel">
+                <Header FunctionInformation="@functionInformation" />
+            </div>
+
+            <div class="tab-panel">
+
+                @* Tabs are rendered on the client (so state such as a running Function is kept when switching tabs) but are only created once they have been opened *@
+                <RadzenTabs RenderMode="TabRenderMode.Client" SelectedIndex="@selectedTabIndex" SelectedIndexChanged="SelectedTabChanged">
+                    <Tabs>
+
+                        <RadzenTabsItem Text="Information">
+                            @if (visitedTabs.Contains(InformationTab))
+                            {
+                                <Information ServerId="@InstanceId" FunctionInformation="@functionInformation" />
+                            }
+                        </RadzenTabsItem>
+
+                        <RadzenTabsItem Text="Run">
+                            @if (visitedTabs.Contains(RunTab))
+                            {
+                                <Run ServerId="@InstanceId" FunctionInformation="@functionInformation" RerunId="@Rerun" />
+                            }
+                        </RadzenTabsItem>
+
+                        <RadzenTabsItem Text="History">
+                            @if (visitedTabs.Contains(HistoryTab))
+                            {
+                                <History ServerId="@InstanceId" FunctionInformation="@functionInformation" />
+                            }
+                        </RadzenTabsItem>
+
+                        <RadzenTabsItem Text="Jobs">
+                            @if (visitedTabs.Contains(JobsTab))
+                            {
+                                <Jobs ServerId="@InstanceId" FunctionInformation="@functionInformation" />
+                            }
+                        </RadzenTabsItem>
+
+                        <RadzenTabsItem Text="Schedule">
+                            @if (visitedTabs.Contains(ScheduleTab))
+                            {
+                                <Schedule ServerId="@InstanceId" FunctionInformation="@functionInformation" />
+                            }
+                        </RadzenTabsItem>
+
+                        <RadzenTabsItem Text="Volume">
+                            @if (visitedTabs.Contains(VolumeTab))
+                            {
+                                <TrakHound.Instance.Pages.Explorer.VolumeExplorer VolumeId="@functionInformation.VolumeId" Client="@client" />
+                            }
+                        </RadzenTabsItem>
+
+                    </Tabs>
+                </RadzenTabs>
+
+            </div>
+
+        </div>
+    }
+    else
+    {
+        <div class="not-found-panel">
+            <div class="not-found-container">
+                <span class="icon fa-solid fa-sharp fa-ban"></span>
+                <span class="title">Function Not Found</span>
+                <span class="subtitle">@FunctionId</span>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <span class="subtitle">@errorMessage</span>
+                }
+            </div>
+        </div>
+    }
+}
+else
+{
+    <Loading Message="@loadingMessage" />
+}
+
+@code {
+
+    private const int InformationTab = 0;
+    private const int RunTab = 1;
+    private const int HistoryTab = 2;
+    private const int JobsTab = 3;
+    private const int ScheduleTab = 4;
+    private const int VolumeTab = 5;
+
+    private static readonly string[] tabPages = { "information", "run", "history", "jobs", "scheduled-tasks", "volume" };
+
+    private string previousInstanceId;
+    private string previousFunctionId;
+    private string previousPage;
+    private int selectedTabIndex;
+    private readonly HashSet<int> visitedTabs = new HashSet<int>();
+    private TrakHoundFunctionInformation functionInformation;
+    private ITrakHoundClient client;
+    private string errorMessage;
+
+    private bool loading = true;
+    private string loadingMessage = "Loading Function..";
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string FunctionId { get; set; }
+
+    [Parameter]
+    public string Page { get; set; }
+
+    /// <summary>
+    /// A Run whose Job and Input Parameters the Run tab is filled with (the Run page's Run Again)
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "rerun")]
+    public string Rerun { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        await explorerService.LoadInstance(InstanceId);
+
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId || FunctionId != previousFunctionId)
+        {
+            previousInstanceId = explorerService.SelectedInstanceId;
+            previousFunctionId = FunctionId;
+
+            loading = true;
+            loadingMessage = "Loading Function..";
+            functionInformation = null;
+            errorMessage = null;
+            visitedTabs.Clear();
+            visitedTabs.Add(selectedTabIndex);
+            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                client = explorerService.GetClient(explorerService.SelectedInstanceId);
+                if (client != null)
+                {
+                    // Get Function
+                    functionInformation = await client.Functions.GetInformation(FunctionId);
+
+                    if (functionInformation != null)
+                    {
+                        // Set Explorer Breadcrumbs
+                        var breadcrumbItems = new List<BreadcrumbItem>();
+                        breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+                        breadcrumbItems.Add(new BreadcrumbItem("Functions", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions")));
+                        breadcrumbItems.Add(new BreadcrumbItem(functionInformation.FunctionId, null));
+                        explorerService.BreadcrumbItems = breadcrumbItems;
+                    }
+                }
+                else
+                {
+                    errorMessage = "Client Not Found";
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+            }
+            finally
+            {
+                loading = false;
+                loadingMessage = null;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        if (Page != previousPage)
+        {
+            previousPage = Page;
+
+            var index = Page != null ? Array.IndexOf(tabPages, Page.ToLower()) : InformationTab;
+            if (index < 0 && Page?.ToLower() == "schedule") index = ScheduleTab;
+            selectedTabIndex = index >= 0 ? index : InformationTab;
+            visitedTabs.Add(selectedTabIndex);
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SelectedTabChanged(int index)
+    {
+        if (index >= 0 && index < tabPages.Length)
+        {
+            selectedTabIndex = index;
+            visitedTabs.Add(index);
+
+            navigationManager.NavigateTo(Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions", previousFunctionId, tabPages[index]));
+        }
+    }
+
+}

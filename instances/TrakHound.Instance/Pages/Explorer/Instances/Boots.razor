@@ -1,0 +1,199 @@
+@* The recent Boots of the Instance process : when each Started, how long it took, the Warnings and Errors, and how it ended *@
+@inject ExplorerService explorerService
+@using TrakHound.Instances
+
+<div class="boots-panel">
+
+    <div class="boots-toolbar">
+        <span class="boots-summary">
+            @if (boots.Count > 0)
+            {
+                var unclean = boots.Count(o => o.Status == TrakHoundInstanceBootStatus.Unclean || o.Status == TrakHoundInstanceBootStatus.Crashed || o.Status == TrakHoundInstanceBootStatus.Failed);
+                var durations = boots.Where(o => o.BootDuration != null).Select(o => o.BootDuration.Value.TotalMilliseconds).ToList();
+
+                <span>@boots.Count @(boots.Count == 1 ? "Boot" : "Boots")</span>
+                @if (durations.Count > 0)
+                {
+                    <span class="separator">·</span><span>Average boot time @FormatDuration(durations.Average())</span>
+                }
+                <span class="separator">·</span>
+                @if (unclean > 0)
+                {
+                    <span class="problem">@unclean did not shut down cleanly</span>
+                }
+                else
+                {
+                    <span>All shut down cleanly</span>
+                }
+            }
+        </span>
+        <span class="boots-actions">
+            <BootDownloadButton Boots="@boots" Label="JSON" Title="Download the Boots with everything recorded (steps, Runtime Starts, Log entries and Exceptions)" />
+            <BootDownloadButton Boots="@boots" Csv="true" Label="CSV" Title="Download a summary of the Boots, one row per Boot" />
+            <button class="btn btn-sm btn-light" @onclick="Load" disabled="@loading"><span class="icon fa-solid fa-sharp fa-rotate @(loading ? "spin" : null)"></span>Refresh</button>
+        </span>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="boots-message problem">@errorMessage</div>
+    }
+    else if (!loading && boots.Count == 0)
+    {
+        <div class="boots-message">No Boots have been recorded yet</div>
+    }
+    else if (boots.Count > 0)
+    {
+        var maxBoot = Math.Max(1, boots.Max(o => o.BootDuration?.TotalMilliseconds ?? 0));
+
+        <table class="table table-sm boots-table">
+            <thead>
+                <tr>
+                    <th class="col-expand"></th>
+                    <th class="col-status">Status</th>
+                    <th class="col-started">Started</th>
+                    <th class="col-boot">Boot Time</th>
+                    <th class="col-log">Warnings / Errors</th>
+                    <th class="col-starts">Runtime Starts</th>
+                    <th class="col-uptime">Uptime</th>
+                    <th class="col-reason">Ended</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var boot in boots)
+                {
+                    var expanded = expandedIds.Contains(boot.Id);
+                    var isCurrent = boot.Id == currentBootId;
+                    var warnings = boot.Log?.WarningCount ?? 0;
+                    var errors = boot.Log?.ErrorCount ?? 0;
+                    var starts = boot.Starts?.Count ?? 0;
+                    var failedStarts = boot.Starts?.Count(o => !o.Success) ?? 0;
+
+                    <tr class="boot-row @(expanded ? "expanded" : null)" @onclick="() => Toggle(boot.Id)">
+                        <td class="col-expand"><span class="icon fa-solid fa-sharp @(expanded ? "fa-chevron-down" : "fa-chevron-right")"></span></td>
+                        <td class="col-status">
+                            <span class="boot-status status-@boot.Status.ToString().ToLower()"><span class="boot-status-dot"></span>@boot.Status</span>
+                            @if (isCurrent)
+                            {
+                                <span class="current-tag" title="This process">Current</span>
+                            }
+                        </td>
+                        <td class="col-started" title="@($"PID {boot.ProcessId}{(string.IsNullOrEmpty(boot.Version) ? "" : $" · v{boot.Version}")}")">@FormatTimestamp(boot.Started)</td>
+                        <td class="col-boot">
+                            @if (boot.BootDuration != null)
+                            {
+                                <span class="boot-bar"><span class="boot-bar-value" style="@BarWidth(boot.BootDuration.Value.TotalMilliseconds, maxBoot)"></span></span>
+                                <span class="boot-time">@FormatDuration(boot.BootDuration.Value.TotalMilliseconds)</span>
+                            }
+                            else
+                            {
+                                <span class="muted">-</span>
+                            }
+                        </td>
+                        <td class="col-log">
+                            <span class="@(warnings > 0 ? "warning" : "muted")">@warnings</span><span class="muted"> / </span><span class="@(errors > 0 ? "problem" : "muted")">@errors</span>
+                        </td>
+                        <td class="col-starts">
+                            @starts@if (failedStarts > 0) {<span class="problem"> (@failedStarts failed)</span>}
+                        </td>
+                        <td class="col-uptime">@FormatUptime(boot)</td>
+                        <td class="col-reason" title="@boot.Reason">@(boot.Status == TrakHoundInstanceBootStatus.Running || boot.Status == TrakHoundInstanceBootStatus.Starting ? "" : boot.Reason)</td>
+                    </tr>
+
+                    @if (expanded)
+                    {
+                        <tr class="boot-details-row">
+                            <td colspan="8">
+                                <BootDetails Boot="@boot" />
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    }
+
+</div>
+
+@code {
+
+    private const int _take = 100;
+
+    private List<TrakHoundInstanceBoot> boots = new List<TrakHoundInstanceBoot>();
+    private readonly HashSet<string> expandedIds = new HashSet<string>();
+    private string currentBootId;
+    private string errorMessage;
+    private bool loading;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+
+        // Show the newest Boot's details without a click
+        var first = boots.FirstOrDefault();
+        if (first != null) expandedIds.Add(first.Id);
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        errorMessage = null;
+
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                boots = (await client.Instances.GetBoots(_take))?.ToList() ?? new List<TrakHoundInstanceBoot>();
+            }
+            else
+            {
+                errorMessage = "Client Not Found";
+            }
+
+            currentBootId = TrakHound.Instance.TrakHoundInstanceLifetimeMonitor.BootId;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void Toggle(string id)
+    {
+        if (!expandedIds.Remove(id)) expandedIds.Add(id);
+    }
+
+    private static string BarWidth(double value, double max) => FormattableString.Invariant($"width: {Math.Clamp(value / max * 100, 1, 100):0.##}%;");
+
+    internal static string FormatUptime(TrakHoundInstanceBoot boot)
+    {
+        var uptime = TrakHound.Instance.Boots.TrakHoundBootExport.GetUptime(boot, DateTime.UtcNow);
+        return uptime != null ? FormatDuration(uptime.Value.TotalMilliseconds) : "-";
+    }
+
+    internal static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+
+        if (duration.TotalSeconds < 1) return $"{milliseconds:0} ms";
+        if (duration.TotalMinutes < 1) return $"{duration.TotalSeconds:0.0} s";
+        if (duration.TotalHours < 1) return $"{duration.Minutes}m {duration.Seconds}s";
+        if (duration.TotalDays < 1) return $"{duration.Hours}h {duration.Minutes}m";
+        return $"{(int)duration.TotalDays}d {duration.Hours}h";
+    }
+
+    internal static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? $"Today {local:HH:mm:ss}" : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

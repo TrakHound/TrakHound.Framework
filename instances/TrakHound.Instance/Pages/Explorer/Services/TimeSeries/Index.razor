@@ -1,0 +1,256 @@
+@page "/_admin/explorer/{instanceId}/services/time-series/{configurationId}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Blazor.Services
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="@($"{GetServiceName()} - TimeSeries")" />
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="time-series-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-chart-line"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">@GetServiceName()</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="Load"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <button class="admin-write btn @(showWrite ? "btn-secondary" : "btn-light")" @onclick="() => showWrite = !showWrite"><span class="icon fa-solid fa-sharp fa-plus"></span>Write</button>
+
+        <div class="filter">
+            <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" placeholder="Filter Measurements" aria-label="Filter Measurements" @bind="@filter" @bind:event="oninput" />
+            @if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <button class="btn-clear-filter" title="Clear Filter" @onclick="() => filter = null"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            }
+        </div>
+
+    </div>
+
+    <div class="write-container">
+        @if (showWrite)
+        {
+            <WritePanel InstanceId="@InstanceId" ConfigurationId="@ConfigurationId" Written="PointWritten" WriteFailed="PointWriteFailed" Cancelled="() => showWrite = false" />
+        }
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (errorMessage != null)
+            {
+                <div class="empty-panel error">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <span class="empty-title">Measurements could not be Loaded</span>
+                    <span class="empty-description">@errorMessage</span>
+                </div>
+            }
+            else if (measurements.Count > 0)
+            {
+                var items = GetItems();
+                if (items.Count > 0)
+                {
+                    <div class="table-panel">
+                        <RadzenDataGrid Data="@items" TItem="string" Density="Density.Compact" AllowSorting="false" AllowColumnResize="true">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="string" CssClass="buttons view-cell" Width="75px" Sortable="false">
+                                    <Template Context="item">
+                                        <a href="@GetMeasurementLink(item)" class="btn btn-sm btn-link"><span class="icon fa-regular fa-sharp fa-chart-line"></span>View</a>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="string" Title="Measurement" MinWidth="200px">
+                                    <Template Context="item">
+                                        <a href="@GetMeasurementLink(item)" class="item-link">@item</a>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-panel">
+                        <span class="empty-title">No matching Measurements</span>
+                        <span class="empty-description">No Measurements match "@filter?.Trim()"</span>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-chart-line"></span>
+                    <span class="empty-title">No Measurements</span>
+                    <span class="empty-description">Write a Point to create a Measurement</span>
+                    @if (!showWrite)
+                    {
+                        <button class="admin-write btn btn-light btn-empty-action" @onclick="() => showWrite = true"><span class="icon fa-solid fa-sharp fa-plus"></span>Write</button>
+                    }
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Measurements.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private List<string> measurements = new List<string>();
+    private TrakHoundServiceInformation service;
+    private string previousKey;
+    private string filter;
+    private string errorMessage;
+    private bool showWrite;
+    private bool loading = true;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        // Only reload when navigating to a different Service
+        var key = $"{InstanceId}:{ConfigurationId}";
+        if (key != previousKey)
+        {
+            previousKey = key;
+            filter = null;
+            showWrite = false;
+
+            await explorerService.LoadInstance(InstanceId);
+            service = explorerService.GetServices(InstanceId, ConfigurationId);
+
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+            breadcrumbItems.Add(new BreadcrumbItem("TimeSeries", Url.Combine("_admin/explorer", InstanceId, "services", "time-series")));
+            breadcrumbItems.Add(new BreadcrumbItem(GetServiceName(), null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            await Load();
+        }
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        errorMessage = null;
+        measurements = new List<string>();
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client != null)
+        {
+            try
+            {
+                var response = await client.Services.TimeSeries.ListMeasurements(routerId: ConfigurationId);
+                if (response.Success)
+                {
+                    measurements = response.Result?.OrderBy(o => o, StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>();
+                }
+                else
+                {
+                    errorMessage = !string.IsNullOrEmpty(response.Message) ? response.Message : $"Status Code {response.StatusCode}";
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+            }
+        }
+        else
+        {
+            errorMessage = $"Instance {InstanceId} is not available";
+        }
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private List<string> GetItems()
+    {
+        if (string.IsNullOrWhiteSpace(filter)) return measurements;
+
+        var value = filter.Trim();
+        return measurements.Where(o => o.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private async Task PointWritten(string measurement)
+    {
+        notificationService.AddNotification(NotificationType.Success, "Point Written", measurement);
+        await Load();
+    }
+
+    private void PointWriteFailed(string message)
+    {
+        notificationService.AddNotification(NotificationType.Error, "Write Failed", message);
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string GetServiceName()
+    {
+        return !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+    }
+
+    private string GetDescription()
+    {
+        var description = !string.IsNullOrEmpty(service?.Description) ? service.Description : "TimeSeries Service";
+        if (!string.IsNullOrEmpty(service?.PackageId)) description += $" · {service.PackageId}";
+        if (!loading && errorMessage == null) description += measurements.Count == 1 ? " · 1 Measurement" : $" · {measurements.Count:N0} Measurements";
+        return description;
+    }
+
+    private string GetMeasurementLink(string measurement)
+    {
+        return Url.Combine("_admin/explorer", InstanceId, "services", "time-series", ConfigurationId, "measurement", Uri.EscapeDataString(measurement));
+    }
+
+}

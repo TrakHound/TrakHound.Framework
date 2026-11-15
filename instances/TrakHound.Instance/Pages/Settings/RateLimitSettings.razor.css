@@ -1,0 +1,28 @@
+.switch-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.switch-label {
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}
+
+.numeric-control {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+    .numeric-control .units {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+/* Sections that don't apply while Rate Limits are disabled */
+.settings-rate-limits ::deep .settings-section.disabled .settings-field-title,
+.settings-rate-limits ::deep .settings-section.disabled .settings-field-description {
+    opacity: 0.5;
+}

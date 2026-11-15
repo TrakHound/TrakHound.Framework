@@ -1,0 +1,109 @@
+﻿.text-box {
+    margin: 0px;
+}
+
+    .text-box .title {
+        font-size: 12px;
+        color: var(--textDark);
+        margin-bottom: 4px;
+    }
+
+    .text-box .subtitle {
+        color: var(--textMild);
+        margin-left: 5px;
+    }
+
+    .text-box .form-group {
+        margin-bottom: 0px;
+    }
+
+    .text-box input {
+        background: var(--inputBackground) !important;
+        border: 1px solid var(--inputBorder) !important;
+        border-radius: 0;
+        color: var(--inputText);
+        height: auto !important;
+        padding: 15px 25px;
+        font-size: 24px;
+    }
+
+    .text-box.small input {
+        font-size: 15px !important;
+        line-height: 36px !important;
+        height: 42px !important;
+        padding: 7px 15px;
+    }
+
+    .text-box input:hover {
+        background: var(--inputBackgroundHover) !important;
+        border: 1px solid var(--inputBorderHover) !important;
+        color: var(--inputTextHover) !important;
+    }
+
+    .text-box input:focus {
+        background: var(--inputBackgroundHighlight) !important;
+        border: 1px solid var(--inputBorderHighlight) !important;
+        color: var(--inputTextHighlight) !important;
+    }
+
+    .text-box input.disabled,
+    .text-box input:disabled {
+        background: var(--inputBackgroundDisabled) !important;
+        border: 1px dashed var(--inputBorderDisabled) !important;
+        color: var(--inputTextDisabled) !important;
+        cursor: not-allowed;
+    }
+
+    .text-box input::placeholder {
+        font-size: 15px !important;
+        color: var(--inputPlaceholder);
+        font-style: normal;
+    }
+
+    .text-box input:hover::placeholder {
+        color: var(--inputPlaceholderHover) !important;
+    }
+
+    .text-box input:focus::placeholder {
+        color: var(--inputPlaceholderHighlight) !important;
+    }
+
+    .text-box input.disabled::placeholder {
+        color: var(--inputPlaceholderDisabled) !important;
+    }
+
+    .text-box.small input::placeholder {
+        font-size: 15px !important;
+    }
+
+
+/* PasswordBox (rendered by TextBox with RootClass="password-box") */
+
+.password-box {
+    margin: 5px 0px 10px;
+}
+
+    .password-box .title {
+        font-size: 12px;
+        color: var(--textDark);
+        margin-bottom: 2px;
+    }
+
+    .password-box .subtitle {
+        color: var(--textMild);
+        margin-left: 5px;
+    }
+
+    .password-box .form-group {
+        margin-bottom: 0px;
+    }
+
+    .password-box input {
+        height: auto !important;
+        padding: 7px 12px;
+    }
+
+        .password-box input::placeholder {
+            font-size: 12px;
+            font-style: italic;
+        }

@@ -1,0 +1,11 @@
+{
+  "id": "TrakHound.Example.Worker",
+  "category": "worker",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Example Worker that reads a simulated sensor and writes the recent readings to a Volume",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "examples/TrakHound.Example.Worker",
+    ".defaultVolumeId": "trakhound.example"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "TrakHound.Packages.Api": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "_debug",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51099;http://localhost:51104"
+    }
+  }
+}

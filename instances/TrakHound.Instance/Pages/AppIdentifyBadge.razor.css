@@ -1,0 +1,55 @@
+.app-identify-badge {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100vw - 32px);
+    padding: 8px 12px;
+    border-radius: 6px;
+    background-color: #1f2937;
+    color: #f9fafb;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.2;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+    border-left: 4px solid #60a5fa;
+    cursor: pointer;
+    animation: app-identify-in 0.15s ease-out;
+}
+
+.app-identify-code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.app-identify-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 11px;
+    color: #cbd5e1;
+}
+
+.app-identify-app,
+.app-identify-client {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 220px;
+}
+
+@keyframes app-identify-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

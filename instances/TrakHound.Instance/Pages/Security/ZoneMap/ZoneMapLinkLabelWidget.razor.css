@@ -1,0 +1,46 @@
+.zone-map-label {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    max-width: 220px;
+    padding: 3px 8px;
+    font-size: var(--fontSizeXs, 11px);
+    line-height: 15px;
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--accentLight);
+    border-radius: 4px;
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    user-select: none;
+}
+
+    .zone-map-label.denied {
+        border-left-color: var(--bs-danger, #dc3545);
+    }
+
+    .zone-map-label.would-deny {
+        border-left-color: var(--bs-warning, #ffc107);
+    }
+
+    .zone-map-label.caller {
+        border-left-color: var(--bs-success, #198754);
+    }
+
+    .zone-map-label.router {
+        border-left-color: var(--textMild);
+    }
+
+.zone-map-label-title {
+    font-weight: bold;
+}
+
+.zone-map-label-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.zone-map-label-more {
+    color: var(--textMild);
+}

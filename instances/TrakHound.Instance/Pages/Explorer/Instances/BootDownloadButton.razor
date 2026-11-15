@@ -1,0 +1,89 @@
+@* Downloads Boots as JSON (everything recorded) or CSV (one summary row per Boot) *@
+@inject TrakHound.Blazor.Services.TrakHoundDownloadService downloadService
+@inject IJSRuntime javascript
+@using TrakHound.Instance.Boots
+@using TrakHound.Instances
+
+<button class="btn btn-sm btn-light" disabled="@(preparing || GetBoots().Count == 0)" title="@Title" @onclick="Download"><span class="icon fa-solid fa-sharp @(preparing ? "fa-loader spin" : "fa-download")"></span>@Label</button>
+
+@if (downloadKey != null)
+{
+    <a id="@downloadElementId" href="@($"_download/{downloadKey}")" download="@downloadFilename" style="display: none"></a>
+}
+
+@code {
+
+    private readonly string downloadElementId = $"boot-download-{Guid.NewGuid():N}";
+    private string downloadKey;
+    private string downloadFilename;
+    private bool preparing;
+
+
+    /// <summary>
+    /// The Boots to download (as a JSON array, or CSV rows)
+    /// </summary>
+    [Parameter]
+    public IEnumerable<TrakHoundInstanceBoot> Boots { get; set; }
+
+    /// <summary>
+    /// One Boot to download (as a JSON object, or one CSV row). Used instead of Boots
+    /// </summary>
+    [Parameter]
+    public TrakHoundInstanceBoot Boot { get; set; }
+
+    [Parameter]
+    public bool Csv { get; set; }
+
+    [Parameter]
+    public string Label { get; set; }
+
+    [Parameter]
+    public string Title { get; set; }
+
+
+    private List<TrakHoundInstanceBoot> GetBoots() => Boot != null ? new List<TrakHoundInstanceBoot> { Boot } : Boots?.Where(o => o != null).ToList() ?? new List<TrakHoundInstanceBoot>();
+
+    private async Task Download()
+    {
+        var boots = GetBoots();
+        if (preparing || boots.Count == 0) return;
+
+        preparing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Build the file off the Circuit's thread so the spinner shows
+            await Task.Run(() => Prepare(boots));
+
+            // Render the Link, then click it
+            await InvokeAsync(StateHasChanged);
+            await javascript.InvokeVoidAsync("JsFunctions.clickElement", downloadElementId);
+        }
+        finally
+        {
+            preparing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Prepare(List<TrakHoundInstanceBoot> boots)
+    {
+        // The previous download is left to expire, not removed: Chrome may not have fetched it yet (ex. after a quick second click)
+        var name = Boot != null ? $"boot-{Boot.Started.ToLocalTime():yyyyMMdd-HHmmss}-{Boot.ProcessId}" : $"boots-{DateTime.Now:yyyyMMdd-HHmmss}";
+        downloadFilename = $"{name}.{(Csv ? "csv" : "json")}";
+
+        // A BOM so Excel reads the CSV as UTF-8
+        var content = Csv
+            ? System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(TrakHoundBootExport.ToCsv(boots))).ToArray()
+            : System.Text.Encoding.UTF8.GetBytes(Boot != null ? TrakHoundBootExport.ToJson(Boot) : TrakHoundBootExport.ToJson(boots));
+
+        downloadKey = downloadService.AddItem(new TrakHound.Blazor.Services.TrakHoundDownloadItem
+        {
+            Filename = downloadFilename,
+            ContentType = Csv ? "text/csv" : "application/json",
+            Content = content
+        }, TimeSpan.FromMinutes(5));
+    }
+
+}

@@ -1,0 +1,58 @@
+@{
+    var edge = Label.Edge;
+    var title = GetTitle(edge.Kind);
+    var details = edge.Details.Take(MaxDetails).ToList();
+    var more = edge.Details.Count - details.Count;
+}
+
+@if (title != null || details.Count > 0)
+{
+    <div class="zone-map-label @GetClass(edge.Kind)" title="@string.Join("\n", edge.Details)">
+        @if (title != null)
+        {
+            <span class="zone-map-label-title">@title</span>
+        }
+        @foreach (var detail in details)
+        {
+            <span class="zone-map-label-detail">@detail</span>
+        }
+        @if (more > 0)
+        {
+            <span class="zone-map-label-more">+@more more</span>
+        }
+    </div>
+}
+
+@code {
+
+    private const int MaxDetails = 3;
+
+    // Filled by the Diagram
+    [Parameter]
+    public ZoneMapLinkLabelModel Label { get; set; } = null!;
+
+
+    private static string GetTitle(ZoneMapEdgeKind kind)
+    {
+        switch (kind)
+        {
+            case ZoneMapEdgeKind.Denied: return "Denied";
+            case ZoneMapEdgeKind.WouldDeny: return "Would Deny";
+            case ZoneMapEdgeKind.AllowedCaller: return "Allowed Caller";
+            default: return null;
+        }
+    }
+
+    private static string GetClass(ZoneMapEdgeKind kind)
+    {
+        switch (kind)
+        {
+            case ZoneMapEdgeKind.Denied: return "denied";
+            case ZoneMapEdgeKind.WouldDeny: return "would-deny";
+            case ZoneMapEdgeKind.AllowedCaller: return "caller";
+            case ZoneMapEdgeKind.Router: return "router";
+            default: return "rule";
+        }
+    }
+
+}

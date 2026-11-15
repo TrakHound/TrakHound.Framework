@@ -1,0 +1,11 @@
+{
+  // Settings for the local debug host (Program.cs, Debug.razor and DebugRoutes.razor). Left out of the package
+  "instanceUrl": "{instanceUrl}",
+  "apiKey": "",
+
+  // Configuration Parameters (as set in the App's Configuration on an Instance)
+  "parameters": {},
+
+  // The Theme shown until one is picked: "light" or "dark"
+  "theme": "light"
+}

@@ -1,0 +1,33 @@
+.information-panel {
+    padding-top: 20px;
+    height: 100%;
+    overflow: auto;
+}
+
+    /* All sections share one width so their edges line up */
+    .information-panel .table {
+        border: none;
+        width: 100%;
+        max-width: 800px;
+        min-width: min(600px, 100%);
+    }
+
+        .information-panel .table td {
+            font-size: var(--fontSizeSm);
+            padding: 5px 15px;
+        }
+
+            .information-panel .table td.label {
+                width: 200px;
+                font-weight: 600;
+                color: var(--textMild);
+            }
+
+            .information-panel .table td.value {
+                padding-right: 50px;
+                overflow-wrap: anywhere; /* Long values (ex. the Package Hash) wrap instead of widening the table */
+            }
+
+            .information-panel .table td.chart {
+                padding: 10px 15px 5px;
+            }

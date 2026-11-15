@@ -1,0 +1,1301 @@
+@page "/_admin/explorer/{instanceId}/functions-board"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using System.Text.Json.Serialization
+@using TrakHound.Api
+@using TrakHound.Clients
+@using TrakHound.Functions
+
+<TrakHoundPageTitle Text="Schedule Board" />
+
+<div class="schedule-board-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-table-columns"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Schedule Board</span>
+                <span class="header-description">Drag a Function onto a column to schedule it · drag a card between columns to change its schedule</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        <button class="admin-write btn btn-primary" @onclick="AddColumnClicked" disabled="@(loading || items == null)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Column</button>
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <div class="btn-group">
+            <button class="btn btn-light" @onclick="() => schedulesTransfer.Export()" disabled="@(loading || items == null)" title="Download the Jobs and Scheduled Tasks of every Function (to import on another Instance)"><span class="icon fa-solid fa-sharp fa-file-export"></span>Export</button>
+            <button class="admin-write btn btn-light" @onclick="() => schedulesTransfer.ShowImport()" disabled="@(loading || items == null)" title="Import Jobs and Scheduled Tasks from an Export"><span class="icon fa-solid fa-sharp fa-file-import"></span>Import</button>
+        </div>
+
+        @if (busy)
+        {
+            <span class="busy-message"><span class="icon fa-regular fa-loader spin"></span>Saving..</span>
+        }
+
+        @if (undoAction != null)
+        {
+            <div class="undo-panel">
+                <span class="undo-message">@undoAction.Message</span>
+                <button class="admin-write btn btn-sm btn-link" @onclick="UndoClicked" disabled="@busy">Undo</button>
+                <button class="admin-write btn btn-sm btn-link btn-dismiss" @onclick="() => undoAction = null" title="Dismiss"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            </div>
+        }
+
+    </div>
+
+    @if (!loading && items != null)
+    {
+        @* Polls and re-renders on its own, so the cards below only re-render when what they show changes *@
+        <WorkerStatusPanel Paused="@(busy || createModalVisible || columnModalVisible || confirmModalVisible || deleteModalVisible)" LiveTasksUpdated="@LiveTasksUpdated" />
+    }
+
+    @if (!loading)
+    {
+        if (items == null)
+        {
+            <div class="empty-panel">
+                <span class="icon fa-regular fa-sharp fa-calendar-clock"></span>
+                <span class="empty-title">Scheduled Tasks Unavailable</span>
+                <span class="empty-description">Install the TrakHound.Functions.Api and TrakHound.ScheduledTasks packages to schedule Functions</span>
+            </div>
+        }
+        else
+        {
+            <div class="board-panel">
+                <RadzenDropZoneContainer TItem="BoardItem"
+                                         Data="@items"
+                                         ItemSelector="@ItemSelector"
+                                         CanDrop="@CanDrop"
+                                         Drop="@OnDrop"
+                                         ItemRender="@OnItemRender">
+                    <Template Context="item">
+                        @if (item.Task == null && item.Job != null)
+                        {
+                            <div class="palette-card palette-job" title="@($"Drag onto a column to schedule this Job\n{item.Job.ParametersText}")">
+                                <span class="icon fa-regular fa-sharp fa-list-check"></span>
+                                <span class="palette-name">@item.Job.Name</span>
+                                @if (item.Job.Parameters?.Count > 0)
+                                {
+                                    <span class="palette-count" title="@item.Job.ParametersText">@item.Job.Parameters.Count</span>
+                                }
+                            </div>
+                        }
+                        else if (item.Task == null)
+                        {
+                            <div class="palette-card" title="@($"{item.FunctionId}\nDrag onto a column to schedule (without Parameters)")">
+                                <span class="icon fa-solid fa-sharp fa-code"></span>
+                                <span class="palette-name">@FormatFunctionId(item.FunctionId)</span>
+                                @if (item.TaskCount > 0)
+                                {
+                                    <span class="palette-count" title="@item.TaskCount Scheduled Tasks">@item.TaskCount</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            var task = item.Task;
+                            var overlap = IsOverlapping(item);
+                            <div class="task-card @(task.Enabled ? null : "paused") @(overlap ? "overlap" : null)">
+                                <div class="task-card-header">
+                                    <a class="task-function" href="@GetFunctionLink(item.FunctionId, "scheduled-tasks")" title="@item.FunctionId" draggable="false">@FormatFunctionId(item.FunctionId)</a>
+                                    <button class="admin-write btn-card" title="@(task.Enabled ? "Pause (disable) this Scheduled Task" : "Resume (enable) this Scheduled Task")" disabled="@busy" @onclick="() => ToggleEnabledClicked(item)" @onclick:stopPropagation="true"><span class="fa-solid fa-sharp @(task.Enabled ? "fa-pause" : "fa-play")"></span></button>
+                                    <button class="admin-write btn-card btn-delete" title="Delete Scheduled Task" disabled="@busy" @onclick="() => DeleteClicked(item)" @onclick:stopPropagation="true"><span class="fa-regular fa-sharp fa-trash"></span></button>
+                                </div>
+                                @if (!string.IsNullOrEmpty(task.Description))
+                                {
+                                    <span class="task-description">@task.Description</span>
+                                }
+                                @if (!string.IsNullOrEmpty(task.TimeZone))
+                                {
+                                    <span class="task-timezone" title="Time Zone"><span class="icon fa-regular fa-sharp fa-globe"></span>@task.TimeZone</span>
+                                }
+                                @if (!string.IsNullOrEmpty(task.ScheduleError))
+                                {
+                                    <span class="task-warning"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>Invalid schedule</span>
+                                }
+                                <div class="task-metrics">
+                                    @if (task.Enabled)
+                                    {
+                                        <span title="@FormatTimestamp(task.NextRun)"><span class="icon fa-regular fa-sharp fa-clock"></span>@FormatRelative(task.NextRun)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="paused-label"><span class="icon fa-solid fa-sharp fa-pause"></span>Paused</span>
+                                    }
+                                    @if (task.LastStatusCode != null)
+                                    {
+                                        <span class="result @GetResultClass(task.LastStatusCode.Value)" title="Last Run @FormatTimestamp(task.LastRun)">@task.LastStatusCode</span>
+                                    }
+                                    <span title="Runs in the last 24 hours">@task.RunCount.ToString("N0") runs</span>
+                                    @if (task.RunCount > 0)
+                                    {
+                                        <span class="@(task.ErrorCount > 0 ? "error" : null)" title="@task.ErrorCount.ToString("N0") errors">@($"{task.SuccessRate:0.#}%")</span>
+                                    }
+                                </div>
+                                @{ var live = GetLiveStatus(task.Id); }
+                                @if (live != null && (live.Running > 0 || live.Waiting > 0 || live.SkippedCount + live.DroppedCount > 0))
+                                {
+                                    <div class="task-live">
+                                        @if (live.Running > 0)
+                                        {
+                                            <span class="live running" title="Started @FormatTimestamp(live.RunStarted)"><span class="icon fa-regular fa-loader spin"></span>Running @FormatElapsed(live.RunStarted)</span>
+                                        }
+                                        else if (live.Waiting > 0)
+                                        {
+                                            <span class="live waiting" title="Waiting for a Run Slot or the previous Run"><span class="icon fa-regular fa-hourglass-half"></span>Waiting @FormatElapsed(live.WaitingSince)</span>
+                                        }
+                                        @if (live.SkippedCount + live.DroppedCount > 0)
+                                        {
+                                            <span class="live skipped" title="Since the Worker started : @live.SkippedCount skipped (previous Run still in progress), @live.DroppedCount dropped (waited past the next occurrence)">@(live.SkippedCount + live.DroppedCount) skipped</span>
+                                        }
+                                    </div>
+                                }
+                                @if (overlap)
+                                {
+                                    <span class="task-warning" title="Runs take longer than the schedule interval, so occurrences are skipped while the previous Run is in progress"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Avg run @FormatDuration(item.AverageDuration) is longer than the interval</span>
+                                }
+                                else if (task.Enabled && task.MissedRunCount > 0)
+                                {
+                                    <span class="task-warning" title="Scheduled occurrences without a Run in the last 24 hours"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@task.MissedRunCount.Value.ToString("N0") missed</span>
+                                }
+                                @if (!string.IsNullOrEmpty(task.JobId))
+                                {
+                                    var job = GetJob(item.FunctionId, task.JobId);
+                                    if (job != null)
+                                    {
+                                        <span class="task-job" title="@job.ParametersText"><span class="icon fa-regular fa-sharp fa-list-check"></span>@job.Name</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="task-warning" title="@task.JobId"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>Job Not Found</span>
+                                    }
+                                }
+                            </div>
+                        }
+                    </Template>
+                    <ChildContent>
+                        <RadzenDropZone Value="@_paletteKey" class="board-column palette-column">
+                            <div class="column-header">
+                                <span class="column-title">Functions</span>
+                                <span class="column-subtitle">drag to schedule</span>
+                            </div>
+                            <div class="palette-filter">
+                                <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                                <input type="text" placeholder="Filter by function, job, or package" aria-label="Filter Functions" value="@filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+                                @if (!string.IsNullOrWhiteSpace(filter))
+                                {
+                                    <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(filter) && !items.Any(o => o.Task == null && MatchesFilter(o)))
+                            {
+                                <div class="column-empty">No matching Functions</div>
+                            }
+                        </RadzenDropZone>
+
+                        @foreach (var column in columns)
+                        {
+                            var tasks = items.Where(o => o.Task != null && GetColumnKey(o.Task.Schedule) == column.Key).ToList();
+                            var enabledCount = tasks.Count(o => o.Task.Enabled);
+                            <RadzenDropZone Value="@column.Key" class="board-column">
+                                <div class="column-header">
+                                    <span class="column-title" title="@column.Schedule">@column.Title</span>
+                                    <span class="column-count">@tasks.Count</span>
+                                    <button class="admin-write btn-column-remove" title="@GetRemoveColumnTitle(column, tasks.Count)" disabled="@(busy || !CanRemoveColumn(column, tasks.Count))" @onclick="() => RemoveColumnClicked(column)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                                    <span class="column-subtitle">@GetColumnSubtitle(column, enabledCount)</span>
+                                </div>
+                                @if (tasks.Count == 0)
+                                {
+                                    <div class="column-empty">Drop here</div>
+                                }
+                            </RadzenDropZone>
+                        }
+                    </ChildContent>
+                </RadzenDropZoneContainer>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+    @* Create a Scheduled Task (dropped from the Functions palette) *@
+    <Modal Class="board-modal" Visible="@createModalVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-calendar-clock"></span>
+            <span class="modal-header-title">Schedule Function</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="configuration-panel">
+                <div class="form-field">
+                    <label>Function</label>
+                    <span class="form-value">@createFunctionId</span>
+                </div>
+                <div class="form-field">
+                    <label>Job</label>
+                    @if (createJob != null)
+                    {
+                        <span class="form-value">@createJob.Name</span>
+                        @if (createJob.Parameters?.Count > 0)
+                        {
+                            <div class="form-parameters">
+                                @foreach (var parameter in createJob.Parameters)
+                                {
+                                    <span class="form-parameter"><span class="form-parameter-name">@parameter.Key</span> = @parameter.Value</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="instructions">This Job has no Parameters</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="form-value muted">No Job : the Function runs without Parameters</span>
+                        <span class="instructions">To run with Parameters, add a Job on the Function's Jobs tab and drag the Job instead</span>
+                    }
+                </div>
+                <div class="form-field">
+                    <label>Schedule</label>
+                    <span class="form-value">@createColumn?.Title <span class="form-schedule">@createColumn?.Schedule</span></span>
+                    @if (createColumn?.IntervalSeconds < 60)
+                    {
+                        <span class="fast-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Runs more than once a minute (@((3600 / createColumn.IntervalSeconds.Value).ToString("N0")) runs per hour)</span>
+                    }
+                </div>
+                <div class="form-field">
+                    <label>Description</label>
+                    <RadzenTextBox @bind-Value=@createDescription Immediate="true" />
+                </div>
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="CreateSaveClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-check"></span>Schedule</button>
+        </FooterContent>
+    </Modal>
+
+    @* Add a Schedule column *@
+    <Modal Class="board-modal" Visible="@columnModalVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-table-columns"></span>
+            <span class="modal-header-title">Add Column</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="configuration-panel">
+                <div class="form-field">
+                    <label>Schedule</label>
+                    <RadzenTextBox @bind-Value=@columnSchedule Placeholder="*/2 * * * *" Immediate="true" />
+                    <div class="template-buttons">
+                        <button class="btn btn-sm btn-secondary" @onclick="@(() => SetColumnTemplate("*/2 * * * *", "2 min"))">Every 2m</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="@(() => SetColumnTemplate("*/30 * * * *", "30 min"))">Every 30m</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="@(() => SetColumnTemplate("0 */6 * * *", "6 hours"))">Every 6hr</button>
+                        <button class="btn btn-sm btn-secondary" @onclick="@(() => SetColumnTemplate("0 8 * * 1-5", "Weekdays 8:00"))">Weekdays 8am</button>
+                    </div>
+                    <span class="instructions">CRON expression (5 fields, or 6 with seconds first) : See <a href="https://crontab.cronhub.io/" target="_blank">Here</a> for examples</span>
+                </div>
+                <div class="form-field">
+                    <label>Title</label>
+                    <RadzenTextBox @bind-Value=@columnTitle Placeholder="(optional) ex. Weekdays 8:00" Immediate="true" />
+                </div>
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="ColumnSaveClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-plus"></span>Add</button>
+        </FooterContent>
+    </Modal>
+
+    @* Confirm moving an existing Task to a schedule that runs more than once a minute *@
+    <Modal Class="board-modal" Visible="@confirmModalVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+            <span class="modal-header-title">Confirm Schedule</span>
+        </HeaderContent>
+        <BodyContent>
+            <span class="confirm-message">Run <b>@pendingMove?.Item.FunctionId</b> on <b>@pendingMove?.Column.Title</b>? That's @(pendingMove?.Column.IntervalSeconds > 0 ? (3600 / pendingMove.Column.IntervalSeconds.Value).ToString("N0") : "0") runs per hour.</span>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="ConfirmMoveClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-check"></span>Schedule</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="board-modal" Visible="@deleteModalVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-trash"></span>
+            <span class="modal-header-title">Confirm Delete</span>
+        </HeaderContent>
+        <BodyContent>
+            <span class="confirm-message">Delete the Scheduled Task for <b>@deleteItem?.FunctionId</b> (@deleteItem?.Task?.Schedule)?</span>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="ConfirmDeleteClicked" disabled="@busy"><span class="icon fa-solid fa-sharp fa-trash"></span>Delete</button>
+        </FooterContent>
+    </Modal>
+
+    <SchedulesTransfer @ref="schedulesTransfer" Notifications="@notificationService" Imported="@(() => Load(true))" />
+
+</div>
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+
+@code {
+
+    private SchedulesTransfer schedulesTransfer;
+
+    private const int _updateInterval = 10000;
+    private const string _paletteKey = "palette";
+
+    public class BoardColumn
+    {
+        /// <summary>
+        /// The normalized Schedule
+        /// </summary>
+        public string Key => Schedule;
+
+        public string Title { get; set; }
+        public string Schedule { get; set; }
+
+        public double? IntervalSeconds { get; set; }
+
+        /// <summary>
+        /// A saved column (can be removed when no Tasks use it). Unsaved columns are shown for Schedules that Tasks use
+        /// </summary>
+        public bool Saved { get; set; }
+    }
+
+    public class ScheduleColumn
+    {
+        [JsonPropertyName("schedule")]
+        public string Schedule { get; set; }
+
+        [JsonPropertyName("title")]
+        public string Title { get; set; }
+
+        [JsonPropertyName("intervalSeconds")]
+        public double? IntervalSeconds { get; set; }
+    }
+
+    /// <summary>
+    /// CRON expressions shown in the same column as an equivalent one (ex. from the Schedule tab's "Every 1hr" button)
+    /// </summary>
+    private static readonly Dictionary<string, string> _scheduleAliases = new Dictionary<string, string>
+    {
+        { "*/1 * * * *", "* * * * *" },
+        { "0 * * * * *", "* * * * *" },
+        { "0 */1 * * *", "0 * * * *" }
+    };
+
+    /// <summary>
+    /// Shown (not removable) when the Functions.Api doesn't have saved columns (ex. an older version)
+    /// </summary>
+    private static readonly BoardColumn[] _defaultColumns = new[]
+    {
+        new BoardColumn { Title = "5 sec", Schedule = "*/5 * * * * *", IntervalSeconds = 5 },
+        new BoardColumn { Title = "10 sec", Schedule = "*/10 * * * * *", IntervalSeconds = 10 },
+        new BoardColumn { Title = "30 sec", Schedule = "*/30 * * * * *", IntervalSeconds = 30 },
+        new BoardColumn { Title = "1 min", Schedule = "* * * * *", IntervalSeconds = 60 },
+        new BoardColumn { Title = "5 min", Schedule = "*/5 * * * *", IntervalSeconds = 300 },
+        new BoardColumn { Title = "15 min", Schedule = "*/15 * * * *", IntervalSeconds = 900 },
+        new BoardColumn { Title = "1 hour", Schedule = "0 * * * *", IntervalSeconds = 3600 },
+        new BoardColumn { Title = "1 day", Schedule = "0 0 * * *", IntervalSeconds = 86400 }
+    };
+
+    public class BoardItem
+    {
+        public string FunctionId { get; set; }
+
+        /// <summary>
+        /// Null for a Function or Job in the palette
+        /// </summary>
+        public FunctionTaskSummary Task { get; set; }
+
+        public string PackageId { get; set; }
+
+        /// <summary>
+        /// A Job in the palette (scheduled with its Parameters)
+        /// </summary>
+        public FunctionJob Job { get; set; }
+
+        /// <summary>
+        /// The Function's average Run duration (milliseconds) in the last 24 hours
+        /// </summary>
+        public double AverageDuration { get; set; }
+
+        public int TaskCount { get; set; }
+    }
+
+    private class UndoAction
+    {
+        public string Message { get; set; }
+        public string FunctionId { get; set; }
+        public string TaskId { get; set; }
+
+        /// <summary>
+        /// The Task was created (Undo deletes it)
+        /// </summary>
+        public bool Created { get; set; }
+
+        public string PreviousSchedule { get; set; }
+        public bool PreviousEnabled { get; set; }
+
+        /// <summary>
+        /// A removed column (Undo adds it back)
+        /// </summary>
+        public BoardColumn RemovedColumn { get; set; }
+    }
+
+    private class PendingMove
+    {
+        public BoardItem Item { get; set; }
+        public BoardColumn Column { get; set; }
+    }
+
+    private List<BoardItem> items;
+    private List<BoardColumn> columns = new List<BoardColumn>();
+
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    // The summaries and saved columns the items were built from (so an unchanged update doesn't rebuild every card)
+    private string itemsSignature;
+
+    // Live state of each Task from the Worker Status (polled by the WorkerStatusPanel)
+    private Dictionary<string, ScheduledTaskStatus> liveTasks = new Dictionary<string, ScheduledTaskStatus>(); // Task ID => Status
+
+    // The time based text the cards showed when the board was last rendered (Next Run countdowns, Running / Waiting times)
+    private string renderedLiveSignature;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string filter;
+    private string loadingMessage;
+    private bool busy;
+    private bool lastChangeSucceeded;
+    private UndoAction undoAction;
+
+    private bool createModalVisible;
+    private string createFunctionId;
+    private BoardColumn createColumn;
+    private string createDescription;
+    private FunctionJob createJob;
+    private Dictionary<string, List<FunctionJob>> jobs = new Dictionary<string, List<FunctionJob>>(StringComparer.OrdinalIgnoreCase); // Function ID => Jobs
+
+    private bool columnModalVisible;
+    private string columnSchedule;
+    private string columnTitle;
+
+    private bool confirmModalVisible;
+    private PendingMove pendingMove;
+
+    private bool deleteModalVisible;
+    private BoardItem deleteItem;
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        updateTimer?.Dispose();
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        try { await InvokeAsync(StateHasChanged); } catch { }
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Scheduled Tasks..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            items = null;
+            itemsSignature = null;
+            liveTasks = new Dictionary<string, ScheduledTaskStatus>();
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Functions", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Schedule Board", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = GetClient();
+            if (client != null)
+            {
+                await UpdateItems(client);
+
+                // Poll for Run metrics (and Tasks changed elsewhere). The WorkerStatusPanel polls for the Worker Status
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private ITrakHoundClient GetClient() => explorerService.GetClient(explorerService.SelectedInstanceId);
+
+    /// <summary>
+    /// Reads the summaries and rebuilds the items (only when they changed, unless force). Returns true when the items were rebuilt
+    /// </summary>
+    private async Task<bool> UpdateItems(ITrakHoundClient client, bool force = true)
+    {
+        var now = DateTime.UtcNow;
+        var parameters = new Dictionary<string, string>
+        {
+            { "start", now.AddDays(-1).ToUnixTime().ToString() },
+            { "stop", now.ToUnixTime().ToString() },
+            { "bucketCount", "1" }
+        };
+
+        List<FunctionSummary> summaries = null;
+        List<ScheduleColumn> savedColumns = null;
+        try
+        {
+            // Null when the TrakHound.Functions.Api package isn't installed
+            summaries = (await client.Api.GetJson<IEnumerable<FunctionSummary>>("functions/summary", queryParameters: parameters))?.ToList();
+            savedColumns = (await client.Api.GetJson<IEnumerable<ScheduleColumn>>("functions/schedule-columns"))?.ToList();
+        }
+        catch { }
+
+        if (summaries == null)
+        {
+            var changed = items != null;
+            items = null;
+            itemsSignature = null;
+            return changed;
+        }
+
+        // Compare what the cards are built from (rebuilding the items re-renders every card in the RadzenDropZoneContainer).
+        // The Timeline isn't shown, and its Timestamp moves with every request
+        foreach (var summary in summaries) summary.Timeline = null;
+        var signature = System.Text.Json.JsonSerializer.Serialize(summaries) + System.Text.Json.JsonSerializer.Serialize(savedColumns);
+        if (!force && items != null && signature == itemsSignature) return false;
+        itemsSignature = signature;
+
+        var boardItems = new List<BoardItem>();
+        foreach (var summary in summaries.OrderBy(o => o.FunctionId, StringComparer.OrdinalIgnoreCase))
+        {
+            // Palette
+            boardItems.Add(new BoardItem { FunctionId = summary.FunctionId, PackageId = summary.PackageId, AverageDuration = summary.AverageDuration, TaskCount = summary.TaskCount });
+
+            // Jobs
+            foreach (var job in summary.Jobs ?? new List<FunctionJob>())
+            {
+                boardItems.Add(new BoardItem { FunctionId = summary.FunctionId, PackageId = summary.PackageId, Job = job, AverageDuration = summary.AverageDuration });
+            }
+
+            // Scheduled Tasks
+            if (!summary.Tasks.IsNullOrEmpty())
+            {
+                foreach (var task in summary.Tasks.OrderBy(o => o.Description ?? o.Id))
+                {
+                    boardItems.Add(new BoardItem { FunctionId = summary.FunctionId, Task = task, AverageDuration = summary.AverageDuration });
+                }
+            }
+        }
+
+        jobs = summaries.Where(o => !string.IsNullOrEmpty(o.FunctionId)).GroupBy(o => o.FunctionId, StringComparer.OrdinalIgnoreCase).ToDictionary(o => o.Key, o => o.First().Jobs ?? new List<FunctionJob>(), StringComparer.OrdinalIgnoreCase);
+        columns = BuildColumns(boardItems, savedColumns);
+        items = boardItems;
+        return true;
+    }
+
+    /// <summary>
+    /// The saved columns, and a column for every other Schedule a Task uses (so no Task is hidden)
+    /// </summary>
+    private static List<BoardColumn> BuildColumns(List<BoardItem> boardItems, List<ScheduleColumn> savedColumns)
+    {
+        var boardColumns = new List<BoardColumn>();
+
+        if (savedColumns == null)
+        {
+            boardColumns.AddRange(_defaultColumns);
+        }
+        else
+        {
+            foreach (var saved in savedColumns)
+            {
+                var key = GetColumnKey(saved.Schedule);
+                var existing = boardColumns.FirstOrDefault(o => o.Key == key);
+                if (existing == null)
+                {
+                    boardColumns.Add(new BoardColumn
+                    {
+                        Title = !string.IsNullOrEmpty(saved.Title) ? saved.Title : key,
+                        Schedule = key,
+                        IntervalSeconds = saved.IntervalSeconds,
+                        Saved = true
+                    });
+                }
+            }
+        }
+
+        foreach (var item in boardItems.Where(o => o.Task != null))
+        {
+            var key = GetColumnKey(item.Task.Schedule);
+            if (!boardColumns.Any(o => o.Key == key))
+            {
+                boardColumns.Add(new BoardColumn { Title = key, Schedule = key, IntervalSeconds = item.Task.IntervalSeconds });
+            }
+        }
+
+        // Most frequent first (Schedules without a regular interval, ex. invalid, last)
+        return boardColumns
+            .OrderBy(o => o.IntervalSeconds ?? double.MaxValue)
+            .ThenBy(o => o.Schedule, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip while a change is being made (so the board doesn't jump back) or the previous update is still running
+        if (busy || createModalVisible || columnModalVisible || confirmModalVisible || deleteModalVisible) return;
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            var client = GetClient();
+            if (client != null)
+            {
+                var changed = await UpdateItems(client, false);
+
+                // Unchanged items are only re-rendered when a card's countdown or elapsed time text changed
+                await InvokeAsync(() =>
+                {
+                    if (changed) RenderBoard();
+                    else RenderBoardIfLiveChanged();
+                });
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private async Task Reload()
+    {
+        var client = GetClient();
+        if (client != null)
+        {
+            await UpdateItems(client);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    #region "Drag and Drop"
+
+    private bool ItemSelector(BoardItem item, RadzenDropZone<BoardItem> zone)
+    {
+        var zoneKey = zone.Value as string;
+        if (item.Task == null) return zoneKey == _paletteKey && MatchesFilter(item);
+        return GetColumnKey(item.Task.Schedule) == zoneKey;
+    }
+
+    private bool CanDrop(RadzenDropZoneItemEventArgs<BoardItem> args)
+    {
+        if (busy) return false;
+
+        var toKey = args.ToZone?.Value as string;
+        var fromKey = args.FromZone?.Value as string;
+        if (toKey == null || toKey == _paletteKey) return false;
+
+        return args.Item.Task == null || toKey != fromKey;
+    }
+
+    private async Task OnDrop(RadzenDropZoneItemEventArgs<BoardItem> args)
+    {
+        var toKey = args.ToZone?.Value as string;
+        var column = columns.FirstOrDefault(o => o.Key == toKey);
+        if (column == null || args.Item == null) return;
+
+        var item = args.Item;
+
+        if (item.Task == null)
+        {
+            // New Scheduled Task (from the Functions palette)
+            createFunctionId = item.FunctionId;
+            createJob = item.Job;
+            createColumn = column;
+            createDescription = item.Job?.Name;
+            createModalVisible = true;
+        }
+        else if (item.Task.Enabled && column.IntervalSeconds < 60)
+        {
+            pendingMove = new PendingMove { Item = item, Column = column };
+            confirmModalVisible = true;
+        }
+        else
+        {
+            await MoveTask(item, column);
+        }
+    }
+
+    private void OnItemRender(RadzenDropZoneItemRenderEventArgs<BoardItem> args)
+    {
+        args.Attributes["class"] = args.Item.Task == null ? "board-item palette-item" : "board-item task-item";
+    }
+
+    #endregion
+
+    #region "Filter"
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        filter = null;
+    }
+
+    /// <summary>
+    /// A palette Function shows when it or one of its Jobs matches, and a Job shows when it or its Function matches (so a matching Job keeps its Function above it)
+    /// </summary>
+    private bool MatchesFilter(BoardItem item)
+    {
+        var text = filter?.Trim();
+        if (string.IsNullOrEmpty(text)) return true;
+
+        bool Contains(string value) => value != null && value.Contains(text, StringComparison.OrdinalIgnoreCase);
+
+        if (Contains(item.FunctionId) || Contains(item.PackageId)) return true;
+        if (item.Job != null) return Contains(item.Job.Name);
+        return jobs.TryGetValue(item.FunctionId ?? "", out var functionJobs) && functionJobs.Any(o => Contains(o.Name));
+    }
+
+    #endregion
+
+    #region "Changes"
+
+    private async void CreateSaveClicked()
+    {
+        if (createColumn == null) return;
+
+        await CreateTask(createFunctionId, createColumn, createDescription, createJob);
+
+        createModalVisible = !lastChangeSucceeded;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void ConfirmMoveClicked()
+    {
+        var move = pendingMove;
+        confirmModalVisible = false;
+        pendingMove = null;
+
+        if (move != null) await MoveTask(move.Item, move.Column);
+    }
+
+    private async void ToggleEnabledClicked(BoardItem item)
+    {
+        var task = item.Task;
+        if (task == null) return;
+
+        var enabled = !task.Enabled;
+
+        await RunChange(enabled ? "Error Resuming Scheduled Task" : "Error Pausing Scheduled Task", async client =>
+        {
+            var error = await SetTask(client, item.FunctionId, task.Id, null, enabled);
+            if (error != null) return error;
+
+            undoAction = new UndoAction
+            {
+                Message = $"{(enabled ? "Resumed" : "Paused")} {item.FunctionId}",
+                FunctionId = item.FunctionId,
+                TaskId = task.Id,
+                PreviousSchedule = task.Schedule,
+                PreviousEnabled = task.Enabled
+            };
+            return null;
+        });
+    }
+
+    private void DeleteClicked(BoardItem item)
+    {
+        deleteItem = item;
+        deleteModalVisible = true;
+    }
+
+    private async void ConfirmDeleteClicked()
+    {
+        var item = deleteItem;
+        deleteModalVisible = false;
+        deleteItem = null;
+
+        if (item?.Task != null)
+        {
+            await RunChange("Error Deleting Scheduled Task", async client =>
+            {
+                var response = await client.Api.Delete(Url.Combine("functions", item.FunctionId, "tasks", item.Task.Id));
+                if (!response.Success) return GetErrorMessage(response);
+
+                undoAction = null; // Deleted Tasks can't be restored (their Parameters aren't kept)
+                notificationService.AddNotification(NotificationType.Success, $"Deleted Scheduled Task for {item.FunctionId}");
+                return null;
+            });
+        }
+    }
+
+    private void ModalCancelClicked()
+    {
+        createModalVisible = false;
+        columnModalVisible = false;
+        confirmModalVisible = false;
+        deleteModalVisible = false;
+        pendingMove = null;
+        deleteItem = null;
+    }
+
+    private async Task CreateTask(string functionId, BoardColumn column, string description, FunctionJob job)
+    {
+        await RunChange("Error Scheduling Function", async client =>
+        {
+            var queryParameters = new Dictionary<string, string>();
+            queryParameters.Add("schedule", column.Schedule);
+            queryParameters.Add("enabled", "true");
+            if (!string.IsNullOrEmpty(description)) queryParameters.Add("description", description);
+            if (job != null) queryParameters.Add("jobId", job.Id);
+
+            var response = await client.Api.Post(Url.Combine("functions", functionId, "tasks"), queryParameters);
+            if (!response.Success) return GetErrorMessage(response);
+
+            var task = response.GetJsonContentObject<FunctionTaskSummary>();
+            var name = job != null ? $"{functionId} ({job.Name})" : functionId;
+            undoAction = task?.Id != null ? new UndoAction { Message = $"Scheduled {name} on {column.Title}", FunctionId = functionId, TaskId = task.Id, Created = true } : null;
+            return null;
+        });
+    }
+
+    /// <summary>
+    /// Moves a Task to a column (its Enabled state is kept)
+    /// </summary>
+    private async Task MoveTask(BoardItem item, BoardColumn column)
+    {
+        var task = item.Task;
+
+        await RunChange("Error Changing Schedule", async client =>
+        {
+            var error = await SetTask(client, item.FunctionId, task.Id, column.Schedule, null);
+            if (error != null) return error;
+
+            undoAction = new UndoAction
+            {
+                Message = $"Moved {item.FunctionId} to {column.Title}",
+                FunctionId = item.FunctionId,
+                TaskId = task.Id,
+                PreviousSchedule = task.Schedule,
+                PreviousEnabled = task.Enabled
+            };
+            return null;
+        });
+    }
+
+    private async Task<string> SetTask(ITrakHoundClient client, string functionId, string taskId, string schedule, bool? enabled)
+    {
+        var taskRoute = Url.Combine("functions", functionId, "tasks", taskId);
+
+        // Disable first (so the old schedule doesn't run again), and enable last (so the new schedule is in place)
+        if (enabled == false)
+        {
+            var response = await client.Api.Put(Url.Combine(taskRoute, "disable"));
+            if (!response.Success) return GetErrorMessage(response);
+        }
+
+        if (!string.IsNullOrEmpty(schedule))
+        {
+            var response = await client.Api.Put(taskRoute, new Dictionary<string, string> { { "schedule", schedule } });
+            if (!response.Success) return GetErrorMessage(response);
+        }
+
+        if (enabled == true)
+        {
+            var response = await client.Api.Put(Url.Combine(taskRoute, "enable"));
+            if (!response.Success) return GetErrorMessage(response);
+        }
+
+        return null;
+    }
+
+    private async void UndoClicked()
+    {
+        var action = undoAction;
+        if (action == null) return;
+
+        await RunChange("Error Undoing Change", async client =>
+        {
+            if (action.RemovedColumn != null)
+            {
+                var queryParameters = new Dictionary<string, string> { { "schedule", action.RemovedColumn.Schedule } };
+                if (action.RemovedColumn.Title != action.RemovedColumn.Schedule) queryParameters.Add("title", action.RemovedColumn.Title);
+
+                var response = await client.Api.Post("functions/schedule-columns", queryParameters);
+                if (!response.Success) return GetErrorMessage(response);
+            }
+            else if (action.Created)
+            {
+                var response = await client.Api.Delete(Url.Combine("functions", action.FunctionId, "tasks", action.TaskId));
+                if (!response.Success) return GetErrorMessage(response);
+            }
+            else
+            {
+                var error = await SetTask(client, action.FunctionId, action.TaskId, action.PreviousSchedule, action.PreviousEnabled);
+                if (error != null) return error;
+            }
+
+            undoAction = null;
+            return null;
+        });
+    }
+
+    /// <summary>
+    /// Runs a change (returns an error message, or null on success) and reloads the board
+    /// </summary>
+    private async Task RunChange(string errorTitle, Func<ITrakHoundClient, Task<string>> change)
+    {
+        if (busy) return;
+
+        busy = true;
+        lastChangeSucceeded = false;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var client = GetClient();
+            if (client != null)
+            {
+                var error = await change(client);
+                if (error == null)
+                {
+                    lastChangeSucceeded = true;
+                }
+                else
+                {
+                    notificationService.AddNotification(NotificationType.Error, errorTitle, error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, errorTitle, ex.Message);
+        }
+        finally
+        {
+            busy = false;
+            await Reload(); // Also puts a card back if the change failed
+        }
+    }
+
+    #endregion
+
+    #region "Columns"
+
+    private void AddColumnClicked()
+    {
+        columnSchedule = null;
+        columnTitle = null;
+        columnModalVisible = true;
+    }
+
+    private void SetColumnTemplate(string schedule, string title)
+    {
+        columnSchedule = schedule;
+        columnTitle = title;
+    }
+
+    private async void ColumnSaveClicked()
+    {
+        var key = GetColumnKey(columnSchedule);
+        if (string.IsNullOrEmpty(key))
+        {
+            notificationService.AddNotification(NotificationType.Error, "Schedule is required");
+            return;
+        }
+
+        var existing = columns.FirstOrDefault(o => o.Key == key);
+        if (existing != null)
+        {
+            notificationService.AddNotification(NotificationType.Information, $"The \"{existing.Title}\" column already uses this Schedule");
+            return;
+        }
+
+        var title = columnTitle;
+        await RunChange("Error Adding Column", async client =>
+        {
+            var queryParameters = new Dictionary<string, string> { { "schedule", key } };
+            if (!string.IsNullOrWhiteSpace(title)) queryParameters.Add("title", title);
+
+            var response = await client.Api.Post("functions/schedule-columns", queryParameters);
+            return response.Success ? null : GetErrorMessage(response);
+        });
+
+        columnModalVisible = !lastChangeSucceeded; // Keep the Modal open so the Schedule can be corrected
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoveColumnClicked(BoardColumn column)
+    {
+        await RunChange("Error Removing Column", async client =>
+        {
+            var response = await client.Api.Delete("functions/schedule-columns", new Dictionary<string, string> { { "schedule", column.Schedule } });
+            if (!response.Success) return GetErrorMessage(response);
+
+            undoAction = new UndoAction { Message = $"Removed the {column.Title} column", RemovedColumn = column };
+            return null;
+        });
+    }
+
+    private static bool CanRemoveColumn(BoardColumn column, int taskCount) => column.Saved && taskCount == 0;
+
+    private static string GetRemoveColumnTitle(BoardColumn column, int taskCount)
+    {
+        if (taskCount > 0) return $"Can't remove : {taskCount} Scheduled Task{(taskCount > 1 ? "s use" : " uses")} this column (move or delete {(taskCount > 1 ? "them" : "it")} first)";
+        if (!column.Saved) return "Can't remove this column";
+        return "Remove Column";
+    }
+
+    #endregion
+
+    #region "Worker Status"
+
+    /// <summary>
+    /// Called by the WorkerStatusPanel (on the Renderer's context) after each poll
+    /// </summary>
+    private void LiveTasksUpdated(Dictionary<string, ScheduledTaskStatus> tasks)
+    {
+        liveTasks = tasks ?? new Dictionary<string, ScheduledTaskStatus>();
+        RenderBoardIfLiveChanged();
+    }
+
+    private void RenderBoard()
+    {
+        renderedLiveSignature = GetLiveSignature();
+        StateHasChanged();
+    }
+
+    private void RenderBoardIfLiveChanged()
+    {
+        if (GetLiveSignature() != renderedLiveSignature) RenderBoard();
+    }
+
+    /// <summary>
+    /// The live state and time based text the cards show (as rendered in the Template), to tell when the board needs to re-render
+    /// </summary>
+    private string GetLiveSignature()
+    {
+        var boardItems = items;
+        if (boardItems == null) return null;
+
+        var signature = new System.Text.StringBuilder();
+        foreach (var item in boardItems)
+        {
+            var task = item.Task;
+            if (task == null) continue;
+
+            signature.Append(task.Id).Append('|');
+            if (task.Enabled) signature.Append(FormatRelative(task.NextRun));
+
+            var live = GetLiveStatus(task.Id);
+            if (live != null && (live.Running > 0 || live.Waiting > 0 || live.SkippedCount + live.DroppedCount > 0))
+            {
+                if (live.Running > 0) signature.Append("|r").Append(FormatTimestamp(live.RunStarted)).Append(FormatElapsed(live.RunStarted));
+                else if (live.Waiting > 0) signature.Append("|w").Append(FormatElapsed(live.WaitingSince));
+                signature.Append("|s").Append(live.SkippedCount).Append(',').Append(live.DroppedCount);
+            }
+
+            signature.Append(';');
+        }
+        return signature.ToString();
+    }
+
+    private ScheduledTaskStatus GetLiveStatus(string taskId) => taskId != null ? liveTasks.GetValueOrDefault(taskId) : null;
+
+    /// <summary>
+    /// Time since a Timestamp (ex. "12s", "3m 05s")
+    /// </summary>
+    private static string FormatElapsed(DateTime? since)
+    {
+        if (since == null) return null;
+
+        var elapsed = DateTime.UtcNow - since.Value.ToUniversalTime();
+        if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+        if (elapsed.TotalHours >= 1) return $"{(int)elapsed.TotalHours}h {elapsed.Minutes:00}m";
+        if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds:00}s";
+        return $"{(int)elapsed.TotalSeconds}s";
+    }
+
+    #endregion
+
+    #region "Helpers"
+
+    private static string NormalizeSchedule(string schedule)
+    {
+        return string.Join(' ', (schedule ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
+    /// The column of a Schedule : the normalized Schedule (or the Schedule it's an alias of)
+    /// </summary>
+    private static string GetColumnKey(string schedule)
+    {
+        var normalized = NormalizeSchedule(schedule);
+        return _scheduleAliases.GetValueOrDefault(normalized) ?? normalized;
+    }
+
+    private static string GetColumnSubtitle(BoardColumn column, int enabledCount)
+    {
+        if (enabledCount == 0 || column.IntervalSeconds == null || column.IntervalSeconds <= 0)
+        {
+            // Show the Schedule (the Title already is the Schedule for unnamed columns)
+            if (column.Title != column.Schedule) return column.Schedule;
+            return column.IntervalSeconds > 0 ? $"about every {FormatInterval(column.IntervalSeconds.Value)}" : null;
+        }
+
+        var runsPerHour = enabledCount * 3600.0 / column.IntervalSeconds.Value;
+        return runsPerHour >= 1 ? $"{runsPerHour:N0} runs / hr" : $"{runsPerHour * 24:0.#} runs / day";
+    }
+
+    /// <summary>
+    /// Runs take longer than the interval, so the Scheduled Task Worker skips occurrences
+    /// </summary>
+    private static bool IsOverlapping(BoardItem item)
+    {
+        if (item.Task == null || !item.Task.Enabled || item.AverageDuration <= 0) return false;
+
+        var interval = item.Task.IntervalSeconds;
+        return interval > 0 && item.AverageDuration >= interval * 1000;
+    }
+
+    private FunctionJob GetJob(string functionId, string jobId)
+    {
+        return functionId != null && jobs.TryGetValue(functionId, out var functionJobs) ? functionJobs.FirstOrDefault(o => o.Id == jobId) : null;
+    }
+
+    /// <summary>
+    /// The Function ID with line breaks allowed after each '.', so long IDs wrap at their segments instead of being cut off
+    /// </summary>
+    private static MarkupString FormatFunctionId(string functionId)
+    {
+        var segments = (functionId ?? "").Split('.').Select(System.Net.WebUtility.HtmlEncode);
+        return new MarkupString(string.Join(".<wbr>", segments));
+    }
+
+    private string GetFunctionLink(string functionId, string page = null)
+    {
+        var link = $"/_admin/explorer/{explorerService.SelectedInstanceId}/functions/{functionId}";
+        return page != null ? $"{link}/{page}" : link;
+    }
+
+    private static string GetErrorMessage(TrakHoundApiResponse response)
+    {
+        var message = response.GetContentUtf8String();
+        return !string.IsNullOrEmpty(message) ? message : $"Status Code {response.StatusCode}";
+    }
+
+    private static string GetResultClass(int statusCode)
+    {
+        if (statusCode >= 200 && statusCode < 400) return "success";
+        if (statusCode == TrakHoundFunctionMetricsCollector.CancelledStatusCode) return "cancelled";
+        return "error";
+    }
+
+    private static string FormatInterval(double seconds)
+    {
+        var interval = TimeSpan.FromSeconds(seconds);
+        if (interval.TotalDays >= 1) return interval.TotalDays == 1 ? "day" : $"{interval.TotalDays:0.#} days";
+        if (interval.TotalHours >= 1) return interval.TotalHours == 1 ? "hour" : $"{interval.TotalHours:0.#} hours";
+        if (interval.TotalMinutes >= 1) return interval.TotalMinutes == 1 ? "minute" : $"{interval.TotalMinutes:0.#} min";
+        return $"{seconds:0} sec";
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
+        if (duration.TotalHours >= 1) return $"{(int)duration.TotalHours}h {duration.Minutes:00}m";
+        if (duration.TotalMinutes >= 1) return $"{duration.Minutes}m {duration.Seconds:00}s";
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.#} s";
+        return $"{milliseconds:0} ms";
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null) return null;
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private static string FormatRelative(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var remaining = timestamp.Value.ToUniversalTime() - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero) return "now";
+        if (remaining.TotalDays >= 1) return $"in {(int)remaining.TotalDays}d {remaining.Hours}h";
+        if (remaining.TotalHours >= 1) return $"in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+        if (remaining.TotalMinutes >= 1) return $"in {(int)remaining.TotalMinutes}m";
+        return $"in {Math.Max(1, (int)remaining.TotalSeconds)}s";
+    }
+
+    #endregion
+}

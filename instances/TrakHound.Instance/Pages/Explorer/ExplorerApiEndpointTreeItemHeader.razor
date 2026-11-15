@@ -1,0 +1,32 @@
+﻿@using TrakHound.Api
+
+@if (Endpoint != null)
+{
+    var active = IsActive ? "active" : "";
+    var title = Endpoint.Route;
+    @* var title = string.IsNullOrEmpty(Endpoint.Route) || Endpoint.Route == "/" ? "/" : $"/{Endpoint.Route}"; *@
+    var icon = Endpoint.Type == TrakHoundApiEndpointType.Request ? Endpoint.Method.ToString().ToUpper() : Endpoint.Type.ToString().ToUpper();
+
+    <div class="tree-item-header @active">
+        <div class="icon-container">
+            <div class="icon">
+                @icon
+            </div>
+        </div>
+        <div class="route-container">
+            <div class="route">
+                @title
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundApiEndpointInformation Endpoint { get; set; }
+
+    [CascadingParameter(Name = "IsActive")]
+    public bool IsActive { get; set; }
+
+}

@@ -1,0 +1,245 @@
+.information-panel {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    padding-top: 15px;
+}
+
+.header-panel {
+    grid-row: 1;
+    padding: 0px 10px 15px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .header-panel .icon {
+        font-size: var(--fontSizeLg);
+        color: var(--textLight);
+        margin-right: 5px;
+    }
+
+    .header-panel .title {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        margin-right: 10px;
+    }
+
+    .header-panel .subtitle {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    grid-row: 2;
+    padding: 10px 0px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+    .toolbar-panel .btn-refresh {
+        margin-left: 10px;
+    }
+
+    .toolbar-panel .btn-transfer {
+        margin-left: 10px;
+    }
+
+.table-panel {
+    grid-row: 3;
+    padding: 0 0 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .table-panel ::deep .buttons .rz-cell-data {
+        height: 22px;
+    }
+
+/*    .table-panel ::deep .rz-switch-circle {
+        background: var(--panelBackgroundMedium);
+    }
+
+    .table-panel ::deep .rz-switch-checked .rz-switch-circle {
+        background: var(--colorGreenHover);
+    }
+
+    .table-panel ::deep .rz-switch-circle::before {
+        background: var(--panelBackgroundMedium);
+    }
+
+    .table-panel ::deep .rz-switch-checked .rz-switch-circle::before {
+        background: var(--colorGreen);
+    }*/
+
+    .table-panel ::deep .rz-switch-checked .rz-switch-circle:hover:not(.rz-disabled):before {
+        box-shadow: none;
+    }
+
+
+.information-panel ::deep .modal .modal-body {
+    padding: 20px 40px;
+    height: 100%;
+    overflow: hidden;
+}
+
+.information-panel ::deep .modal .btn.disabled .icon {
+    animation: spin 1s linear infinite;
+}
+
+.information-panel ::deep .form-field .rz-dropdown {
+    display: flex;
+    width: 100%;
+    font-size: var(--fontSizeBase);
+}
+
+.information-panel .form-field.form-field-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+    /* Beside the Check Box (not a Field Label above it) */
+    .information-panel .form-field.form-field-check ::deep label.rz-label {
+        margin-bottom: 0;
+        font-size: var(--fontSizeSm);
+        font-weight: normal;
+        color: var(--textDark);
+        cursor: pointer;
+    }
+
+.table-panel .task-id {
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeXs);
+    color: var(--textLight);
+}
+
+.table-panel .job-name {
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+/* Schedule Column */
+.table-panel .schedule-expression {
+    font-family: var(--fontMono);
+}
+
+.table-panel .schedule-timezone {
+    margin-left: 8px;
+    font-size: var(--fontSizeXs);
+    color: var(--textMild);
+}
+
+.table-panel .schedule-run-missed {
+    margin-left: 8px;
+    color: var(--textMild);
+}
+
+/* Delete Modal */
+.information-panel .delete-modal-message {
+    display: block;
+    margin-bottom: 15px;
+    font-size: var(--fontSizeBase);
+    color: var(--textDark);
+}
+
+.information-panel .delete-modal-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 15px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--colorRed);
+    border-radius: 3px;
+}
+
+    .information-panel .delete-modal-items .delete-item-name {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        overflow-wrap: anywhere;
+    }
+
+    .information-panel .delete-modal-items .delete-item-schedule {
+        font-family: var(--fontMono);
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+    }
+
+        .information-panel .delete-modal-items .delete-item-schedule .icon {
+            margin-right: 8px;
+            color: var(--textMild);
+        }
+
+    .information-panel .delete-modal-items .delete-item-id {
+        font-family: var(--fontMono);
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+.information-panel ::deep .form-field {
+    display: block;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+    .information-panel ::deep .form-field > label {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: var(--textMild);
+    }
+
+    .information-panel ::deep .form-field .rz-textbox {
+        display: block;
+        width: 100%;
+        font-size: var(--fontSizeBase);
+    }
+
+    .information-panel ::deep .form-field .rz-textarea {
+        display: block;
+        width: 100%;
+        min-height: 100px;
+        font-size: var(--fontSizeBase);
+    }
+
+.information-panel .template-buttons {
+    display: block;
+    padding: 10px 0;
+}
+
+.information-panel .instructions {
+    display: block;
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}
+
+/* Task Metrics (from the Functions Summary) */
+.table-panel .metric {
+    font-variant-numeric: tabular-nums;
+}
+
+    .table-panel .metric.result {
+        margin-left: 8px;
+    }
+
+    .table-panel .metric.muted {
+        color: var(--textLight);
+    }
+
+    .table-panel .metric.success {
+        color: var(--colorGreen);
+    }
+
+    .table-panel .metric.cancelled,
+    .table-panel .metric.warning {
+        color: var(--colorOrange);
+    }
+
+    .table-panel .metric.error {
+        color: var(--colorRed);
+    }

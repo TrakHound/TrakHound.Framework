@@ -1,0 +1,878 @@
+@page "/_admin/configuration/zones/{ZoneId}"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/zones/{ZoneId}"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Zones)]
+@layout TrakHound.Instance.Pages.Configuration.ConfigurationLayout
+@implements IDisposable
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject NavigationManager navigationManager
+@using TrakHound.Instances
+@using TrakHound.Services
+@using TrakHound.Zones
+
+<TrakHound.Instance.Pages.Security.SecurityPageStyles>
+    <TrakHoundPageTitle Text="@(zone?.Id ?? "Zone")" />
+    <AreaBreadcrumbs Items="@([new("Zones", configurationsService.GetLink("_admin/configuration/zones")), new(zone == null ? ZoneId : string.IsNullOrEmpty(zone.Name) ? zone.Id : zone.Name)])" />
+
+    @if (zone == null)
+    {
+        <div class="empty-state">
+            <span class="empty-icon fa-regular fa-sharp fa-circle-question"></span>
+            <span class="empty-title">Zone "@ZoneId" Not Found</span>
+            <a class="btn btn-light" href="@configurationsService.GetLink("_admin/configuration/zones")">Back to Zones</a>
+        </div>
+    }
+    else
+    {
+        <div class="zone-page">
+
+            <div class="page-header">
+                <span class="page-icon fa-solid fa-sharp fa-object-group"></span>
+                <div class="page-title">
+                    <span class="title">@(string.IsNullOrEmpty(zone.Name) ? zone.Id : zone.Name)</span>
+                    @if (!string.IsNullOrEmpty(zone.Description))
+                    {
+                        <span class="description">@zone.Description</span>
+                    }
+                </div>
+                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removeVisible = true"><span class="icon fa-regular fa-sharp fa-trash-can"></span> Remove Zone</button>
+            </div>
+
+            <div class="section">
+                <div class="callout">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    <div>
+                        <strong>Zones guard against mistakes, not deliberate attacks.</strong>
+                        A Zone limits the calls its Members make through their Client, so a Module in development can't accidentally reach something it shouldn't. Code that sets out to get around it still can.
+                    </div>
+                </div>
+            </div>
+
+            @* Settings *@
+            <div class="section">
+                <div class="card">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label for="zone-name">Name</label>
+                            <input id="zone-name" class="form-control" @bind="editName" @bind:event="oninput" placeholder="Optional" />
+                        </div>
+                        <div class="form-field">
+                            <label for="zone-mode">Mode</label>
+                            <select id="zone-mode" class="form-select" @bind="editMode">
+                                <option value="@TrakHoundZoneMode.Audit">Audit (record, don't deny)</option>
+                                <option value="@TrakHoundZoneMode.Enforce">Enforce (deny)</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="zone-router">Service Router</label>
+                            <select id="zone-router" class="form-select" @bind="editRouterId">
+                                <option value="">The Router each Member is configured with</option>
+                                @foreach (var router in routers)
+                                {
+                                    <option value="@router.Id">@(string.IsNullOrEmpty(router.Name) ? router.Id : $"{router.Name} ({router.Id})")</option>
+                                }
+                                @if (!string.IsNullOrEmpty(zone.RouterId) && !routers.Any(o => o.Id == zone.RouterId))
+                                {
+                                    <option value="@zone.RouterId">@zone.RouterId (not found)</option>
+                                }
+                            </select>
+                            <span class="hint">Send every Service call made by the Members through this Router (ex. one that points to test data)</span>
+                        </div>
+                        <div class="form-field wide">
+                            <label for="zone-description">Description</label>
+                            <input id="zone-description" class="form-control" @bind="editDescription" @bind:event="oninput" placeholder="Optional" />
+                        </div>
+                        <div class="form-field wide">
+                            <div>
+                                <label class="zone-check">
+                                    <input type="checkbox" @bind="editAllowSameZone" />
+                                    <span>Members can call each other without a Rule</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="zone-mode-note">
+                        @if (editMode == TrakHoundZoneMode.Audit)
+                        {
+                            <span class="status warning"><span class="status-dot"></span>Audit: calls the Rules don't allow are recorded below as "Would Deny", but still made</span>
+                        }
+                        else
+                        {
+                            <span class="status ok"><span class="status-dot"></span>Enforce: calls the Rules don't allow are denied</span>
+                        }
+                    </div>
+
+                    <div class="form-actions">
+                        @if (saved)
+                        {
+                            <span class="saved-message"><span class="icon fa-solid fa-sharp fa-check"></span>Saved</span>
+                        }
+                        <button class="btn btn-light" disabled="@(!IsDirty)" @onclick="ResetSettings">Reset</button>
+                        <button class="admin-write btn btn-primary" disabled="@(!IsDirty)" @onclick="SaveSettings"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span>Save</button>
+                    </div>
+                </div>
+            </div>
+
+            @* Members *@
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-title">Members<span class="section-description">The Apis, Apps, Functions, Workers and Services in this Zone</span></span>
+                </div>
+
+                <div class="card table-card">
+                    <div class="zone-add-row">
+                        <select class="form-select" @bind="addMemberId">
+                            <option value="">Select a Module..</option>
+                            @foreach (var group in modules.All.Where(o => !IsMember(o.MemberId)).GroupBy(o => o.TypeTitle))
+                            {
+                                <optgroup label="@group.Key">
+                                    @foreach (var module in group.OrderBy(o => o.DisplayName))
+                                    {
+                                        <option value="@module.MemberId">@module.DisplayName (@module.ConfigurationId)</option>
+                                    }
+                                </optgroup>
+                            }
+                            @{
+                                var memberGroups = modules.Groups.Where(o => !IsMember(TrakHoundZoneResources.GetGroupReference(o.Id))).ToList();
+                            }
+                            @if (memberGroups.Count > 0)
+                            {
+                                <optgroup label="Groups">
+                                    @foreach (var memberGroup in memberGroups)
+                                    {
+                                        <option value="@TrakHoundZoneResources.GetGroupReference(memberGroup.Id)">Every Module in @ZoneModules.GetGroupName(memberGroup) (@memberGroup.Id)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                        <span class="muted">or</span>
+                        <input class="form-control" @bind="addMemberPattern" @bind:event="oninput" placeholder="Pattern, ex. worker:dev-*" spellcheck="false" />
+                        <button class="admin-write btn btn-primary" disabled="@(string.IsNullOrEmpty(addMemberId) && string.IsNullOrWhiteSpace(addMemberPattern))" @onclick="AddMember"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Member</button>
+                    </div>
+
+                    @if (zone.Members.IsNullOrEmpty())
+                    {
+                        <div class="empty-state">
+                            <span class="empty-icon fa-solid fa-sharp fa-cubes"></span>
+                            <span class="empty-title">No Members</span>
+                            <span class="empty-description">Add the Modules this Zone should restrict.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-scroll">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Member</th>
+                                        <th class="col-actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var member in zone.Members)
+                                    {
+                                        var matched = modules.Match(member).ToList();
+                                        var description = modules.Describe(member);
+
+                                        <tr>
+                                            <td>
+                                                <div class="resource-label">
+                                                    <span class="resource-icon @ZoneModules.GetTypeIcon(member.Split(':')[0])"></span>
+                                                    <div>
+                                                        <span class="resource-title">@(description ?? member)</span>
+                                                        <code class="resource-id">@member</code>
+                                                        @if (matched.Count == 0)
+                                                        {
+                                                            <span class="status warning"><span class="status-dot"></span>No Module matches</span>
+                                                        }
+                                                        else if (member.EndsWith('*') || member.StartsWith($"{TrakHoundZoneResources.GroupPrefix}:", StringComparison.OrdinalIgnoreCase))
+                                                        {
+                                                            <span class="item-description">Matches @string.Join(", ", matched.Select(o => o.DisplayName))</span>
+                                                        }
+                                                        @foreach (var module in matched)
+                                                        {
+                                                            var memberZone = zoneManager.GetMemberZone(module.MemberId);
+                                                            if (memberZone != null && memberZone.Id != zone.Id)
+                                                            {
+                                                                <span class="status error" title="A Module listed in more than one Zone belongs to the first Zone (by ID). A Zone that lists the Module itself comes before a Zone that lists its Group"><span class="status-dot"></span>@module.DisplayName belongs to the Zone "@memberZone.Id"</span>
+                                                            }
+                                                        }
+                                                        @{
+                                                            var capabilities = GetCapabilities(matched).ToList();
+                                                        }
+                                                        @if (capabilities.Count > 0)
+                                                        {
+                                                            <div class="zone-capabilities">
+                                                                <span class="zone-capabilities-label" title="The Package's code does these directly, not through its Client, so a Zone can't restrict them">Reaches outside its Client:</span>
+                                                                @foreach (var capability in capabilities)
+                                                                {
+                                                                    <span class="chip warning" title="@($"{capability.Description}. A Zone can't restrict this.\n{string.Join("\n", capability.Evidence)}")"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@capability.Title</span>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="col-actions">
+                                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => RemoveMember(member)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Rules *@
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-title">Rules<span class="section-description">What the Members can access. Anything a Rule doesn't allow is denied</span></span>
+                    <button class="admin-write btn btn-primary" @onclick="() => OpenRuleEditor(-1)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Rule</button>
+                </div>
+
+                <div class="card table-card">
+                    @if (zone.Rules.IsNullOrEmpty())
+                    {
+                        <div class="empty-state">
+                            <span class="empty-icon fa-solid fa-sharp fa-list-check"></span>
+                            <span class="empty-title">No Rules</span>
+                            <span class="empty-description">The Members can't call anything outside the Zone. Add a Rule for each Api, Function, Worker, Service or Volume they need, or grant what they use from the Activity below.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        var rules = zone.Rules.ToList();
+                        <div class="table-scroll">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Resource</th>
+                                        <th>Permissions</th>
+                                        <th class="col-actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (var i = 0; i < rules.Count; i++)
+                                    {
+                                        var index = i;
+                                        var rule = rules[i];
+                                        <tr>
+                                            <td>
+                                                <div class="resource-label">
+                                                    <span class="resource-icon @ZoneModules.GetTypeIcon(rule.Resource?.Split(':')[0])"></span>
+                                                    <div>
+                                                        <span class="resource-title">@(modules.DescribeResource(rule.Resource) ?? rule.Resource)</span>
+                                                        <code class="resource-id">@rule.Resource</code>
+                                                        @if (!string.IsNullOrEmpty(rule.Description))
+                                                        {
+                                                            <span class="item-description">@rule.Description</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="chips">
+                                                    @if (rule.Permissions.IsNullOrEmpty() || rule.Permissions.Contains("*"))
+                                                    {
+                                                        <span class="chip accent">Any</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        @foreach (var permission in rule.Permissions)
+                                                        {
+                                                            <span class="chip">@permission</span>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td class="col-actions">
+                                                <button class="admin-write btn btn-sm btn-command" @onclick="() => OpenRuleEditor(index)"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</button>
+                                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => RemoveRule(index)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Allowed Callers *@
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-title">Allowed Callers<span class="section-description">Which other Modules can call the Members. Leave empty to allow any Module</span></span>
+                </div>
+
+                <div class="card table-card">
+                    <div class="zone-add-row">
+                        <input class="form-control" list="zone-caller-options" @bind="addCaller" @bind:event="oninput" placeholder="ex. api:entities, worker:*, zone:production, group:line-1" spellcheck="false" />
+                        <datalist id="zone-caller-options">
+                            @foreach (var module in modules.Callers)
+                            {
+                                <option value="@module.MemberId">@module.TypeTitle · @module.DisplayName</option>
+                            }
+                            @foreach (var other in zoneManager.GetZones().Where(o => o.Id != zone.Id))
+                            {
+                                <option value="@TrakHoundZoneResources.GetZoneReference(other.Id)">Every Member of the Zone @other.Id</option>
+                            }
+                            @foreach (var callerGroup in modules.Groups)
+                            {
+                                <option value="@TrakHoundZoneResources.GetGroupReference(callerGroup.Id)">Every Module in the Group @ZoneModules.GetGroupName(callerGroup)</option>
+                            }
+                        </datalist>
+                        <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(addCaller)" @onclick="AddCaller"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Caller</button>
+                    </div>
+
+                    @if (zone.AllowedCallers.IsNullOrEmpty())
+                    {
+                        <span class="zone-empty-text">Any Module can call the Members of this Zone (subject to the caller's own Zone).</span>
+                    }
+                    else
+                    {
+                        <div class="chips zone-chips">
+                            @foreach (var caller in zone.AllowedCallers)
+                            {
+                                <span class="chip" title="@modules.Describe(caller)">
+                                    @caller
+                                    <button class="chip-remove" title="Remove" @onclick="() => RemoveCaller(caller)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                                </span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Activity *@
+            <div class="section" id="activity">
+                <div class="section-header">
+                    <span class="section-title">Activity<span class="section-description">Calls by or to the Members that were denied (or would be, in Audit Mode). Grant what a Member needs</span></span>
+                    @if (activity.Count > 0)
+                    {
+                        <button class="btn btn-light" @onclick="ClearActivity"><span class="icon fa-solid fa-sharp fa-broom"></span>Clear</button>
+                    }
+                </div>
+
+                <div class="card table-card">
+                    @if (activity.Count == 0)
+                    {
+                        <div class="empty-state">
+                            <span class="empty-icon fa-solid fa-sharp fa-wave-pulse"></span>
+                            <span class="empty-title">No Activity</span>
+                            <span class="empty-description">Nothing has been denied since the Instance started. Calls appear here as soon as a Member makes one that the Rules don't allow.</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-scroll">
+                            <table class="data-table zone-activity-table">
+                                <thead>
+                                    <tr>
+                                        <th>Call</th>
+                                        <th class="col-narrow">Result</th>
+                                        <th class="col-narrow hide-narrow">Count</th>
+                                        <th class="col-narrow hide-narrow">Last</th>
+                                        <th class="col-actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in activity)
+                                    {
+                                        var broader = item.Direction == TrakHoundZoneDirection.Outbound ? ZoneModules.GetBroaderPattern(item.ResourceId) : null;
+                                        <tr>
+                                            <td>
+                                                <div class="resource-label">
+                                                    <span class="resource-icon @ZoneModules.GetTypeIcon(item.CallerId?.Split(':')[0])"></span>
+                                                    <div>
+                                                        <span class="resource-title">@(modules.Describe(item.CallerId) ?? item.CallerName ?? item.CallerId)</span>
+                                                        <span class="item-description">
+                                                            <span class="fa-solid fa-sharp fa-arrow-right"></span>
+                                                            @(modules.DescribeResource(item.ResourceId) ?? item.ResourceId)
+                                                            @if (!string.IsNullOrEmpty(item.Permission))
+                                                            {
+                                                                <span class="chip">@item.Permission</span>
+                                                            }
+                                                        </span>
+                                                        <code class="resource-id">@item.ResourceId</code>
+                                                        @if (item.Direction == TrakHoundZoneDirection.Inbound)
+                                                        {
+                                                            <span class="item-description">The caller is not in this Zone's Allowed Callers</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="col-narrow">
+                                                @if (item.Enforced)
+                                                {
+                                                    <span class="status error"><span class="status-dot"></span>Denied</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="status warning"><span class="status-dot"></span>Would Deny</span>
+                                                }
+                                            </td>
+                                            <td class="col-narrow hide-narrow">@item.Count</td>
+                                            <td class="col-narrow hide-narrow" title="First @item.FirstSeen.ToLocalTime()">@item.LastSeen.ToLocalTime().ToString("g")</td>
+                                            <td class="col-actions">
+                                                @if (item.Direction == TrakHoundZoneDirection.Outbound)
+                                                {
+                                                    <button class="admin-write btn btn-sm btn-command" title="Add a Rule for exactly this Resource" @onclick="() => Grant(item, null)"><span class="icon fa-solid fa-sharp fa-check"></span>Grant</button>
+                                                    @if (broader != null)
+                                                    {
+                                                        <button class="admin-write btn btn-sm btn-command" title="@($"Add a Rule for {broader}")" @onclick="() => Grant(item, broader)"><span class="icon fa-solid fa-sharp fa-check-double"></span>Grant All</button>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <button class="admin-write btn btn-sm btn-command" title="Add the caller to the Allowed Callers" @onclick="() => Grant(item, null)"><span class="icon fa-solid fa-sharp fa-check"></span>Allow Caller</button>
+                                                }
+                                                <button class="admin-write btn btn-sm btn-command btn-remove" title="Remove from the list (it is recorded again if it happens again)" @onclick="() => Dismiss(item)"><span class="icon fa-solid fa-sharp fa-xmark"></span>Dismiss</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* Test a Call *@
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-title">Test a Call<span class="section-description">Check a call against the current Zones (nothing is called or recorded)</span></span>
+                </div>
+
+                <div class="card">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label for="test-caller">Caller</label>
+                            <select id="test-caller" class="form-select" @bind="testCaller" @bind:after="ClearTest">
+                                <option value="">Select a Module..</option>
+                                @foreach (var group in modules.Callers.GroupBy(o => o.TypeTitle))
+                                {
+                                    <optgroup label="@group.Key">
+                                        @foreach (var module in group.OrderBy(o => o.DisplayName))
+                                        {
+                                            <option value="@module.MemberId">@module.DisplayName (@module.ConfigurationId)</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="test-permission">Permission</label>
+                            <select id="test-permission" class="form-select" @bind="testPermission" @bind:after="ClearTest">
+                                @foreach (var permission in TrakHoundZoneResources.Permissions)
+                                {
+                                    <option value="@permission">@permission</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-field wide">
+                            <label for="test-resource">Resource</label>
+                            <input id="test-resource" class="form-control" list="zone-resource-options" @bind="testResource" @bind:event="oninput" @bind:after="ClearTest" placeholder="ex. api:entities:/objects/query" spellcheck="false" />
+                            <span class="hint">An exact Resource ID: api:{apiId}:{route}, function:{id}, worker:{id}, service:{id}:{family}:{operation}, volume:{id}:{path} or manage:{...}</span>
+                        </div>
+                    </div>
+
+                    @if (testResult != null)
+                    {
+                        var result = testResult.Value;
+                        <div class="zone-test-result">
+                            @if (result.Zone == null)
+                            {
+                                <span class="status ok"><span class="status-dot"></span>Allowed: neither the caller nor the target is in a Zone</span>
+                            }
+                            else if (result.Direction == null)
+                            {
+                                <span class="status ok"><span class="status-dot"></span>Allowed by the Zone "@result.Zone.Id"</span>
+                            }
+                            else if (result.Decision.IsAllowed)
+                            {
+                                <span class="status warning"><span class="status-dot"></span>Would Deny (Audit Mode): @result.Decision.Message</span>
+                            }
+                            else
+                            {
+                                <span class="status error"><span class="status-dot"></span>Denied: @result.Decision.Message</span>
+                            }
+                        </div>
+                    }
+
+                    <div class="form-actions">
+                        <button class="btn btn-primary" disabled="@(string.IsNullOrEmpty(testCaller) || string.IsNullOrWhiteSpace(testResource))" @onclick="RunTest"><span class="icon fa-solid fa-sharp fa-play"></span>Check</button>
+                    </div>
+                </div>
+            </div>
+
+            <datalist id="zone-resource-options">
+                @foreach (var suggestion in resourceSuggestions)
+                {
+                    <option value="@suggestion.Pattern">@suggestion.Text</option>
+                }
+            </datalist>
+
+            @* Rule Editor *@
+            <Modal Class="security-modal" Visible="@ruleEditorVisible">
+                <HeaderContent>
+                    <span class="modal-header-icon fa-solid fa-sharp fa-list-check"></span>
+                    <span class="modal-header-title">@(editRuleIndex < 0 ? "Add Rule" : "Edit Rule")</span>
+                </HeaderContent>
+                <BodyContent>
+                    <div class="form-grid">
+                        <div class="form-field wide">
+                            <label for="rule-resource">Resource</label>
+                            <input id="rule-resource" class="form-control" list="zone-resource-options" @bind="editRuleResource" @bind:event="oninput" placeholder="ex. api:entities:*" spellcheck="false" />
+                            <span class="hint">@(modules.DescribeResource(editRuleResource) ?? "Matches exactly, or by prefix when it ends with *")</span>
+                        </div>
+                        <div class="form-field wide">
+                            <label>Permissions</label>
+                            <div class="zone-permissions">
+                                @foreach (var permission in TrakHoundZoneResources.Permissions)
+                                {
+                                    var value = permission;
+                                    <label class="zone-check">
+                                        <input type="checkbox" checked="@editRulePermissions.Contains(value)" @onchange="e => TogglePermission(value, (bool)e.Value)" />
+                                        <span>@value</span>
+                                    </label>
+                                }
+                            </div>
+                            <span class="hint">read: GET requests, Service reads, Volume reads. write: other requests, Service writes, Volume writes, management. run: Run a Function, Start / Stop a Worker. None selected allows any Permission</span>
+                        </div>
+                        <div class="form-field wide">
+                            <label for="rule-description">Description</label>
+                            <input id="rule-description" class="form-control" @bind="editRuleDescription" placeholder="Optional" />
+                        </div>
+                    </div>
+                </BodyContent>
+                <FooterContent>
+                    <button class="btn btn-secondary" @onclick="() => ruleEditorVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                    <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(editRuleResource)" @onclick="SaveRule"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span>Save Rule</button>
+                </FooterContent>
+            </Modal>
+
+            <Modal Class="security-modal" Visible="@removeVisible">
+                <HeaderContent>
+                    <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+                    <span class="modal-header-title">Remove Zone</span>
+                </HeaderContent>
+                <BodyContent>
+                    <p>Remove the Zone <strong>@zone.Id</strong>?</p>
+                    <p class="muted">Its @(zone.Members?.Count() ?? 0) Member(s) will no longer be restricted.</p>
+                </BodyContent>
+                <FooterContent>
+                    <button class="btn btn-secondary" @onclick="() => removeVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                    <button class="admin-write btn btn-danger" @onclick="RemoveZoneConfirmed"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Remove</button>
+                </FooterContent>
+            </Modal>
+
+        </div>
+    }
+</TrakHound.Instance.Pages.Security.SecurityPageStyles>
+
+@code {
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    // The Zone Manager subscribed to (kept, since the URL has already changed when the page is disposed)
+    private TrakHoundZoneManager _zoneManager;
+    private TrakHoundZoneManager zoneManager => _zoneManager ??= configurationsService.Target.ZoneManager;
+
+    [Parameter]
+    public string ZoneId { get; set; }
+
+    private TrakHoundZoneConfiguration zone;
+    private ZoneModules modules;
+    private List<ZoneResourceSuggestion> resourceSuggestions = new List<ZoneResourceSuggestion>();
+    private List<TrakHoundServiceRouterConfiguration> routers = new List<TrakHoundServiceRouterConfiguration>();
+    private List<TrakHoundZoneActivity> activity = new List<TrakHoundZoneActivity>();
+
+    private string editName;
+    private string editDescription;
+    private TrakHoundZoneMode editMode;
+    private string editRouterId;
+    private bool editAllowSameZone;
+    private bool saved;
+    private bool removeVisible;
+
+    private string addMemberId;
+    private string addMemberPattern;
+    private string addCaller;
+
+    private bool ruleEditorVisible;
+    private int editRuleIndex = -1;
+    private string editRuleResource;
+    private HashSet<string> editRulePermissions = new HashSet<string>();
+    private string editRuleDescription;
+
+    private string testCaller;
+    private string testResource;
+    private string testPermission = TrakHoundZoneResources.ReadPermission;
+    private TrakHoundZoneEvaluation? testResult;
+
+    private bool IsDirty => zone != null &&
+        ((editName ?? "") != (zone.Name ?? "") ||
+         (editDescription ?? "") != (zone.Description ?? "") ||
+         editMode != zone.Mode ||
+         (editRouterId ?? "") != (zone.RouterId ?? "") ||
+         editAllowSameZone != zone.AllowSameZone);
+
+
+    protected override void OnInitialized()
+    {
+        if (zoneManager != null)
+        {
+            zoneManager.ZonesUpdated += ZonesUpdated;
+            zoneManager.ActivityRecorded += ActivityRecorded;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        modules = new ZoneModules(configurationsService.ConfigurationProfile);
+        resourceSuggestions = modules.GetResourceSuggestions().ToList();
+        routers = configurationsService.ConfigurationProfile.Get<TrakHoundServiceRouterConfiguration>(TrakHoundServiceRouterConfiguration.ConfigurationCategory)?.OrderBy(o => o.Id).ToList() ?? new List<TrakHoundServiceRouterConfiguration>();
+        Load(true);
+    }
+
+    public void Dispose()
+    {
+        if (zoneManager != null)
+        {
+            zoneManager.ZonesUpdated -= ZonesUpdated;
+            zoneManager.ActivityRecorded -= ActivityRecorded;
+        }
+    }
+
+    private void ZonesUpdated(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(false); StateHasChanged(); });
+
+    private void ActivityRecorded(object sender, TrakHoundZoneActivity item)
+    {
+        if (item.ZoneId == zone?.Id) _ = InvokeAsync(() => { LoadActivity(); StateHasChanged(); });
+    }
+
+    private void Load(bool resetSettings)
+    {
+        zone = zoneManager?.GetZone(ZoneId);
+        LoadActivity();
+
+        if (zone != null && (resetSettings || !IsDirty)) ResetSettings();
+    }
+
+    private void LoadActivity()
+    {
+        activity = zone != null ? zoneManager.GetActivity(zone.Id).ToList() : new List<TrakHoundZoneActivity>();
+    }
+
+    private void ResetSettings()
+    {
+        editName = zone?.Name;
+        editDescription = zone?.Description;
+        editMode = zone?.Mode ?? TrakHoundZoneMode.Audit;
+        editRouterId = zone?.RouterId;
+        editAllowSameZone = zone?.AllowSameZone ?? true;
+    }
+
+    // Zones are replaced (not modified) so that the Zone Manager can read them without locking
+    private void Update(Action<TrakHoundZoneConfiguration> change)
+    {
+        var updated = TrakHoundZoneManager.Copy(zone);
+        change(updated);
+        zoneManager.Save(updated);
+        Load(false);
+    }
+
+    private void SaveSettings()
+    {
+        Update(o =>
+        {
+            o.Name = string.IsNullOrWhiteSpace(editName) ? null : editName.Trim();
+            o.Description = string.IsNullOrWhiteSpace(editDescription) ? null : editDescription.Trim();
+            o.Mode = editMode;
+            o.RouterId = string.IsNullOrEmpty(editRouterId) ? null : editRouterId;
+            o.AllowSameZone = editAllowSameZone;
+        });
+
+        ResetSettings();
+        saved = true;
+        _ = HideSaved();
+    }
+
+    private async Task HideSaved()
+    {
+        await Task.Delay(2000);
+        saved = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    #region "Members"
+
+    private bool IsMember(string memberId) => zone.Members?.Any(o => string.Equals(o, memberId, StringComparison.OrdinalIgnoreCase)) ?? false;
+
+    private void AddMember()
+    {
+        var member = !string.IsNullOrEmpty(addMemberId) ? addMemberId : addMemberPattern?.Trim();
+        if (string.IsNullOrEmpty(member) || IsMember(member)) return;
+
+        Update(o => o.Members = (o.Members ?? Enumerable.Empty<string>()).Append(member).ToList());
+        addMemberId = null;
+        addMemberPattern = null;
+    }
+
+    private void RemoveMember(string member)
+    {
+        Update(o => o.Members = o.Members?.Where(m => m != member).ToList());
+    }
+
+    private IEnumerable<TrakHoundPackageCapability> GetCapabilities(IEnumerable<ZoneModule> matched)
+    {
+        var scanner = zoneManager?.Capabilities;
+        if (scanner == null) return Enumerable.Empty<TrakHoundPackageCapability>();
+
+        return matched
+            .Where(o => !string.IsNullOrEmpty(o.PackageId))
+            .SelectMany(o => scanner.Scan(o.PackageId, o.PackageVersion))
+            .GroupBy(o => o.Id)
+            .Select(g => new TrakHoundPackageCapability { Id = g.Key, Title = g.First().Title, Description = g.First().Description, Evidence = g.SelectMany(o => o.Evidence).Distinct().ToList() })
+            .ToList();
+    }
+
+    #endregion
+
+    #region "Rules"
+
+    private void OpenRuleEditor(int index)
+    {
+        var rule = index >= 0 ? zone.Rules?.ElementAtOrDefault(index) : null;
+        editRuleIndex = rule != null ? index : -1;
+        editRuleResource = rule?.Resource;
+        editRulePermissions = new HashSet<string>(rule?.Permissions ?? Enumerable.Empty<string>());
+        editRuleDescription = rule?.Description;
+        ruleEditorVisible = true;
+    }
+
+    private void TogglePermission(string permission, bool isChecked)
+    {
+        if (isChecked) editRulePermissions.Add(permission);
+        else editRulePermissions.Remove(permission);
+    }
+
+    private void SaveRule()
+    {
+        var rule = new TrakHoundZoneRule
+        {
+            Resource = editRuleResource?.Trim(),
+            Permissions = editRulePermissions.Count > 0 ? TrakHoundZoneResources.Permissions.Where(editRulePermissions.Contains).ToList() : null,
+            Description = string.IsNullOrWhiteSpace(editRuleDescription) ? null : editRuleDescription.Trim()
+        };
+
+        var index = editRuleIndex;
+        Update(o =>
+        {
+            var rules = o.Rules?.ToList() ?? new List<TrakHoundZoneRule>();
+            if (index >= 0 && index < rules.Count) rules[index] = rule;
+            else rules.Add(rule);
+            o.Rules = rules;
+        });
+
+        ruleEditorVisible = false;
+    }
+
+    private void RemoveRule(int index)
+    {
+        Update(o =>
+        {
+            var rules = o.Rules?.ToList() ?? new List<TrakHoundZoneRule>();
+            if (index >= 0 && index < rules.Count) rules.RemoveAt(index);
+            o.Rules = rules;
+        });
+    }
+
+    #endregion
+
+    #region "Callers"
+
+    private void AddCaller()
+    {
+        var caller = addCaller?.Trim();
+        if (string.IsNullOrEmpty(caller) || (zone.AllowedCallers?.Contains(caller, StringComparer.OrdinalIgnoreCase) ?? false)) return;
+
+        Update(o => o.AllowedCallers = (o.AllowedCallers ?? Enumerable.Empty<string>()).Append(caller).ToList());
+        addCaller = null;
+    }
+
+    private void RemoveCaller(string caller)
+    {
+        Update(o => o.AllowedCallers = o.AllowedCallers?.Where(c => c != caller).ToList());
+    }
+
+    #endregion
+
+    #region "Activity"
+
+    private void Grant(TrakHoundZoneActivity item, string pattern)
+    {
+        zoneManager.Grant(item, pattern);
+        Load(false);
+    }
+
+    private void Dismiss(TrakHoundZoneActivity item)
+    {
+        zoneManager.ClearActivity(item.Key);
+        LoadActivity();
+    }
+
+    private void ClearActivity()
+    {
+        zoneManager.ClearAllActivity(zone.Id);
+        LoadActivity();
+    }
+
+    #endregion
+
+    #region "Test"
+
+    private void ClearTest() => testResult = null;
+
+    private void RunTest()
+    {
+        var resource = testResource?.Trim();
+        testResult = zoneManager.Evaluate(testCaller, GetTargetMemberId(resource), resource, testPermission);
+    }
+
+    // The Module a Resource belongs to (ex. "api:entities:/objects" => "api:entities")
+    private static string GetTargetMemberId(string resourceId)
+    {
+        var parts = resourceId?.Split(':', 3);
+        if (parts == null || parts.Length < 2) return null;
+
+        switch (parts[0])
+        {
+            case TrakHoundZoneResources.ApiPrefix:
+            case TrakHoundZoneResources.FunctionPrefix:
+            case TrakHoundZoneResources.WorkerPrefix:
+            case TrakHoundZoneResources.ServicePrefix:
+                return TrakHoundZoneResources.GetMemberId(parts[0], parts[1]);
+
+            case TrakHoundZoneResources.ManagePrefix:
+                var manageParts = resourceId.Split(':');
+                return manageParts.Length > 2 && (manageParts[1] == TrakHoundZoneResources.ApiPrefix || manageParts[1] == TrakHoundZoneResources.AppPrefix) ? TrakHoundZoneResources.GetMemberId(manageParts[1], manageParts[2]) : null;
+        }
+
+        return null;
+    }
+
+    #endregion
+
+    private void RemoveZoneConfirmed()
+    {
+        zoneManager.Remove(zone.Id);
+        removeVisible = false;
+        navigationManager.NavigateTo(configurationsService.GetLink("_admin/configuration/zones"));
+    }
+
+}

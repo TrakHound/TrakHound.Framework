@@ -1,0 +1,14 @@
+﻿{
+  "id": "TrakHound.Mqtt.Service",
+  "category": "service",
+  "version": "0.4",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "MQTT Services for the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Mqtt.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".defaultVolumeId": "trakhound.mqtt.service.configuration",
+    ".configurationParameters": "hostname,port,clientId,qos,timeout,cleanSession,useTls"
+  }
+}

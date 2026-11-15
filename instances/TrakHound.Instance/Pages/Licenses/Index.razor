@@ -1,0 +1,1469 @@
+@page "/_admin/licenses"
+@page "/_admin/licenses/{Section}"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses)]
+@implements IDisposable
+@inject JavascriptService javascript
+@inject NavigationManager navigationManager
+@using Microsoft.AspNetCore.Components.Forms
+@using Radzen
+@using Radzen.Blazor
+@using TrakHound.Blazor.Components
+@using TrakHound.Blazor.Services
+@using TrakHound.Licenses
+
+<TrakHoundPageTitle Text="@(IsAssignments ? "Assignments - Licenses" : "Licenses")" />
+<AreaBreadcrumbs Items="@GetBreadcrumbs()" />
+
+<AreaLayout Icon="fa-solid fa-sharp fa-key" Title="Licenses" Subtitle="Manage Licenses" Link="_admin/licenses">
+    <Tools>
+        @* Publisher, Device ID and Refresh (for both sections) *@
+        <div class="device-panel">
+            @if (multiplePublishers)
+            {
+                <label>Publisher</label>
+                <RadzenDropDown TValue="string" Data="@publisherIds" @bind-Value="@selectedPublisherId" />
+            }
+            <label>Device ID</label>
+            <div class="device-id-output" title="@GetDeviceIdSourceText()">@deviceId</div>
+            <button class="btn btn-light btn-icon" title="Copy Device ID" disabled="@string.IsNullOrEmpty(deviceId)" @onclick="CopyDeviceId"><span class="icon fa-solid fa-sharp fa-copy"></span></button>
+        </div>
+
+        @if (!loading)
+        {
+            <button class="btn btn-light btn-icon" title="Refresh" aria-label="Refresh the Licenses" @onclick="Load"><span class="icon fa-solid fa-sharp fa-rotate-right"></span></button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-icon disabled" title="Loading.." disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span></button>
+        }
+    </Tools>
+    <Nav>
+        <AreaNavItem Href="_admin/licenses" Icon="fa-solid fa-sharp fa-key" Label="Licenses" Count="@licenseTableItems?.Count()" Match="NavLinkMatch.All" />
+        <AreaNavItem Href="_admin/licenses/assignments" Icon="fa-solid fa-sharp fa-link" Label="Assignments" Count="@assignmentTableItems?.Count()" />
+    </Nav>
+    <ChildContent>
+<div class="licenses-page">
+
+    @if (deviceIdWarning != null)
+    {
+        <div class="device-id-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@deviceIdWarning</div>
+    }
+
+    @if (loadError != null)
+    {
+        <div class="content-panel">
+            <div class="empty-state">
+                <span class="empty-state-icon error fa-solid fa-sharp fa-circle-exclamation"></span>
+                <span class="empty-state-title">Unable to load Licenses</span>
+                <span class="empty-state-description">@loadError</span>
+            </div>
+        </div>
+    }
+    else if (!loading)
+    {
+        <div class="content-panel">
+
+            @* Summary : click a tile to filter the table it applies to *@
+            <div class="summary-tiles">
+                @foreach (var tile in GetSummaryTiles())
+                {
+                    <button class="summary-tile @tile.StatusClass @(tile.Selected ? "selected" : null) @(tile.Value > 0 ? null : "zero")" title="@tile.Title" @onclick="tile.Clicked">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp @tile.Icon"></span>@tile.Label</span>
+                        <span class="tile-value">@tile.Value</span>
+                        <span class="tile-detail">@tile.Detail</span>
+                    </button>
+                }
+            </div>
+
+            <div class="tabs-panel">
+                @if (!IsAssignments)
+                {
+                        <div class="licenses-panel">
+                            <div class="tab-toolbar">
+                                <button class="admin-write btn btn-primary" @onclick="AddLicenseClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add License</button>
+                                <button class="admin-write btn btn-light" title="Paste or open a License File to add multiple Licenses" @onclick="ImportClicked"><span class="icon fa-solid fa-sharp fa-file-import"></span>Import</button>
+                                @* On the TrakHound website : where a License Code comes from *@
+                                <a class="btn btn-light" href="@TrakHoundWebsite.LicenseRequestUrl" target="_blank" rel="noopener" title="Request a trial or subscription License from TrakHound"><span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span>Request a License</a>
+
+                                @if (licenseFilter != null)
+                                {
+                                    <span class="filter-chip">
+                                        Showing @GetLicenseFilterText() Licenses
+                                        <button class="btn-chip-clear" title="Show all Licenses" @onclick="() => licenseFilter = null"><span class="icon fa-solid fa-sharp fa-xmark"></span></button>
+                                    </span>
+                                }
+                            </div>
+                            <div class="table-panel">
+
+                                @if (!licenseTableItems.IsNullOrEmpty())
+                                {
+                                    <RadzenDataGrid Data="@GetFilteredLicenses()" TItem="LicenseTableItem" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true" RowRender="LicenseRowRender">
+                                        <Columns>
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Property="Status" Title="Status" Width="120px">
+                                                <Template Context="context">
+                                                    <span class="status-badge @context.StatusClass" title="@context.Message">
+                                                        <span class="status-dot"></span>@context.Status
+                                                    </span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Property="ProductId" Title="Product" MinWidth="200px">
+                                                <Template Context="context">
+                                                    <div class="value-with-actions">
+                                                        <span class="value" title="@context.ProductId">@context.ProductId</span>
+                                                        <button class="btn btn-light btn-cell" title="Copy Product ID" @onclick="() => CopyClipboard(context.ProductId)"><span class="icon fa-solid fa-sharp fa-copy"></span></button>
+                                                    </div>
+                                                    @if (context.Description != null)
+                                                    {
+                                                        <span class="value sub-value" title="@context.Description">@context.Description</span>
+                                                    }
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Property="LicenseCode" Title="License Code" Width="260px">
+                                                <Template Context="context">
+                                                    @{
+                                                        var revealed = revealedLicenseCodes.Contains(context.LicenseCode);
+                                                    }
+                                                    <div class="value-with-actions">
+                                                        <span class="value code">@(revealed ? context.LicenseCode : MaskLicenseCode(context.LicenseCode))</span>
+                                                        <button class="btn btn-light btn-cell" title="@(revealed ? "Hide License Code" : "Show License Code")" @onclick="() => ToggleReveal(context.LicenseCode)"><span class="icon fa-solid fa-sharp @(revealed ? "fa-eye-slash" : "fa-eye")"></span></button>
+                                                        <button class="btn btn-light btn-cell" title="Copy License Code" @onclick="() => CopyClipboard(context.LicenseCode)"><span class="icon fa-solid fa-sharp fa-copy"></span></button>
+                                                    </div>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Property="AssignmentCount" Title="Assignments" Width="135px">
+                                                <Template Context="context">
+                                                    <span class="usage-text">@context.AssignmentCount / @context.AssignmentLimit</span>
+                                                    <span class="usage-bar @(context.AssignmentCount >= context.AssignmentLimit ? "full" : null)"><span class="usage-fill" style="width: @GetUsagePercent(context)%"></span></span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Property="ExpirationDate" Title="Expires" Width="170px">
+                                                <Template Context="context">
+                                                    @if (context.IsPermanent)
+                                                    {
+                                                        <span class="expires @context.StatusClass">Never</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="expires @context.StatusClass">@GetExpiration(context.ExpiresIn)</span>
+                                                        <span class="expires-date">@context.ExpirationDate.ToString("MMM d, yyyy")</span>
+                                                    }
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Property="PublisherId" Title="Publisher" Width="110px" Visible="@multiplePublishers" />
+                                            <RadzenDataGridColumn TItem="LicenseTableItem" Title="Actions" Width="150px" Sortable="false">
+                                                <Template Context="context">
+                                                    <div class="table-buttons-container">
+                                                        <button class="admin-write btn btn-sm btn-light btn-action" title="Edit Description" @onclick="() => EditDescriptionClicked(context)"><span class="icon fa-solid fa-sharp fa-pen"></span></button>
+                                                        <button class="admin-write btn btn-sm btn-light btn-action" title="Renew License" @onclick="() => RenewLicenseClicked(context)"><span class="icon fa-solid fa-sharp fa-rotate"></span></button>
+                                                        <button class="admin-write btn btn-sm btn-light btn-action" title="Unassign All" disabled="@(context.AssignmentCount == 0)" @onclick="() => UnassignAllClicked(context)"><span class="icon fa-solid fa-sharp fa-link-slash"></span></button>
+                                                        <button class="admin-write btn btn-sm btn-light btn-action btn-danger-icon" title="Remove License" @onclick="() => RemoveLicenseClicked(context)"><span class="icon fa-solid fa-sharp fa-trash"></span></button>
+                                                    </div>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                        </Columns>
+                                    </RadzenDataGrid>
+                                }
+                                else
+                                {
+                                    <div class="empty-state">
+                                        <span class="empty-state-icon fa-solid fa-sharp fa-key"></span>
+                                        <span class="empty-state-title">No Licenses</span>
+                                        <span class="empty-state-description">Add a License using its Product ID and License Code, or Import a License File</span>
+                                        <span class="empty-state-links">
+                                            <a href="@TrakHoundWebsite.LicenseRequestUrl" target="_blank" rel="noopener">Request a License</a>
+                                            <a href="@TrakHoundWebsite.LicensingGuide" target="_blank" rel="noopener">Licensing Guide</a>
+                                        </span>
+                                    </div>
+                                }
+
+                            </div>
+                        </div>
+                }
+                else
+                {
+                        <div class="assignments-panel">
+
+                            @if (unlicensedOnly)
+                            {
+                                <div class="tab-toolbar">
+                                    <span class="filter-chip">
+                                        Showing Unlicensed Assignments
+                                        <button class="btn-chip-clear" title="Show all Assignments" @onclick="() => unlicensedOnly = false"><span class="icon fa-solid fa-sharp fa-xmark"></span></button>
+                                    </span>
+                                </div>
+                            }
+
+                            <div class="table-panel">
+
+                                @if (!assignmentTableItems.IsNullOrEmpty())
+                                {
+                                    <RadzenDataGrid Data="@GetFilteredAssignments()" TItem="AssignmentTableItem" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true" RowRender="AssignmentRowRender">
+                                        <Columns>
+                                            <RadzenDataGridColumn TItem="AssignmentTableItem" Property="Status" Title="Status" Width="110px">
+                                                <Template Context="context">
+                                                    <span class="status-badge @context.StatusClass" title="@context.Message">
+                                                        <span class="status-dot"></span>@context.Status
+                                                    </span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="AssignmentTableItem" Property="Description" Title="Description" MinWidth="260px">
+                                                <Template Context="context">
+                                                    <span class="value" title="@context.Description">@context.Description</span>
+                                                    <span class="value sub-value code" title="Assignment ID">@context.AssignmentId</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="AssignmentTableItem" Property="ProductId" Title="Product" Width="240px">
+                                                <Template Context="context">
+                                                    <div class="value-with-actions">
+                                                        <span class="value" title="@context.ProductId">@context.ProductId</span>
+                                                        <button class="btn btn-light btn-cell" title="Copy Product ID" @onclick="() => CopyClipboard(context.ProductId)"><span class="icon fa-solid fa-sharp fa-copy"></span></button>
+                                                    </div>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="AssignmentTableItem" Property="LicenseCode" Title="License" Width="300px" CssClass="license-select">
+                                                <Template Context="context">
+                                                    <RadzenDropDown TValue="string" Data="@GetAssignableLicenses(context)" TextProperty="DisplayText" ValueProperty="LicenseCode" Value="@context.LicenseCode" ValueChanged="(licenseCode) => AssignmentLicenseChanged(context, licenseCode)" Placeholder="Select License..." />
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="AssignmentTableItem" Property="PublisherId" Title="Publisher" Width="100px" Visible="@multiplePublishers" />
+                                            <RadzenDataGridColumn TItem="AssignmentTableItem" Title="Actions" Width="80px" Sortable="false">
+                                                <Template Context="context">
+                                                    <div class="table-buttons-container">
+                                                        <button class="admin-write btn btn-sm btn-light btn-action btn-danger-icon" title="Unassign License" disabled="@string.IsNullOrEmpty(context.LicenseCode)" @onclick="() => UnassignClicked(context)"><span class="icon fa-solid fa-sharp fa-link-slash"></span></button>
+                                                    </div>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                        </Columns>
+                                    </RadzenDataGrid>
+                                }
+                                else
+                                {
+                                    <div class="empty-state">
+                                        <span class="empty-state-icon fa-solid fa-sharp fa-link"></span>
+                                        <span class="empty-state-title">No Assignments</span>
+                                        <span class="empty-state-description">Assignments appear here when licensed Workers, APIs, or Services request a License</span>
+                                    </div>
+                                }
+
+                            </div>
+                        </div>
+                }
+            </div>
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Licenses..." Delay="false" />
+        </div>
+    }
+
+</div>
+    </ChildContent>
+</AreaLayout>
+
+
+<Modal Class="renew-license-modal" Visible="@renewModalVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-rotate"></span>
+        <span class="modal-header-title">Renew License</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="renew-license-panel">
+
+            @if (renewItem != null)
+            {
+                <div class="renew-license-table">
+                    <table>
+                        <tbody>
+                            <tr>
+                                <td class="label">Product ID</td>
+                                <td class="value">@renewItem.ProductId</td>
+                            </tr>
+                            @if (renewItem.Description != null)
+                            {
+                                <tr>
+                                    <td class="label">Description</td>
+                                    <td class="value">@renewItem.Description</td>
+                                </tr>
+                            }
+                            <tr>
+                                <td class="label">Current License</td>
+                                <td class="value">@MaskLicenseCode(renewItem.LicenseCode)</td>
+                            </tr>
+                            <tr>
+                                <td class="label">Device ID</td>
+                                <td class="value">@renewItem.DeviceId</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="renew-license-input">
+                <TextBox @bind-Value="renewLicenseCode" PlaceHolder="New License Code" />
+            </div>
+
+            @if (renewError != null)
+            {
+                <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@renewError</div>
+            }
+        </div>
+    </BodyContent>
+    <FooterContent>
+
+        @if (!renewLoading)
+        {
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@string.IsNullOrWhiteSpace(renewLicenseCode)" @onclick="ModalRenewLicenseClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Renew</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Renewing..</button>
+        }
+
+    </FooterContent>
+</Modal>
+
+<Modal Class="description-modal" Visible="@descriptionVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-pen"></span>
+        <span class="modal-header-title">Edit Description</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="description-panel">
+
+            @if (descriptionItem != null)
+            {
+                <div class="description-table">
+                    <table>
+                        <tbody>
+                            <tr>
+                                <td class="label">Product ID</td>
+                                <td class="value">@descriptionItem.ProductId</td>
+                            </tr>
+                            <tr>
+                                <td class="label">License</td>
+                                <td class="value">@MaskLicenseCode(descriptionItem.LicenseCode)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="add-license-input">
+                <label>Description</label>
+                <TextBox @bind-Value="descriptionText" PlaceHolder="ex. Line 3 machines, PO-4471" Submitted="ModalSaveDescriptionClicked" />
+            </div>
+
+            @if (descriptionError != null)
+            {
+                <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@descriptionError</div>
+            }
+        </div>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="ModalCancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+        <button class="admin-write btn btn-primary" @onclick="ModalSaveDescriptionClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Save</button>
+    </FooterContent>
+</Modal>
+
+<Modal Class="add-license-modal" Visible="@addVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-plus"></span>
+        <span class="modal-header-title">Add License</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="add-license-panel">
+
+            <div class="add-license-table">
+                <table>
+                    <tbody>
+                        <tr>
+                            <td class="label">Device ID</td>
+                            <td class="value code">@deviceId</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="add-license-input">
+                <label>Publisher ID</label>
+                <TextBox @bind-Value="addPublisherId" PlaceHolder="ex. trakhound" />
+            </div>
+            <div class="add-license-input">
+                <label>Product ID</label>
+                <TextBox @bind-Value="addProductId" PlaceHolder="ex. trakhound.sqlserver" />
+            </div>
+            <div class="add-license-input">
+                <label>License Code</label>
+                <TextBox @bind-Value="addLicenseCode" PlaceHolder="XXXXX-XXXXX-XXXXX" />
+            </div>
+            <div class="add-license-input">
+                <label>Description (optional)</label>
+                <TextBox @bind-Value="addDescription" PlaceHolder="ex. Line 3 machines, PO-4471" />
+            </div>
+
+            @if (addError != null)
+            {
+                <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@addError</div>
+            }
+        </div>
+    </BodyContent>
+    <FooterContent>
+
+        @if (!addLoading)
+        {
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(addPublisherId) || string.IsNullOrWhiteSpace(addProductId) || string.IsNullOrWhiteSpace(addLicenseCode))" @onclick="ModalAddLicenseClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add License</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Adding..</button>
+        }
+
+    </FooterContent>
+</Modal>
+
+<Modal Class="import-license-modal" Visible="@importVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-file-import"></span>
+        <span class="modal-header-title">Import Licenses</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="import-license-panel">
+
+            @if (!importComplete)
+            {
+                <div class="import-description">Paste a License File (JSON) or one <span class="code">ProductId LicenseCode</span> pair per line</div>
+
+                <textarea class="form-control import-text" rows="8" spellcheck="false" autocomplete="off" disabled="@importLoading"
+                          placeholder="@_importPlaceHolder"
+                          @bind="importText" @bind:event="oninput" @bind:after="ParseImport"></textarea>
+
+                <div class="import-toolbar">
+                    <div class="import-file-button btn btn-light @(importLoading ? "disabled" : "")">
+                        <span class="icon fa-solid fa-sharp fa-folder-open"></span>Open File
+                        <InputFile OnChange="ImportFileSelected" accept="@($"{TrakHoundLicenseFile.FileExtension},.txt")" title="" class="import-file-input" />
+                    </div>
+                    <span class="import-summary">@GetImportSummary()</span>
+                </div>
+            }
+
+            @if (!importErrors.IsNullOrEmpty())
+            {
+                <div class="import-errors">
+                    @foreach (var error in importErrors)
+                    {
+                        <div class="modal-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</div>
+                    }
+                </div>
+            }
+
+            @if (!importRows.IsNullOrEmpty())
+            {
+                <div class="import-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Status</th>
+                                <th>Product</th>
+                                <th>License Code</th>
+                                <th>Publisher</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in importRows)
+                            {
+                                <tr>
+                                    <td class="status">
+                                        <span class="status-badge @GetImportStatusClass(row.Status)">
+                                            <span class="status-dot"></span>@GetImportStatusText(row.Status)
+                                        </span>
+                                        @if (!string.IsNullOrEmpty(row.Message))
+                                        {
+                                            <span class="status-message">@row.Message</span>
+                                        }
+                                    </td>
+                                    <td class="product" title="@row.ProductId">
+                                        @row.ProductId
+                                        @if (row.Description != null)
+                                        {
+                                            <span class="product-description" title="@row.Description">@row.Description</span>
+                                        }
+                                    </td>
+                                    <td class="code">@MaskLicenseCode(row.LicenseCode)</td>
+                                    <td>@row.PublisherId</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+        </div>
+    </BodyContent>
+    <FooterContent>
+
+        @if (importComplete)
+        {
+            <button class="btn btn-primary" @onclick="ImportCloseClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Done</button>
+        }
+        else if (!importLoading)
+        {
+            var readyCount = importRows.Count(o => o.Status == ImportStatus.Ready);
+
+            <button class="btn btn-secondary" @onclick="ImportCloseClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@(readyCount == 0)" @onclick="ModalImportClicked"><span class="icon fa-solid fa-sharp fa-file-import"></span>Import@(readyCount > 0 ? $" ({readyCount})" : "")</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Importing..</button>
+        }
+
+    </FooterContent>
+</Modal>
+
+<Modal Class="confirm-modal" Visible="@(confirmAction != null)">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+        <span class="modal-header-title">@confirmTitle</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="confirm-panel">
+
+            <div class="confirm-message-container">
+                <span class="confirm-message">@confirmMessage</span>
+            </div>
+
+            @if (!confirmDetails.IsNullOrEmpty())
+            {
+                <div class="confirm-table">
+                    <table>
+                        <tbody>
+                            @foreach (var detail in confirmDetails)
+                            {
+                                <tr>
+                                    <td class="label">@detail.Key</td>
+                                    <td class="value">@detail.Value</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+        </div>
+    </BodyContent>
+    <FooterContent>
+
+        @if (!confirmLoading)
+        {
+            <button class="btn btn-secondary" @onclick="ModalCancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="ModalConfirmClicked"><span class="icon fa-solid fa-sharp @confirmIcon"></span>@confirmLabel</button>
+        }
+        else
+        {
+            <button class="btn btn-danger disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>@(confirmLabel)..</button>
+        }
+
+    </FooterContent>
+</Modal>
+
+<Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+@code {
+
+    private static readonly TimeSpan _expiringSoon = TimeSpan.FromDays(30);
+    private const string _defaultPublisherId = TrakHoundLicenseManagers.DefaultPublisherId;
+    private const long _maxImportFileSize = 1024 * 1024; // 1 MB
+    private const string _importPlaceHolder = "{\n  \"publisherId\": \"trakhound\",\n  \"deviceId\": \"...\",\n  \"licenses\": [\n    { \"productId\": \"...\", \"licenseCode\": \"...\", \"description\": \"...\" }\n  ]\n}";
+
+    private TrakHound.Instance.Components.NotificationService notificationService;
+
+    private IEnumerable<string> publisherIds;
+    private string selectedPublisherId;
+    private string deviceId;
+    private string deviceIdWarning;
+
+    private IEnumerable<LicenseTableItem> licenseTableItems;
+    private IEnumerable<AssignmentTableItem> assignmentTableItems;
+    private readonly HashSet<string> revealedLicenseCodes = new HashSet<string>();
+    private bool multiplePublishers;
+
+    // The section (from the route) : "assignments", or the Licenses
+    [Parameter]
+    public string Section { get; set; }
+
+    private bool IsAssignments => string.Equals(Section, "assignments", StringComparison.OrdinalIgnoreCase);
+
+    private IEnumerable<BreadcrumbItem> GetBreadcrumbs() => IsAssignments ? [new("Assignments")] : [];
+
+    private string licenseFilter; // StatusClass (active, expiring, expired)
+    private bool unlicensedOnly;
+
+    private bool addVisible;
+    private bool addLoading;
+    private string addError;
+    private string addPublisherId;
+    private string addProductId;
+    private string addLicenseCode;
+    private string addDescription;
+    private bool loading = true;
+
+    private bool descriptionVisible;
+    private string descriptionError;
+    private LicenseTableItem descriptionItem;
+    private string descriptionText;
+    private string loadError;
+
+    private bool renewModalVisible;
+    private bool renewLoading;
+    private string renewError;
+    private LicenseTableItem renewItem;
+    private string renewLicenseCode;
+
+    // Import
+    private bool importVisible;
+    private bool importLoading;
+    private bool importComplete;
+    private string importText;
+    private List<string> importErrors = new List<string>();
+    private List<ImportRow> importRows = new List<ImportRow>();
+
+    // Confirmation (Remove, Unassign, Unassign All)
+    private Func<Task> confirmAction;
+    private bool confirmLoading;
+    private string confirmTitle;
+    private string confirmMessage;
+    private string confirmLabel;
+    private string confirmIcon;
+    private IEnumerable<KeyValuePair<string, string>> confirmDetails;
+
+
+    class LicenseTableItem
+    {
+        public bool IsValid { get; set; }
+        public string Status { get; set; }
+        public string StatusClass { get; set; }
+        public string PublisherId { get; set; }
+        public string ProductId { get; set; }
+        public string DeviceId { get; set; }
+        public string LicenseCode { get; set; }
+        public string Description { get; set; }
+        public int AssignmentCount { get; set; }
+        public int AssignmentLimit { get; set; }
+        public TimeSpan ExpiresIn { get; set; }
+        public DateTime ExpirationDate { get; set; }
+        public string Message { get; set; }
+        public bool IsPermanent { get; set; }
+
+        // Shown in the Assignment License dropdown (the Description, when there is one, tells Licenses for the same Product apart)
+        public string DisplayText => $"{Description ?? MaskLicenseCode(LicenseCode)}  ({AssignmentCount} / {AssignmentLimit} used)";
+    }
+
+    class AssignmentTableItem
+    {
+        public bool IsValid { get; set; }
+        public string Status { get; set; }
+        public string StatusClass { get; set; }
+        public string AssignmentId { get; set; }
+        public string PublisherId { get; set; }
+        public string ProductId { get; set; }
+        public string DeviceId { get; set; }
+        public string LicenseCode { get; set; }
+        public string Description { get; set; }
+        public string Message { get; set; }
+    }
+
+    enum ImportStatus
+    {
+        Ready,
+        Exists,
+        UnknownPublisher,
+        WrongDevice,
+        Added,
+        Failed
+    }
+
+    class ImportRow
+    {
+        public ImportStatus Status { get; set; }
+        public string PublisherId { get; set; }
+        public string ProductId { get; set; }
+        public string LicenseCode { get; set; }
+        public string Description { get; set; }
+        public string Message { get; set; }
+    }
+
+    class SummaryTile
+    {
+        public string Label { get; set; }
+        public string Icon { get; set; }
+        public int Value { get; set; }
+        public string Detail { get; set; }
+        public string Title { get; set; }
+        public string StatusClass { get; set; }
+        public bool Selected { get; set; }
+        public Action Clicked { get; set; }
+    }
+
+    class LoadResult
+    {
+        public List<string> PublisherIds { get; } = new List<string>();
+        public List<LicenseTableItem> Licenses { get; } = new List<LicenseTableItem>();
+        public List<AssignmentTableItem> Assignments { get; } = new List<AssignmentTableItem>();
+    }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService = new TrakHound.Instance.Components.NotificationService();
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        // Stop the notification timer, which would otherwise keep running (and keep this page alive)
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Once (not when the section changes)
+    protected async override Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+
+    private async Task Load()
+    {
+        loading = true;
+        loadError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // License Managers read from disk, so load off of the UI thread
+            var result = await Task.Run(LoadLicenses);
+
+            publisherIds = result.PublisherIds;
+            multiplePublishers = result.PublisherIds.Count > 1;
+
+            // Group by Product, then the License that expires last first (the one most likely in use)
+            licenseTableItems = result.Licenses.OrderBy(o => o.ProductId).ThenByDescending(o => o.ExpirationDate).ToList();
+            assignmentTableItems = result.Assignments.OrderBy(o => o.IsValid).ThenBy(o => o.ProductId).ThenBy(o => o.Description).ToList();
+
+            // Keep the selected Publisher if it still exists
+            if (selectedPublisherId == null || !result.PublisherIds.Contains(selectedPublisherId))
+            {
+                selectedPublisherId = result.PublisherIds.FirstOrDefault();
+            }
+
+            // Every Publisher's Licenses are issued for the same Device ID
+            var deviceIdInformation = TrakHoundDeviceId.GetInformation();
+            deviceId = deviceIdInformation.DeviceId;
+            deviceIdWarning = deviceIdInformation.Warning;
+        }
+        catch (Exception ex)
+        {
+            // Show the error instead of staying on 'Loading..'
+            loadError = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static LoadResult LoadLicenses()
+    {
+        var result = new LoadResult();
+        var now = DateTime.UtcNow;
+
+        var licenseManagers = TrakHoundLicenseManagers.Get();
+        if (!licenseManagers.IsNullOrEmpty())
+        {
+            foreach (var licenseManager in licenseManagers)
+            {
+                licenseManager.Refresh();
+                result.PublisherIds.Add(licenseManager.PublisherId);
+
+                var licenseInformations = licenseManager.GetLicenses();
+                if (!licenseInformations.IsNullOrEmpty())
+                {
+                    foreach (var licenseInformation in licenseInformations)
+                    {
+                        var validationResult = licenseManager.CheckLicenseCode(licenseInformation.LicenseCode);
+                        var expiresIn = licenseInformation.ExpirationDate - now;
+
+                        var item = new LicenseTableItem();
+                        item.IsValid = validationResult.IsValid;
+                        (item.Status, item.StatusClass) = GetLicenseStatus(validationResult.IsValid, expiresIn);
+                        item.PublisherId = licenseManager.PublisherId;
+                        item.ProductId = licenseInformation.ProductId;
+                        item.DeviceId = licenseInformation.DeviceId;
+                        item.LicenseCode = licenseInformation.LicenseCode;
+                        item.Description = licenseInformation.Description;
+                        item.AssignmentCount = licenseInformation.AssignmentCount;
+                        item.AssignmentLimit = licenseInformation.AssignmentLimit;
+                        item.ExpiresIn = expiresIn;
+                        item.ExpirationDate = licenseInformation.ExpirationDate;
+                        item.Message = validationResult.Message;
+                        item.IsPermanent = licenseInformation.IsPermanent;
+                        result.Licenses.Add(item);
+                    }
+                }
+
+                var assignmentInformations = licenseManager.GetAssignments();
+                if (!assignmentInformations.IsNullOrEmpty())
+                {
+                    foreach (var assignmentInformation in assignmentInformations)
+                    {
+                        var validationResult = licenseManager.CheckAssignment(assignmentInformation.AssignmentId);
+
+                        var item = new AssignmentTableItem();
+                        item.IsValid = validationResult.IsValid;
+                        item.Status = validationResult.IsValid ? "Active" : "Inactive";
+                        item.StatusClass = validationResult.IsValid ? "active" : "inactive";
+                        item.AssignmentId = assignmentInformation.AssignmentId;
+                        item.PublisherId = licenseManager.PublisherId;
+                        item.ProductId = assignmentInformation.ProductId;
+                        item.DeviceId = assignmentInformation.DeviceId;
+                        item.LicenseCode = assignmentInformation.LicenseCode;
+                        item.Message = validationResult.Message;
+                        item.Description = assignmentInformation.Description;
+                        result.Assignments.Add(item);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static (string Status, string StatusClass) GetLicenseStatus(bool isValid, TimeSpan expiresIn)
+    {
+        if (expiresIn <= TimeSpan.Zero) return ("Expired", "expired");
+        if (!isValid) return ("Invalid", "inactive");
+        if (expiresIn < _expiringSoon) return ("Expiring", "expiring");
+        return ("Active", "active");
+    }
+
+
+    // Summary
+
+    private IEnumerable<SummaryTile> GetSummaryTiles()
+    {
+        var licenses = licenseTableItems ?? Enumerable.Empty<LicenseTableItem>();
+        var assignments = assignmentTableItems ?? Enumerable.Empty<AssignmentTableItem>();
+        var total = licenses.Count();
+
+        var active = licenses.Count(o => o.StatusClass == "active");
+        var expiring = licenses.Count(o => o.StatusClass == "expiring");
+        var expired = licenses.Count(o => o.StatusClass == "expired" || o.StatusClass == "inactive");
+        var unlicensed = assignments.Count(o => !o.IsValid);
+
+        yield return LicenseTile("active", "Active", "fa-circle-check", active, $"of {Plural(total, "License")}");
+        yield return LicenseTile("expiring", "Expiring", "fa-clock", expiring, $"within {_expiringSoon.TotalDays} days");
+        yield return LicenseTile("expired", "Expired", "fa-circle-xmark", expired, expired > 0 ? "Renew or Remove" : "None");
+        yield return new SummaryTile
+        {
+            Label = "Unlicensed",
+            Icon = "fa-link-slash",
+            Value = unlicensed,
+            Detail = $"of {Plural(assignments.Count(), "Assignment")}",
+            Title = "Show Assignments without a valid License",
+            StatusClass = unlicensed > 0 ? "inactive" : null,
+            Selected = unlicensedOnly,
+            Clicked = () =>
+            {
+                unlicensedOnly = !unlicensedOnly;
+                licenseFilter = null;
+                if (!IsAssignments) navigationManager.NavigateTo("_admin/licenses/assignments");
+            }
+        };
+    }
+
+    private SummaryTile LicenseTile(string statusClass, string label, string icon, int value, string detail)
+    {
+        return new SummaryTile
+        {
+            Label = label,
+            Icon = icon,
+            Value = value,
+            Detail = detail,
+            Title = $"Show {label} Licenses",
+            StatusClass = value > 0 ? statusClass : null,
+            Selected = licenseFilter == statusClass,
+            Clicked = () =>
+            {
+                licenseFilter = licenseFilter == statusClass ? null : statusClass;
+                unlicensedOnly = false;
+                if (IsAssignments) navigationManager.NavigateTo("_admin/licenses");
+            }
+        };
+    }
+
+    private IEnumerable<LicenseTableItem> GetFilteredLicenses()
+    {
+        if (licenseFilter == null) return licenseTableItems;
+        if (licenseFilter == "expired") return licenseTableItems.Where(o => o.StatusClass == "expired" || o.StatusClass == "inactive");
+        return licenseTableItems.Where(o => o.StatusClass == licenseFilter);
+    }
+
+    private IEnumerable<AssignmentTableItem> GetFilteredAssignments()
+    {
+        return unlicensedOnly ? assignmentTableItems.Where(o => !o.IsValid) : assignmentTableItems;
+    }
+
+    private string GetLicenseFilterText() => licenseFilter switch
+    {
+        "active" => "Active",
+        "expiring" => "Expiring",
+        _ => "Expired"
+    };
+
+    // Dim Licenses and Assignments that are no longer usable (a "class" attribute replaces the row classes, so keep rz-data-row)
+    private void LicenseRowRender(RowRenderEventArgs<LicenseTableItem> args)
+    {
+        if (args.Data.StatusClass == "expired" || args.Data.StatusClass == "inactive") args.Attributes.Add("class", "rz-data-row row-inactive");
+    }
+
+    private void AssignmentRowRender(RowRenderEventArgs<AssignmentTableItem> args)
+    {
+        if (!args.Data.IsValid) args.Attributes.Add("class", "rz-data-row row-unlicensed");
+    }
+
+    private static int GetUsagePercent(LicenseTableItem item)
+    {
+        if (item.AssignmentLimit <= 0) return 0;
+        return Math.Min(100, (int)Math.Round(100.0 * item.AssignmentCount / item.AssignmentLimit));
+    }
+
+
+    // Add
+
+    private void AddLicenseClicked()
+    {
+        addPublisherId = selectedPublisherId ?? _defaultPublisherId;
+        addProductId = null;
+        addLicenseCode = null;
+        addDescription = null;
+        addError = null;
+        addVisible = true;
+    }
+
+    private async Task ModalAddLicenseClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses);
+
+        if (string.IsNullOrWhiteSpace(addPublisherId) || string.IsNullOrWhiteSpace(addProductId) || string.IsNullOrWhiteSpace(addLicenseCode)) return;
+
+        var licenseManager = TrakHoundLicenseManagers.Get(addPublisherId.Trim());
+        if (licenseManager == null)
+        {
+            addError = $"'{addPublisherId.Trim()}' isn't a valid Publisher ID";
+            return;
+        }
+
+        addLoading = true;
+        addError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var information = licenseManager.AddLicense(addProductId.Trim(), licenseManager.GetDeviceId(), addLicenseCode.Trim(), addDescription);
+            if (information != null)
+            {
+                notificationService.AddNotification(NotificationType.Success, "License Added", information.ProductId);
+                selectedPublisherId = licenseManager.PublisherId;
+                addVisible = false;
+                await Load();
+            }
+            else
+            {
+                addError = "Unable to Add License. Check the Product ID and License Code.";
+            }
+        }
+        catch (Exception ex)
+        {
+            addError = ex.Message;
+        }
+        finally
+        {
+            addLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+    // Import
+
+    private void ImportClicked()
+    {
+        importText = null;
+        importErrors = new List<string>();
+        importRows = new List<ImportRow>();
+        importLoading = false;
+        importComplete = false;
+        importVisible = true;
+    }
+
+    private async Task ImportFileSelected(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        if (file == null) return;
+
+        if (file.Size > _maxImportFileSize)
+        {
+            importErrors = new List<string> { $"'{file.Name}' is too large to be a License File" };
+            importRows = new List<ImportRow>();
+            return;
+        }
+
+        try
+        {
+            using (var reader = new StreamReader(file.OpenReadStream(_maxImportFileSize)))
+            {
+                importText = await reader.ReadToEndAsync();
+            }
+
+            ParseImport();
+        }
+        catch (Exception ex)
+        {
+            importErrors = new List<string> { $"Could not read '{file.Name}' : {ex.Message}" };
+            importRows = new List<ImportRow>();
+        }
+    }
+
+    // Parses the pasted text and checks each License against what is already loaded (nothing is added yet)
+    private void ParseImport()
+    {
+        var licenseFile = TrakHoundLicenseFile.Parse(importText);
+        var rows = new List<ImportRow>();
+
+        foreach (var entry in licenseFile.Licenses)
+        {
+            var row = new ImportRow();
+            row.PublisherId = entry.PublisherId ?? selectedPublisherId ?? _defaultPublisherId;
+            row.ProductId = entry.ProductId;
+            row.LicenseCode = entry.LicenseCode;
+            row.Description = entry.Description;
+
+            // Checked without creating the Publisher's Manager, so a preview doesn't add a Publisher
+            if (!TrakHoundLicenseManagers.IsValidPublisherId(row.PublisherId))
+            {
+                row.Status = ImportStatus.UnknownPublisher;
+                row.Message = $"'{row.PublisherId}' isn't a valid Publisher ID";
+            }
+            else
+            {
+                if (licenseTableItems != null && licenseTableItems.Any(o => o.PublisherId == row.PublisherId && o.LicenseCode == TrakHoundLicenseCode.Format(row.LicenseCode)))
+                {
+                    row.Status = ImportStatus.Exists;
+                }
+                else if (entry.DeviceId != null && deviceId != null && TrakHoundDeviceId.Normalize(entry.DeviceId) != deviceId)
+                {
+                    row.Status = ImportStatus.WrongDevice;
+                    row.Message = $"Issued for Device '{entry.DeviceId}'";
+                }
+                else
+                {
+                    row.Status = ImportStatus.Ready;
+                }
+            }
+
+            rows.Add(row);
+        }
+
+        importRows = rows;
+        importErrors = licenseFile.Errors;
+    }
+
+    private async Task ModalImportClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses);
+
+        var rows = importRows.Where(o => o.Status == ImportStatus.Ready).ToList();
+        if (rows.Count == 0) return;
+
+        importLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        // License Managers write to disk, so import off of the UI thread. Each License is added on its own so one bad code doesn't stop the rest.
+        await Task.Run(() =>
+        {
+            foreach (var row in rows)
+            {
+                try
+                {
+                    var licenseManager = TrakHoundLicenseManagers.Get(row.PublisherId);
+                    var information = licenseManager?.AddLicense(row.ProductId, licenseManager.GetDeviceId(), row.LicenseCode, row.Description);
+                    if (information != null)
+                    {
+                        row.Status = ImportStatus.Added;
+                        row.Message = null;
+                    }
+                    else
+                    {
+                        row.Status = ImportStatus.Failed;
+                        row.Message = "Check the Product ID and License Code";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    row.Status = ImportStatus.Failed;
+                    row.Message = ex.Message;
+                }
+            }
+        });
+
+        var added = rows.Count(o => o.Status == ImportStatus.Added);
+        var failed = rows.Count(o => o.Status == ImportStatus.Failed);
+        var skipped = importRows.Count - rows.Count;
+
+        var description = $"{added} added" + (skipped > 0 ? $", {skipped} skipped" : "") + (failed > 0 ? $", {failed} failed" : "");
+        if (failed > 0) notificationService.AddNotification(NotificationType.Error, "Licenses Imported with Errors", description);
+        else notificationService.AddNotification(NotificationType.Success, "Licenses Imported", description);
+
+        importLoading = false;
+        importComplete = true;
+
+        await Load();
+    }
+
+    private void ImportCloseClicked()
+    {
+        importVisible = false;
+        importText = null;
+        importRows = new List<ImportRow>();
+        importErrors = new List<string>();
+    }
+
+    private string GetImportSummary()
+    {
+        if (importRows.IsNullOrEmpty()) return importErrors.IsNullOrEmpty() ? null : "No Licenses found";
+
+        var ready = importRows.Count(o => o.Status == ImportStatus.Ready);
+        var skipped = importRows.Count - ready;
+        return $"{Plural(importRows.Count, "License")} found" + (skipped > 0 ? $", {skipped} will be skipped" : "");
+    }
+
+    private static string GetImportStatusText(ImportStatus status) => status switch
+    {
+        ImportStatus.Ready => "Ready",
+        ImportStatus.Exists => "Already Added",
+        ImportStatus.UnknownPublisher => "Invalid Publisher",
+        ImportStatus.WrongDevice => "Wrong Device",
+        ImportStatus.Added => "Added",
+        _ => "Failed"
+    };
+
+    private static string GetImportStatusClass(ImportStatus status) => status switch
+    {
+        ImportStatus.Ready => "ready",
+        ImportStatus.Added => "active",
+        ImportStatus.Exists => "skipped",
+        _ => "inactive"
+    };
+
+
+    // Renew
+
+    private void RenewLicenseClicked(LicenseTableItem item)
+    {
+        renewItem = item;
+        renewLicenseCode = null;
+        renewError = null;
+        renewModalVisible = true;
+    }
+
+    private async Task ModalRenewLicenseClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses);
+
+        if (renewItem == null || string.IsNullOrWhiteSpace(renewLicenseCode)) return;
+
+        renewLoading = true;
+        renewError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Use the License's own Publisher (not the selected Publisher)
+            var licenseManager = TrakHoundLicenseManagers.Get(renewItem.PublisherId);
+            var information = licenseManager?.RenewLicense(renewItem.ProductId, renewItem.DeviceId, renewItem.LicenseCode, renewLicenseCode.Trim());
+            if (information != null)
+            {
+                notificationService.AddNotification(NotificationType.Success, "License Renewed", renewItem.ProductId);
+                renewModalVisible = false;
+                await Load();
+            }
+            else
+            {
+                renewError = "Unable to Renew License. Check the new License Code.";
+            }
+        }
+        catch (Exception ex)
+        {
+            renewError = ex.Message;
+        }
+        finally
+        {
+            renewLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+    // Description
+
+    private void EditDescriptionClicked(LicenseTableItem item)
+    {
+        descriptionItem = item;
+        descriptionText = item.Description;
+        descriptionError = null;
+        descriptionVisible = true;
+    }
+
+    private async Task ModalSaveDescriptionClicked()
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses);
+
+        if (descriptionItem == null) return;
+
+        try
+        {
+            var licenseManager = TrakHoundLicenseManagers.Get(descriptionItem.PublisherId);
+            var information = licenseManager?.SetLicenseDescription(descriptionItem.LicenseCode, descriptionText);
+            if (information != null)
+            {
+                notificationService.AddNotification(NotificationType.Success, "Description Saved", information.Description ?? information.ProductId);
+                descriptionVisible = false;
+                await Load();
+            }
+            else
+            {
+                descriptionError = "The License wasn't found. Refresh and try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            descriptionError = ex.Message;
+        }
+    }
+
+
+    // Remove / Unassign (confirmed)
+
+    private void RemoveLicenseClicked(LicenseTableItem item)
+    {
+        ShowConfirm("Remove License", "Remove this License? Anything assigned to it will stop being licensed.", "Remove", "fa-trash",
+            new Dictionary<string, string>
+            {
+                { "Description", item.Description },
+                { "Product ID", item.ProductId },
+                { "License Code", MaskLicenseCode(item.LicenseCode) },
+                { "Assignments", $"{item.AssignmentCount} / {item.AssignmentLimit}" },
+                { "Expires", GetExpiration(item.ExpiresIn) }
+            },
+            () => RunLicenseAction(item.PublisherId, m => m.RemoveLicense(item.LicenseCode), "License Removed", "Error Removing License", item.ProductId));
+    }
+
+    private void UnassignAllClicked(LicenseTableItem item)
+    {
+        ShowConfirm("Unassign All", $"Unassign all {item.AssignmentCount} assignments from this License?", "Unassign All", "fa-link-slash",
+            new Dictionary<string, string>
+            {
+                { "Product ID", item.ProductId },
+                { "License Code", MaskLicenseCode(item.LicenseCode) }
+            },
+            () => RunLicenseAction(item.PublisherId, m => m.UnassignAll(item.LicenseCode), "Assignments Removed", "Error Unassigning License", item.ProductId));
+    }
+
+    private void UnassignClicked(AssignmentTableItem item)
+    {
+        ShowConfirm("Unassign License", "Unassign the License from this assignment? It will stop being licensed.", "Unassign", "fa-link-slash",
+            new Dictionary<string, string>
+            {
+                { "Description", item.Description },
+                { "Product ID", item.ProductId },
+                { "Assignment ID", item.AssignmentId }
+            },
+            () => RunLicenseAction(item.PublisherId, m => m.UnassignLicense(item.AssignmentId), "License Unassigned", "Error Unassigning License", item.Description ?? item.AssignmentId));
+    }
+
+    private void ShowConfirm(string title, string message, string label, string icon, IEnumerable<KeyValuePair<string, string>> details, Func<Task> action)
+    {
+        confirmTitle = title;
+        confirmMessage = message;
+        confirmLabel = label;
+        confirmIcon = icon;
+        confirmDetails = details?.Where(o => !string.IsNullOrEmpty(o.Value)).ToList(); // ex. a License without a Description
+        confirmAction = action;
+    }
+
+    private async Task ModalConfirmClicked()
+    {
+        if (confirmAction == null) return;
+
+        confirmLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await confirmAction();
+        }
+        finally
+        {
+            confirmLoading = false;
+            confirmAction = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Runs an action against a Publisher's License Manager and reports the result
+    private async Task RunLicenseAction(string publisherId, Action<ITrakHoundLicenseManager> action, string successTitle, string errorTitle, string description)
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses);
+
+        var licenseManager = TrakHoundLicenseManagers.Get(publisherId);
+        if (licenseManager == null)
+        {
+            notificationService.AddNotification(NotificationType.Error, errorTitle, $"Publisher '{publisherId}' not found");
+            return;
+        }
+
+        try
+        {
+            action(licenseManager);
+            notificationService.AddNotification(NotificationType.Success, successTitle, description);
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, errorTitle, ex.Message);
+        }
+
+        await Load();
+    }
+
+
+    // Assign
+
+    private async Task AssignmentLicenseChanged(AssignmentTableItem item, string licenseCode)
+    {
+        TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Licenses);
+
+        if (licenseCode == null || licenseCode == item.LicenseCode) return;
+
+        var licenseManager = TrakHoundLicenseManagers.Get(item.PublisherId);
+        if (licenseManager != null)
+        {
+            try
+            {
+                var result = licenseManager.AssignLicense(licenseCode, item.AssignmentId);
+                if (result.Success)
+                {
+                    notificationService.AddNotification(NotificationType.Success, "License Assigned", item.Description ?? item.AssignmentId);
+                }
+                else
+                {
+                    notificationService.AddNotification(NotificationType.Error, "Assign License Failed", result.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                notificationService.AddNotification(NotificationType.Error, "Assign License Failed", ex.Message);
+            }
+
+            await Load();
+        }
+    }
+
+    // Only valid Licenses for the same Product (plus the currently assigned License, so it still displays)
+    private IEnumerable<LicenseTableItem> GetAssignableLicenses(AssignmentTableItem item)
+    {
+        if (!string.IsNullOrEmpty(item.ProductId) && !licenseTableItems.IsNullOrEmpty())
+        {
+            return licenseTableItems.Where(o => o.ProductId == item.ProductId && o.PublisherId == item.PublisherId && (o.IsValid || o.LicenseCode == item.LicenseCode));
+        }
+
+        return null;
+    }
+
+
+    // Toolbar
+
+    private string GetDeviceIdSourceText()
+    {
+        var information = TrakHoundDeviceId.GetInformation();
+        if (information.Source == TrakHoundDeviceIdSource.Variable) return $"From {TrakHoundDeviceId.Variable} (container detected : {information.Container})";
+        return "From the machine name";
+    }
+
+    private void ModalCancelClicked()
+    {
+        addVisible = false;
+        renewModalVisible = false;
+        descriptionVisible = false;
+        confirmAction = null;
+    }
+
+    private async Task CopyDeviceId()
+    {
+        await javascript.CopyClipboard(deviceId);
+        notificationService.AddNotification(NotificationType.Success, "Device ID Copied");
+    }
+
+    private async Task CopyClipboard(string value)
+    {
+        await javascript.CopyClipboard(value);
+        notificationService.AddNotification(NotificationType.Success, "Copied to Clipboard");
+    }
+
+    private void ToggleReveal(string licenseCode)
+    {
+        if (!revealedLicenseCodes.Remove(licenseCode)) revealedLicenseCodes.Add(licenseCode);
+    }
+
+
+    // Formatting
+
+    // Show only the first and last groups (ex. 91870-•••••-CD2YX) so codes aren't exposed in screenshots
+    private static string MaskLicenseCode(string licenseCode)
+    {
+        if (string.IsNullOrEmpty(licenseCode)) return licenseCode;
+
+        var groups = licenseCode.Split('-');
+        if (groups.Length >= 3) return $"{groups[0]}-•••••-{groups[^1]}";
+        if (licenseCode.Length > 8) return $"{licenseCode[..4]}••••{licenseCode[^4..]}";
+        return new string('•', licenseCode.Length);
+    }
+
+    private static string GetExpiration(TimeSpan timeSpan)
+    {
+        if (timeSpan <= TimeSpan.Zero) return $"Expired {FormatDuration(timeSpan.Negate())} ago";
+        return $"In {FormatDuration(timeSpan)}";
+    }
+
+    private static string FormatDuration(TimeSpan timeSpan)
+    {
+        if (timeSpan.TotalDays >= 60) return Plural((int)(timeSpan.TotalDays / 30), "month");
+        if (timeSpan.TotalDays >= 2) return Plural((int)timeSpan.TotalDays, "day");
+        if (timeSpan.TotalHours >= 2) return Plural((int)timeSpan.TotalHours, "hour");
+        if (timeSpan.TotalMinutes >= 2) return Plural((int)timeSpan.TotalMinutes, "minute");
+        return "a moment";
+    }
+
+    private static string Plural(int value, string unit) => $"{value} {unit}{(value == 1 ? "" : "s")}";
+
+}

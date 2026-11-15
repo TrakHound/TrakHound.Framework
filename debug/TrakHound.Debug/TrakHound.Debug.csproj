@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+		<DebugSymbols>false</DebugSymbols>
+		<DebugType>None</DebugType>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<AssemblyName>TrakHound.Debug</AssemblyName>
+		<RootNamespace>TrakHound.Debug</RootNamespace>
+		<Configurations>Debug;Release;Package</Configurations>
+		<Description>Contains classes for running TrakHound packages locally, without an Instance</Description>
+		<RunAnalyzersDuringLiveAnalysis>False</RunAnalyzersDuringLiveAnalysis>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
+	  <ProjectReference Include="..\..\libraries\TrakHound.Hosting\TrakHound.Hosting.csproj" />
+	</ItemGroup>
+
+</Project>

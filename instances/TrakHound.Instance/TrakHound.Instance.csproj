@@ -1,0 +1,71 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+		<RuntimeIdentifiers>win-x64;win-x86</RuntimeIdentifiers>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<ApplicationIcon>__TemplateIcon.ico</ApplicationIcon>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Pages\Explorer\Services\Commands\**" />
+	  <Content Remove="Pages\Explorer\Services\Commands\**" />
+	  <EmbeddedResource Remove="Pages\Explorer\Services\Commands\**" />
+	  <None Remove="Pages\Explorer\Services\Commands\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Debug.cs" />
+	  <Compile Remove="Routing\HotReloadManager.cs" />
+	  <Compile Remove="Routing\RouteKey.cs" />
+	  <Compile Remove="Routing\RouteTable.cs" />
+	  <Compile Remove="Routing\RouteTableFactory.cs" />
+	  <Compile Remove="Routing\TrakHoundClientMiddleware.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="Pages\Explorer\Services\Blobs\Index.razor~RF576162.TMP" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="Debug.cs" />
+		<None Include="Routing\HotReloadManager.cs" />
+		<None Include="Routing\RouteKey.cs" />
+		<None Include="Routing\RouteTable.cs" />
+		<None Include="Routing\RouteTableFactory.cs" />
+		<None Include="Routing\TrakHoundClientMiddleware.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.12" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
+		<PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+		<PackageReference Include="NLog.Web.AspNetCore" Version="5.3.14" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\libraries\TrakHound.AspNetCore\TrakHound.AspNetCore.csproj" />
+		<ProjectReference Include="..\..\libraries\TrakHound.Blazor.Diagrams\TrakHound.Blazor.Diagrams.csproj" />
+		<ProjectReference Include="..\..\libraries\TrakHound.Blazor.Hosting\TrakHound.Blazor.Hosting.csproj" />
+		<ProjectReference Include="..\..\libraries\TrakHound.Blazor\TrakHound.Blazor.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- systemd unit and install script for Linux installs -->
+		<None Update="trakhound-instance.service" CopyToPublishDirectory="PreserveNewest" />
+		<None Update="install.sh" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
+	<Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+		<RemoveDir Directories="wwwroot/_packages" />
+	</Target>
+
+</Project>

@@ -1,0 +1,181 @@
+.edit-page {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.muted {
+    color: var(--textMild);
+}
+
+/* Header */
+
+.edit-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    padding: 14px 25px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.edit-title .title {
+    display: block;
+    font-size: var(--fontSizeMd, 15px);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.edit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+    .edit-actions .btn {
+        white-space: nowrap;
+    }
+
+.save-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 4px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .save-status .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--bs-warning, #ffc107);
+    }
+
+/* Content */
+
+.edit-content {
+    height: 100%;
+    overflow: auto;
+}
+
+.form-content {
+    max-width: 950px;
+    padding: 20px 25px 80px;
+}
+
+/* Modules */
+
+.group-add-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+    .group-add-row .form-select {
+        flex: 1;
+        min-width: 220px;
+        max-width: 480px;
+    }
+
+    .group-add-row .btn {
+        white-space: nowrap;
+    }
+
+/* Wider than the section body by the cell padding, so the text lines up with the section's fields and the row hover runs past it */
+.group-table {
+    width: calc(100% + 24px);
+    margin: 0 -12px;
+    border-collapse: collapse;
+    font-size: var(--fontSizeBase);
+}
+
+    .group-table th {
+        padding: 9px 12px;
+        font-size: var(--fontSizeSm);
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--textMild);
+        background: transparent;
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+    .group-table td {
+        padding: 10px 12px;
+        vertical-align: middle;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+        overflow-wrap: anywhere;
+    }
+
+    .group-table tbody tr:hover {
+        background: var(--panelItemBackground);
+    }
+
+        .group-table td .icon {
+            width: 18px;
+            margin-right: 6px;
+            color: var(--textMild);
+        }
+
+        .group-table td a {
+            color: var(--textDark);
+        }
+
+            .group-table td a:hover {
+                color: var(--accentLight);
+            }
+
+.col-actions {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Zones */
+
+.group-zones {
+    margin: 0;
+    padding-left: 18px;
+}
+
+    .group-zones li {
+        margin: 2px 0;
+    }
+
+    .group-zones a {
+        margin-right: 6px;
+        color: var(--accentLight);
+    }
+
+/* Empty state */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 100%;
+    min-height: 240px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .empty-state .empty-icon {
+        margin-bottom: 6px;
+        font-size: 40px;
+        color: var(--textLight);
+    }
+
+    .empty-state .empty-title {
+        font-size: var(--fontSizeMd, 15px);
+        font-weight: bold;
+        color: var(--textDark);
+    }

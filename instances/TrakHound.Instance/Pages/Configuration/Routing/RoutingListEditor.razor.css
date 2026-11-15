@@ -1,0 +1,67 @@
+.list-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.list-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+    .list-row .rz-textbox {
+        flex: 1;
+        min-width: 0;
+        height: 30px;
+        padding: 0 8px;
+        border: 1px solid;
+        border-radius: 4px;
+        outline: none;
+        font-family: var(--bs-font-monospace, monospace);
+        font-size: var(--fontSizeSm);
+    }
+
+        .list-row .rz-textbox:hover {
+            border-color: var(--inputBorderHover) !important;
+        }
+
+        .list-row .rz-textbox:focus {
+            border-color: var(--inputBorderHighlight) !important;
+        }
+
+        .list-row .rz-textbox.warning {
+            border-color: var(--bs-warning, #ffc107) !important;
+        }
+
+.list-warning {
+    flex-shrink: 0;
+    color: var(--bs-warning, #ffc107);
+    cursor: help;
+}
+
+.list-remove,
+.list-add {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    color: var(--textMild);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+    .list-remove:hover {
+        color: var(--bs-danger, #dc3545);
+    }
+
+    .list-add:not(:disabled):hover {
+        color: var(--accentLight);
+        border-color: var(--accentLight);
+    }
+
+    .list-add:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }

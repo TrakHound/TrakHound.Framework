@@ -1,0 +1,885 @@
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject ExplorerTreeViewService explorerTreeViewService
+@inject NavigationManager navigationManager
+@inject TrakHound.Instances.ITrakHoundInstance hostInstance
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@using System.Collections.Concurrent
+@using TrakHound.Api
+@using TrakHound.Services
+@using TrakHound.Workers
+
+<div class="explorer-tree-view">
+
+    @{
+        var nodes = BuildTree();
+
+        var filter = explorerTreeViewService.Filter;
+        var anyMatch = false;
+        foreach (var node in nodes)
+        {
+            if (node.ApplyFilter(filter)) anyMatch = true;
+        }
+
+        explorerTreeViewService.SetKnownIds(nodes.SelectMany(o => o.GetExpandableIds()));
+
+        if (_currentLogNodeId != null)
+        {
+            foreach (var node in nodes) SetCurrent(node, _currentLogNodeId);
+        }
+
+        // Select first Instance by default
+        if (selectedItemId == null)
+        {
+            selectedItemId = explorerService.SelectedInstanceId;
+        }
+
+        if (nodes.Count > 0)
+        {
+            <TreeView SelectedId="@selectedItemId">
+                @foreach (var node in nodes)
+                {
+                    <ExplorerTreeNodeItem Node="@node" Selected="ItemSelected" />
+                }
+            </TreeView>
+
+            if (explorerTreeViewService.IsFiltering && !anyMatch)
+            {
+                <div class="explorer-tree-empty">No items match "@filter.Trim()"</div>
+            }
+        }
+    }
+
+</div>
+
+@code {
+
+    private const string serverIcon = "fa-solid fa-sharp fa-server";
+    private const string appIcon = "fa-solid fa-sharp fa-browsers";
+    private const string pageIcon = "fa-regular fa-sharp fa-window";
+    private const string apiIcon = "fa-solid fa-sharp fa-circle-location-arrow";
+    private const string apiControllerIcon = "fa-solid fa-sharp fa-rectangle-vertical-history";
+    private const string functionIcon = "fa-solid fa-sharp fa-code";
+    private const string functionRunIcon = "fa-regular fa-sharp fa-circle-play";
+    private const string functionHistoryIcon = "fa-solid fa-sharp fa-timer";
+    private const string functionScheduledTasksIcon = "fa-regular fa-sharp fa-calendar-clock";
+    private const string functionJobsIcon = "fa-regular fa-sharp fa-list-check";
+    private const string functionsSummaryIcon = "fa-solid fa-sharp fa-chart-simple";
+    private const string functionsBoardIcon = "fa-solid fa-sharp fa-table-columns";
+    private const string workerIcon = "fa-solid fa-sharp fa-gear";
+    private const string workerStoppedIcon = "fa-solid fa-sharp fa-circle-stop";
+    private const string workerErrorIcon = "fa-solid fa-sharp fa-triangle-exclamation";
+    private const string serviceBlobsIcon = "fa-solid fa-sharp fa-box-archive";
+    private const string serviceKeyValuesIcon = "fa-solid fa-sharp fa-key";
+    private const string serviceMessagesIcon = "fa-solid fa-sharp fa-envelope";
+    private const string serviceMessageQueuesIcon = "fa-solid fa-sharp fa-inbox";
+    private const string serviceTablesIcon = "fa-solid fa-sharp fa-database";
+    private const string serviceTimeSeriesIcon = "fa-solid fa-sharp fa-chart-line";
+    private const string tableIcon = "fa-solid fa-sharp fa-table";
+    private const string healthIcon = "fa-solid fa-sharp fa-heart-pulse";
+    private const string apiMetricsIcon = "fa-solid fa-sharp fa-gauge-high";
+    private const string appMetricsIcon = "fa-solid fa-sharp fa-chart-simple";
+    private const string functionMetricsIcon = "fa-solid fa-sharp fa-stopwatch";
+    private const string serviceMetricsIcon = "fa-solid fa-sharp fa-server";
+    private const string workerMetricsIcon = "fa-solid fa-sharp fa-gears";
+    private const string webSocketMetricsIcon = "fa-solid fa-sharp fa-plug-circle-bolt";
+    private const string mcpMetricsIcon = "fa-solid fa-sharp fa-robot";
+    private const string httpMetricsIcon = "fa-solid fa-sharp fa-globe";
+    private const string buffersIcon = "fa-solid fa-sharp fa-layer-group";
+    private const string modulesIcon = "fa-solid fa-sharp fa-cubes";
+    private const string appConnectionsIcon = "fa-solid fa-sharp fa-window-restore";
+    private const string apiConnectionsIcon = "fa-solid fa-sharp fa-arrow-right-arrow-left";
+    private const string streamConnectionIcon = "fa-solid fa-sharp fa-signal-stream";
+    private const string httpConnectionsIcon = "fa-solid fa-sharp fa-arrow-right-arrow-left";
+    private const string loggerIcon = "fa-solid fa-sharp fa-file-lines";
+
+    // NLog Loggers are listed under this directory (see TrakHoundLogHistoryTarget.SystemLoggerDirectory)
+    private const string systemLogDirectory = TrakHound.Instance.Logging.History.TrakHoundLogHistoryTarget.SystemLoggerDirectory;
+
+    // .NET Loggers under "system" (the same prefixes the Log History Target treats as Framework Loggers)
+    private const string runtimeLogFolder = "runtime";
+    private static readonly string[] runtimeLoggerPrefixes = new[] { "Microsoft.", "System." };
+
+    // Live Worker Status (InstanceId:WorkerId => Status), updated from each Instance's Status stream
+    private readonly ConcurrentDictionary<string, TrakHoundWorkerStatusType> _workerStatuses = new ConcurrentDictionary<string, TrakHoundWorkerStatusType>();
+    private readonly Dictionary<string, ITrakHoundStream<TrakHoundWorkerStatusResponse>> _statusStreams = new Dictionary<string, ITrakHoundStream<TrakHoundWorkerStatusResponse>>();
+    private readonly SemaphoreSlim _subscribeLock = new SemaphoreSlim(1, 1);
+    private readonly HashSet<string> _lazyLoadRequested = new HashSet<string>();
+
+    // Loggers from earlier runs whose Name isn't known (only the hashed Logger ID)
+    private static readonly System.Text.RegularExpressions.Regex _unnamedLoggerRegex = new System.Text.RegularExpressions.Regex("^[0-9a-f]{32}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private string selectedItemId;
+    private string _currentLogNodeId;
+    private bool _pendingLogSelection = true;
+    private bool _disposed;
+
+
+    protected override void OnInitialized()
+    {
+        explorerService.ConfigurationUpdated += ConfigurationUpdated;
+        explorerTreeViewService.Changed += TreeChanged;
+        navigationManager.LocationChanged += LocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Restore the Expanded items (Local Storage requires JS Interop, so after the first render)
+            await explorerTreeViewService.Load();
+
+            SelectLogNode();
+
+            await SubscribeWorkerStatus();
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        _disposed = true;
+
+        explorerService.ConfigurationUpdated -= ConfigurationUpdated;
+        explorerTreeViewService.Changed -= TreeChanged;
+        navigationManager.LocationChanged -= LocationChanged;
+
+        lock (_statusStreams)
+        {
+            foreach (var stream in _statusStreams.Values) stream?.Dispose();
+            _statusStreams.Clear();
+        }
+    }
+
+    private async void ConfigurationUpdated(object sender, EventArgs args)
+    {
+        if (_disposed) return;
+
+        // The Loggers may not have been loaded when the page opened
+        if (_pendingLogSelection) await InvokeAsync(SelectLogNode);
+
+        await InvokeAsync(StateHasChanged);
+        await SubscribeWorkerStatus();
+    }
+
+    private async void TreeChanged(object sender, EventArgs args)
+    {
+        if (_disposed) return;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ItemSelected(string id)
+    {
+        selectedItemId = id;
+    }
+
+    private async void LocationChanged(object sender, LocationChangedEventArgs args)
+    {
+        if (_disposed) return;
+
+        _pendingLogSelection = true;
+        await InvokeAsync(SelectLogNode);
+    }
+
+    /// <summary>
+    /// Selects the Logger matching the Log View's Patterns and expands its parents, so a Logger opened from a link
+    /// (or after a reload) shows in the Tree. Other query parameters (ex. "view=history") are ignored
+    /// </summary>
+    private void SelectLogNode()
+    {
+        var uri = new Uri(navigationManager.Uri);
+        var patterns = uri.AbsolutePath.EndsWith("/diagnostics/logs/view", StringComparison.OrdinalIgnoreCase) ? GetLinkPatterns(uri) : null;
+        if (patterns.IsNullOrEmpty())
+        {
+            _pendingLogSelection = false;
+            if (_currentLogNodeId != null)
+            {
+                _currentLogNodeId = null;
+                StateHasChanged();
+            }
+            return;
+        }
+
+        var path = new List<ExplorerTreeNode>();
+        foreach (var root in BuildTree())
+        {
+            if (FindLogNode(root, uri.AbsolutePath, patterns, path)) break;
+        }
+
+        if (path.Count > 0)
+        {
+            _pendingLogSelection = false;
+            _currentLogNodeId = path.Last().Id;
+            foreach (var ancestor in path.Take(path.Count - 1)) explorerTreeViewService.SetExpanded(ancestor.Id, true);
+            StateHasChanged();
+        }
+    }
+
+    private static bool SetCurrent(ExplorerTreeNode node, string id)
+    {
+        if (node.Id == id)
+        {
+            node.IsCurrent = true;
+            return true;
+        }
+
+        return node.Children.Any(o => SetCurrent(o, id));
+    }
+
+    private bool FindLogNode(ExplorerTreeNode node, string absolutePath, HashSet<string> patterns, List<ExplorerTreeNode> path)
+    {
+        path.Add(node);
+
+        if (node.Link != null && node.Link.Contains("pattern="))
+        {
+            var linkUri = navigationManager.ToAbsoluteUri(node.Link);
+            if (string.Equals(linkUri.AbsolutePath, absolutePath, StringComparison.OrdinalIgnoreCase) && GetLinkPatterns(linkUri).SetEquals(patterns)) return true;
+        }
+
+        foreach (var child in node.Children)
+        {
+            if (FindLogNode(child, absolutePath, patterns, path)) return true;
+        }
+
+        path.RemoveAt(path.Count - 1);
+        return false;
+    }
+
+    private static HashSet<string> GetLinkPatterns(Uri uri)
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        var patterns = query.TryGetValue("pattern", out var values) ? values.Where(o => !string.IsNullOrEmpty(o)) : Enumerable.Empty<string>();
+
+        // A Logger and its directory (ex. "instance" and "instance/**") select the same item
+        return new HashSet<string>(patterns.Select(o => o.EndsWith("/**") ? o[..^3] : o), StringComparer.OrdinalIgnoreCase);
+    }
+
+
+    #region "Build"
+
+    private List<ExplorerTreeNode> BuildTree()
+    {
+        var nodes = new List<ExplorerTreeNode>();
+
+        var instances = explorerService.Instances;
+        if (instances.IsNullOrEmpty()) return nodes;
+
+        var canViewModules = adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.Modules);
+        var canViewServices = adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.Services);
+        var canViewInstance = adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.Instance);
+        var canViewLogs = adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.Logs);
+
+        foreach (var instance in instances)
+        {
+            var instanceId = instance.Id;
+
+            // Show the address if the Instance has an HTTP Interface
+            var instanceInterface = instance.Interfaces?.FirstOrDefault(o => o.Type == "HTTP");
+            var instanceName = !string.IsNullOrEmpty(instance.Name) ? instance.Name : instanceId;
+            var title = instanceInterface != null ? $"{instanceName} ({instanceInterface.Address}:{instanceInterface.Port})" : instanceName;
+
+            var instanceNode = new ExplorerTreeNode
+            {
+                Id = instanceId,
+                Title = title,
+                Icon = serverIcon,
+                CssClass = "instance-tree-item",
+                Link = GetLink(instanceId)
+            };
+
+            // Only what the signed in Admin's Roles let them view
+            if (canViewModules)
+            {
+                instanceNode.Add(BuildApps(instanceId));
+                instanceNode.Add(BuildApis(instanceId));
+                instanceNode.Add(BuildFunctions(instanceId));
+                instanceNode.Add(BuildWorkers(instanceId));
+            }
+
+            if (canViewServices) instanceNode.Add(BuildServices(instanceId));
+            if (canViewInstance || canViewLogs) instanceNode.Add(BuildDiagnostics(instanceId, canViewInstance, canViewLogs));
+
+            nodes.Add(instanceNode);
+        }
+
+        return nodes;
+    }
+
+    private ExplorerTreeNode BuildApps(string instanceId)
+    {
+        var apps = explorerService.GetApps(instanceId)?.ToList();
+        var folder = Folder($"{instanceId}:apps", "Apps", GetLink(instanceId, "apps"), apps?.Count);
+
+        if (!apps.IsNullOrEmpty())
+        {
+            var groupFolders = AddGroupFolders(folder, instanceId, apps.Select(o => o.GroupId));
+
+            foreach (var app in apps.OrderBy(o => o.Route))
+            {
+                var appNode = GetParent(folder, groupFolders, app.GroupId).Add(new ExplorerTreeNode
+                {
+                    Id = $"{instanceId}:{app.Id}",
+                    Title = !string.IsNullOrEmpty(app.Route) ? app.Route : "/",
+                    Icon = appIcon,
+                    Link = GetLink(instanceId, $"apps/{app.Id}")
+                });
+
+                if (!app.Pages.IsNullOrEmpty())
+                {
+                    foreach (var pageInfo in app.Pages.OrderBy(o => o.Route))
+                    {
+                        appNode.Add(Leaf(pageInfo.Route, pageIcon, GetLink(instanceId, $"apps/{app.Id}/pages/{pageInfo.Id}")));
+                    }
+                }
+            }
+        }
+
+        return folder;
+    }
+
+    private ExplorerTreeNode BuildApis(string instanceId)
+    {
+        var apis = explorerService.GetApiRoutes(instanceId)?.Where(o => !string.IsNullOrEmpty(o.Route)).ToList();
+        var folderId = $"{instanceId}:api";
+        var folder = Folder(folderId, "Api", GetLink(instanceId, "api"), apis?.Count);
+
+        if (!apis.IsNullOrEmpty())
+        {
+            var groupFolders = AddGroupFolders(folder, instanceId, apis.Select(o => o.GroupId));
+
+            foreach (var api in apis.OrderBy(o => o.Route))
+            {
+                var apiNode = GetParent(folder, groupFolders, api.GroupId).Add(new ExplorerTreeNode
+                {
+                    Id = $"{folderId}:{api.Id}",
+                    Title = api.Route,
+                    Icon = apiIcon,
+                    CssClass = "api-tree-item",
+                    Link = GetLink(instanceId, $"api/{api.Id}")
+                });
+
+                if (api.Controllers.IsNullOrEmpty()) continue;
+
+                foreach (var controller in api.Controllers.OrderBy(o => o.Route))
+                {
+                    if (controller.EndPoints.IsNullOrEmpty()) continue;
+
+                    var controllerItemId = $"{apiNode.Id}:{controller.Id}";
+
+                    // Endpoints of the root ("/") Controller are listed directly under the Api
+                    var parent = apiNode;
+                    if (controller.Route != Url.PathSeparator.ToString())
+                    {
+                        parent = apiNode.Add(new ExplorerTreeNode
+                        {
+                            Id = controllerItemId,
+                            Title = controller.Route,
+                            Icon = apiControllerIcon,
+                            CssClass = "api-controller-tree-item"
+                        });
+                    }
+
+                    // Grouped Endpoints (Group IDs include the Controller so each keeps its own Expanded state)
+                    var groups = controller.EndPoints.Select(o => o.Group).Where(o => !string.IsNullOrEmpty(o)).Distinct();
+                    foreach (var group in groups.OrderBy(o => o))
+                    {
+                        var groupNode = parent.Add(Folder($"{controllerItemId}:{group}", group));
+                        foreach (var endpoint in controller.EndPoints.Where(o => o.Group == group).OrderBy(o => o.Route))
+                        {
+                            groupNode.Add(BuildEndpoint(instanceId, api, controller, endpoint, controllerItemId));
+                        }
+                    }
+
+                    foreach (var endpoint in controller.EndPoints.Where(o => string.IsNullOrEmpty(o.Group)).OrderBy(o => o.Route))
+                    {
+                        parent.Add(BuildEndpoint(instanceId, api, controller, endpoint, controllerItemId));
+                    }
+                }
+            }
+        }
+
+        return folder;
+    }
+
+    private ExplorerTreeNode BuildEndpoint(string instanceId, TrakHoundApiInformation api, TrakHoundApiControllerInformation controller, TrakHoundApiEndpointInformation endpoint, string controllerItemId)
+    {
+        return new ExplorerTreeNode
+        {
+            Id = $"{controllerItemId}:{endpoint.Id}",
+            CssClass = "api-endpoint-tree-item",
+            Link = GetLink(instanceId, $"api/{api.Id}/{controller.Id}/{endpoint.Id}"),
+            SearchText = $"{endpoint.Method} {endpoint.Route}",
+            Header = builder =>
+            {
+                builder.OpenComponent<ExplorerApiEndpointTreeItemHeader>(0);
+                builder.AddAttribute(1, nameof(ExplorerApiEndpointTreeItemHeader.Endpoint), endpoint);
+                builder.CloseComponent();
+            }
+        };
+    }
+
+    private ExplorerTreeNode BuildFunctions(string instanceId)
+    {
+        var functions = explorerService.GetFunctions(instanceId)?.Where(o => !string.IsNullOrEmpty(o.FunctionId)).ToList();
+        var folderId = $"{instanceId}:function";
+        var folder = Folder(folderId, "Functions", GetLink(instanceId, "functions"), functions?.Count);
+
+        folder.Add(Leaf("Summary", functionsSummaryIcon, GetLink(instanceId, "functions-summary"), "Functions Summary Scheduled Tasks"));
+        folder.Add(Leaf("Schedule Board", functionsBoardIcon, GetLink(instanceId, "functions-board"), "Functions Schedule Board Scheduled Tasks Kanban"));
+
+        if (!functions.IsNullOrEmpty())
+        {
+            var groupFolders = AddGroupFolders(folder, instanceId, functions.Select(o => o.GroupId));
+
+            foreach (var function in functions.OrderBy(o => o.FunctionId))
+            {
+                var functionNode = GetParent(folder, groupFolders, function.GroupId).Add(new ExplorerTreeNode
+                {
+                    Id = $"{folderId}:{function.FunctionId}",
+                    Title = function.FunctionId,
+                    Icon = functionIcon,
+                    Link = GetLink(instanceId, $"functions/{function.FunctionId}")
+                });
+
+                functionNode.Add(Leaf("Run", functionRunIcon, GetLink(instanceId, $"functions/{function.FunctionId}/run")));
+                functionNode.Add(Leaf("History", functionHistoryIcon, GetLink(instanceId, $"functions/{function.FunctionId}/history")));
+                functionNode.Add(Leaf("Jobs", functionJobsIcon, GetLink(instanceId, $"functions/{function.FunctionId}/jobs")));
+                functionNode.Add(Leaf("Scheduled Tasks", functionScheduledTasksIcon, GetLink(instanceId, $"functions/{function.FunctionId}/scheduled-tasks")));
+            }
+        }
+
+        return folder;
+    }
+
+    private ExplorerTreeNode BuildWorkers(string instanceId)
+    {
+        var workers = explorerService.GetWorkers(instanceId)?.ToList();
+        var folder = Folder($"{instanceId}:workers", "Workers", GetLink(instanceId, "workers"), workers?.Count);
+
+        if (!workers.IsNullOrEmpty())
+        {
+            var groupFolders = AddGroupFolders(folder, instanceId, workers.Select(o => o.GroupId));
+
+            foreach (var worker in workers.OrderBy(o => o.Name))
+            {
+                // Use the live Status if one has been received
+                var status = _workerStatuses.TryGetValue($"{instanceId}:{worker.Id}", out var liveStatus) ? liveStatus : worker.Status;
+
+                GetParent(folder, groupFolders, worker.GroupId).Add(new ExplorerTreeNode
+                {
+                    Id = $"{instanceId}:workers:{worker.Id}",
+                    Title = worker.Name,
+                    Subtitle = status != TrakHoundWorkerStatusType.Started ? status.ToString() : null,
+                    Icon = GetWorkerIcon(status),
+                    IconLabel = status.ToString(),
+                    CssClass = $"worker-tree-item worker-{status.ToString().ToLower()}",
+                    Link = GetLink(instanceId, $"workers/{worker.Id}")
+                });
+            }
+        }
+
+        return folder;
+    }
+
+    private ExplorerTreeNode BuildServices(string instanceId)
+    {
+        var folderId = $"{instanceId}:services";
+        var allServices = explorerService.GetServices(instanceId)?.ToList() ?? new List<TrakHoundServiceInformation>();
+        var services = allServices.Where(o => o.Routes != null).ToList();
+
+        // Counts every Service (the same as its page), including any without a Route to list under a type
+        var folder = Folder(folderId, "Services", GetLink(instanceId, "services"), allServices.Count);
+
+        folder.Add(BuildServiceType(instanceId, services, "Blobs", "Blobs", "blobs", serviceBlobsIcon));
+        folder.Add(BuildServiceType(instanceId, services, "KeyValues", "KeyValues", "key-values", serviceKeyValuesIcon));
+        folder.Add(BuildServiceType(instanceId, services, "Messages", "Messages", "messages", serviceMessagesIcon));
+        folder.Add(BuildServiceType(instanceId, services, "MessageQueues", "MessageQueues", "message-queues", serviceMessageQueuesIcon));
+        folder.Add(BuildServiceType(instanceId, services, "Tables", "Tables", "tables", serviceTablesIcon));
+        folder.Add(BuildServiceType(instanceId, services, "TimeSeries", "TimeSeries", "time-series", serviceTimeSeriesIcon));
+
+        return folder;
+    }
+
+    private ExplorerTreeNode BuildServiceType(string instanceId, List<TrakHoundServiceInformation> services, string route, string title, string path, string icon)
+    {
+        var typeServices = services.Where(o => o.Routes.Contains(route)).ToList();
+        var folderId = $"{instanceId}:services:{path}";
+        var folder = Folder(folderId, title, GetLink(instanceId, $"services/{path}"), typeServices.Count);
+
+        foreach (var service in typeServices)
+        {
+            var serviceNode = folder.Add(new ExplorerTreeNode
+            {
+                Id = $"{folderId}:{service.ConfigurationId}",
+                Title = service.Name,
+                Icon = icon,
+                Link = GetLink(instanceId, $"services/{path}/{service.ConfigurationId}")
+            });
+
+            if (route == "Tables")
+            {
+                // Tables are loaded when the Service is Expanded
+                var serviceId = service.ConfigurationId;
+                serviceNode.Load = () => explorerService.LoadServiceTables(instanceId, serviceId);
+
+                var tables = explorerService.GetServiceTables(instanceId, serviceId);
+                if (!tables.IsNullOrEmpty())
+                {
+                    foreach (var table in tables)
+                    {
+                        serviceNode.Add(new ExplorerTreeNode
+                        {
+                            Id = $"{serviceNode.Id}:{table.Id}",
+                            Title = $"{table.Schema}.{table.Name}",
+                            Icon = tableIcon,
+                            Link = GetLink(instanceId, $"services/tables/{serviceId}/{table.Id}")
+                        });
+                    }
+                }
+                else if (explorerTreeViewService.IsExpanded(serviceNode.Id))
+                {
+                    // Expanded (ex. restored from a previous session) but not loaded yet
+                    RequestLazyLoad(serviceNode);
+                }
+            }
+        }
+
+        return folder;
+    }
+
+    private ExplorerTreeNode BuildDiagnostics(string instanceId, bool canViewInstance, bool canViewLogs)
+    {
+        var folderId = $"{instanceId}:diagnostics";
+        var folder = Folder(folderId, "Diagnostics");
+
+        if (canViewInstance) BuildInstanceDiagnostics(folder, folderId, instanceId);
+        if (canViewLogs) BuildLogs(folder, folderId, instanceId);
+        if (canViewInstance) BuildConnections(folder, folderId, instanceId);
+
+        return folder;
+    }
+
+    private void BuildInstanceDiagnostics(ExplorerTreeNode folder, string folderId, string instanceId)
+    {
+        folder.Add(Leaf("Health", healthIcon, GetLink(instanceId, "diagnostics/health"), "Instance Health"));
+        folder.Add(Leaf("Modules", modulesIcon, GetLink(instanceId, "diagnostics/modules"), "Loaded Modules"));
+
+        // Metrics
+        var metrics = folder.Add(Folder($"{folderId}:metrics", "Metrics"));
+        metrics.Add(Leaf("Api", apiMetricsIcon, GetLink(instanceId, "diagnostics/api"), "API Metrics"));
+        metrics.Add(Leaf("Apps", appMetricsIcon, GetLink(instanceId, "diagnostics/apps"), "App Metrics"));
+        metrics.Add(Leaf("HTTP", httpMetricsIcon, GetLink(instanceId, "diagnostics/http"), "HTTP Request Metrics"));
+        metrics.Add(Leaf("Functions", functionMetricsIcon, GetLink(instanceId, "diagnostics/functions"), "Function Metrics"));
+        metrics.Add(Leaf("Services", serviceMetricsIcon, GetLink(instanceId, "diagnostics/services"), "Service Metrics"));
+        metrics.Add(Leaf("Workers", workerMetricsIcon, GetLink(instanceId, "diagnostics/workers"), "Worker Metrics"));
+        metrics.Add(Leaf("Streams", webSocketMetricsIcon, GetLink(instanceId, "diagnostics/streams"), "Stream Metrics (WebSockets and Server-Sent Events)"));
+        metrics.Add(Leaf("MCP", mcpMetricsIcon, GetLink(instanceId, "diagnostics/mcp"), "MCP Server Metrics (Tool calls and AI clients)"));
+        metrics.Add(Leaf("Buffers", buffersIcon, GetLink(instanceId, "diagnostics/buffers"), "Buffer Metrics"));
+    }
+
+    private void BuildLogs(ExplorerTreeNode folder, string folderId, string instanceId)
+    {
+        var logsNode = folder.Add(Folder($"{folderId}:logs", "Logs", GetLink(instanceId, "diagnostics/logs")));
+
+        var logPaths = GetLogPaths(instanceId);
+        if (logPaths.Count > 0)
+        {
+            // Build the Log tree from a Parent => Children lookup (instead of searching the list for each Path)
+            var childrenByParent = logPaths.ToLookup(o => TrakHoundPath.GetParentPath(o) ?? "", StringComparer.OrdinalIgnoreCase);
+            var roots = childrenByParent[""].OrderBy(o => o, StringComparer.OrdinalIgnoreCase).ToList();
+
+            // Top level Loggers without sub Loggers (ex. "instance", "modules") are listed under "system" with the NLog Loggers
+            var systemPath = roots.FirstOrDefault(o => string.Equals(o, systemLogDirectory, StringComparison.OrdinalIgnoreCase)) ?? systemLogDirectory;
+            var systemLoggers = roots.Where(o => o != systemPath && !childrenByParent[o].Any()).ToList();
+
+            foreach (var root in roots.Except(systemLoggers))
+            {
+                if (root == systemPath) logsNode.Add(BuildSystemLogNode(instanceId, systemPath, systemLoggers, childrenByParent, $"{folderId}:logs"));
+                else logsNode.Add(BuildLogNode(instanceId, root, childrenByParent, $"{folderId}:logs"));
+            }
+
+            // No NLog Loggers yet, but still group the top level Loggers
+            if (!roots.Contains(systemPath) && systemLoggers.Count > 0)
+            {
+                logsNode.Add(BuildSystemLogNode(instanceId, systemPath, systemLoggers, childrenByParent, $"{folderId}:logs"));
+            }
+        }
+    }
+
+    private void BuildConnections(ExplorerTreeNode folder, string folderId, string instanceId)
+    {
+        var connectionsId = $"{folderId}:connections";
+        var connections = folder.Add(Folder(connectionsId, "Connections"));
+
+        var appConnections = connections.Add(Folder($"{connectionsId}:app", "Apps"));
+        appConnections.Add(Leaf("Pages", appConnectionsIcon, GetLink(instanceId, "diagnostics/connections/apps/pages")));
+
+        var apiConnections = connections.Add(Folder($"{connectionsId}:api", "Api"));
+        apiConnections.Add(Leaf("Requests", apiConnectionsIcon, GetLink(instanceId, "diagnostics/connections/api/requests")));
+        apiConnections.Add(Leaf("Streams", streamConnectionIcon, GetLink(instanceId, "diagnostics/connections/api/streams")));
+
+        var httpConnections = connections.Add(Folder($"{connectionsId}:http", "Http"));
+        httpConnections.Add(Leaf("Requests", httpConnectionsIcon, GetLink(instanceId, "diagnostics/connections/http/requests")));
+    }
+
+    /// <summary>
+    /// Every Logger Name (ex. "system/TrakHound.Instance.InstanceApplication") and its parent paths. Built from the Logger Names
+    /// (not only the Log Directories) so that Loggers without sub Loggers (ex. everything under "system") are listed
+    /// </summary>
+    private List<string> GetLogPaths(string instanceId)
+    {
+        var names = explorerService.GetLogs(instanceId) ?? explorerService.GetLogDirectories(instanceId);
+        if (names == null) return new List<string>();
+
+        var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // Case-insensitive, keeping the first casing seen
+        foreach (var name in names.Where(o => !_unnamedLoggerRegex.IsMatch(o)).OrderBy(o => o, StringComparer.Ordinal))
+        {
+            foreach (var path in TrakHoundPath.GetPaths(name) ?? Enumerable.Empty<string>())
+            {
+                paths.TryAdd(path, path);
+            }
+        }
+
+        return paths.Values.ToList();
+    }
+
+    private ExplorerTreeNode BuildSystemLogNode(string instanceId, string systemPath, List<string> topLevelLoggers, ILookup<string, string> childrenByParent, string idPrefix)
+    {
+        // The Link includes the top level Loggers listed in the folder (so selecting it shows the same Logs as its items)
+        var patterns = new[] { $"{systemPath}/**" }.Concat(topLevelLoggers.Select(o => $"{o}/**"));
+        var node = Folder($"{idPrefix}:{systemPath.ToLowerInvariant()}", TrakHoundPath.GetObject(systemPath), GetLogLink(instanceId, patterns));
+        node.MatchLinkQueryParameters = true;
+
+        var children = childrenByParent[systemPath].Concat(topLevelLoggers).OrderBy(o => TrakHoundPath.GetObject(o), StringComparer.OrdinalIgnoreCase).ToList();
+
+        // .NET Loggers (ex. "Microsoft.AspNetCore.Server.Kestrel") are grouped in a "runtime" folder
+        var runtimeLoggers = children.Where(o => o.StartsWith($"{systemPath}/", StringComparison.OrdinalIgnoreCase) && IsRuntimeLogger(TrakHoundPath.GetObject(o))).ToList();
+        if (runtimeLoggers.Count > 0)
+        {
+            var runtimePatterns = runtimeLoggerPrefixes.Select(o => $"{systemPath}/{o}*");
+            var runtimeNode = node.Add(Folder($"{idPrefix}:{systemPath.ToLowerInvariant()}/{runtimeLogFolder}", runtimeLogFolder, GetLogLink(instanceId, runtimePatterns)));
+            runtimeNode.MatchLinkQueryParameters = true;
+
+            foreach (var runtimeLogger in runtimeLoggers)
+            {
+                runtimeNode.Add(BuildLogNode(instanceId, runtimeLogger, childrenByParent, idPrefix));
+            }
+        }
+
+        foreach (var child in children.Except(runtimeLoggers))
+        {
+            node.Add(BuildLogNode(instanceId, child, childrenByParent, idPrefix));
+        }
+
+        return node;
+    }
+
+    private static bool IsRuntimeLogger(string loggerName)
+    {
+        return runtimeLoggerPrefixes.Any(o => loggerName.StartsWith(o, StringComparison.Ordinal));
+    }
+
+    private ExplorerTreeNode BuildLogNode(string instanceId, string path, ILookup<string, string> childrenByParent, string idPrefix)
+    {
+        var id = $"{idPrefix}:{path.ToLowerInvariant()}";
+        var title = TrakHoundPath.GetObject(path);
+        var link = GetLogLink(instanceId, path);
+        var children = childrenByParent[path].OrderBy(o => o, StringComparer.OrdinalIgnoreCase).ToList();
+
+        ExplorerTreeNode node;
+        if (children.Count > 0)
+        {
+            node = Folder(id, title, link);
+            foreach (var child in children)
+            {
+                node.Add(BuildLogNode(instanceId, child, childrenByParent, idPrefix));
+            }
+        }
+        else
+        {
+            node = Leaf(title, loggerIcon, link, path);
+            node.Id = id;
+        }
+
+        node.MatchLinkQueryParameters = true;
+        return node;
+    }
+
+    #endregion
+
+    #region "Helpers"
+
+    private static ExplorerTreeNode Folder(string id, string title, string link = null, int? count = null)
+    {
+        return new ExplorerTreeNode
+        {
+            Id = id,
+            Title = title,
+            Subtitle = count > 0 ? count.Value.ToString("N0") : null,
+            IsFolder = true,
+            Link = link
+        };
+    }
+
+    /// <summary>
+    /// Adds a folder for each Group the Modules are in (ordered by name). Modules that aren't in a Group stay in the parent folder,
+    /// so a tree without Groups looks the same as before. Folder IDs include the parent's, so each keeps its own Expanded state
+    /// </summary>
+    private Dictionary<string, ExplorerTreeNode> AddGroupFolders(ExplorerTreeNode folder, string instanceId, IEnumerable<string> groupIds)
+    {
+        var groupFolders = new Dictionary<string, ExplorerTreeNode>(StringComparer.OrdinalIgnoreCase);
+
+        var ids = groupIds.Where(o => !string.IsNullOrWhiteSpace(o)).Select(o => o.Trim()).Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var groupId in ids.OrderBy(o => GetGroupName(instanceId, o), StringComparer.OrdinalIgnoreCase))
+        {
+            var groupFolder = folder.Add(Folder($"{folder.Id}:group:{groupId}", GetGroupName(instanceId, groupId)));
+            groupFolder.SearchText = $"{groupFolder.Title} Group";
+            groupFolders[groupId] = groupFolder;
+        }
+
+        return groupFolders;
+    }
+
+    private static ExplorerTreeNode GetParent(ExplorerTreeNode folder, Dictionary<string, ExplorerTreeNode> groupFolders, string groupId)
+    {
+        return !string.IsNullOrWhiteSpace(groupId) && groupFolders.TryGetValue(groupId.Trim(), out var groupFolder) ? groupFolder : folder;
+    }
+
+    // Group names are only known for this Instance (another Instance's Groups are shown by ID)
+    private string GetGroupName(string instanceId, string groupId)
+    {
+        if (instanceId == hostInstance?.Id)
+        {
+            var group = hostInstance.ConfigurationProfile?.Get<TrakHound.Groups.TrakHoundGroupConfiguration>(TrakHound.Groups.TrakHoundGroupConfiguration.ConfigurationCategory, groupId);
+            if (!string.IsNullOrEmpty(group?.Name)) return group.Name;
+        }
+
+        return groupId;
+    }
+
+    private static ExplorerTreeNode Leaf(string title, string icon, string link, string searchText = null)
+    {
+        return new ExplorerTreeNode
+        {
+            Title = title,
+            Icon = icon,
+            Link = link,
+            SearchText = searchText
+        };
+    }
+
+    private static string GetWorkerIcon(TrakHoundWorkerStatusType status)
+    {
+        switch (status)
+        {
+            case TrakHoundWorkerStatusType.Error: return workerErrorIcon;
+            case TrakHoundWorkerStatusType.Stopped: return workerStoppedIcon;
+            default: return workerIcon;
+        }
+    }
+
+    private void RequestLazyLoad(ExplorerTreeNode node)
+    {
+        if (node.Load == null || !_lazyLoadRequested.Add(node.Id)) return;
+
+        var load = node.Load;
+        var id = node.Id;
+        _ = InvokeAsync(async () =>
+        {
+            explorerTreeViewService.SetLoading(id, true);
+            try
+            {
+                await load();
+            }
+            catch { }
+            finally
+            {
+                explorerTreeViewService.SetLoading(id, false);
+            }
+
+            if (!_disposed) StateHasChanged();
+        });
+    }
+
+    private async Task SubscribeWorkerStatus()
+    {
+        if (_disposed) return;
+
+        await _subscribeLock.WaitAsync();
+        try
+        {
+            var instances = explorerService.Instances;
+            if (instances.IsNullOrEmpty()) return;
+
+            foreach (var instance in instances)
+            {
+                var instanceId = instance.Id;
+                lock (_statusStreams)
+                {
+                    if (_statusStreams.ContainsKey(instanceId)) continue;
+                }
+
+                var client = explorerService.GetClient(instanceId);
+                if (client == null) continue;
+
+                ITrakHoundStream<TrakHoundWorkerStatusResponse> stream = null;
+                try
+                {
+                    stream = await client.Workers.SubscribeStatus();
+                }
+                catch { }
+
+                if (stream == null) continue;
+
+                stream.Received += async (s, response) =>
+                {
+                    if (string.IsNullOrEmpty(response.WorkerId) || _disposed) return;
+
+                    _workerStatuses[$"{instanceId}:{response.WorkerId}"] = response.Status;
+                    await InvokeAsync(StateHasChanged);
+                };
+
+                lock (_statusStreams)
+                {
+                    if (_disposed)
+                    {
+                        stream.Dispose();
+                    }
+                    else
+                    {
+                        _statusStreams[instanceId] = stream;
+                        stream.Start();
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _subscribeLock.Release();
+        }
+    }
+
+    private static string GetLink(string instanceId)
+    {
+        return Url.Combine("_admin/explorer", instanceId);
+    }
+
+    private static string GetLink(string instanceId, string path)
+    {
+        return Url.Combine(Url.Combine("_admin/explorer", instanceId), path);
+    }
+
+    private static string GetLogLink(string instanceId, string path)
+    {
+        return GetLogLink(instanceId, new[] { $"{path}/**" }); // All Loggers in the directory (and its sub directories)
+    }
+
+    private static string GetLogLink(string instanceId, IEnumerable<string> patterns)
+    {
+        var url = GetLink(instanceId, "diagnostics/logs/view");
+        foreach (var pattern in patterns) url = Url.AddQueryParameter(url, "pattern", pattern);
+        return url;
+    }
+
+    #endregion
+
+}

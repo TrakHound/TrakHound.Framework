@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Ldap.Identity",
+  "category": "identity",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Sign in with a Username and Password verified by an LDAP server (ex. Active Directory)",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Ldap.Identity",
+    ".configurationParameters": "server,port,useSsl,startTls,bindDnFormat,serviceBindDn,serviceBindPassword,searchBase,userFilter,groupAttribute,nameAttribute,roleFormat"
+  }
+}

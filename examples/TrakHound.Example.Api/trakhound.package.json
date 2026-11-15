@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Example.Api",
+  "category": "api",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Example Api that serves the readings written by TrakHound.Example.Worker and runs TrakHound.Example.Function",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "examples/TrakHound.Example.Api",
+    ".defaultRoute": "example/api",
+    ".defaultVolumeId": "trakhound.example"
+  }
+}

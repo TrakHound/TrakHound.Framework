@@ -1,0 +1,15 @@
+{
+  // Build and Publish the Example Packages : th packages build examples
+  // Each project publishes to the Publish Target in the nearest trakhound.package.publish.json (its own directory, or a parent)
+  "defaults": {
+    "projectConfiguration": "Release",
+    "publish": true
+  },
+  "projects": [
+    // Dependencies first, so the App's dependencies are on the server when it is published
+    { "path": "TrakHound.Example.Worker" },
+    { "path": "TrakHound.Example.Function" },
+    { "path": "TrakHound.Example.Api" },
+    { "path": "TrakHound.Example.App" }
+  ]
+}

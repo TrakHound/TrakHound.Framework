@@ -1,0 +1,43 @@
+﻿.tree-item-header {
+    display: grid;
+    grid-template-columns: max-content max-content 1fr;
+    grid-column-gap: 5px;
+}
+
+    .tree-item-header .icon-container {
+        padding: 2px;
+    }
+
+    .tree-item-header .icon {
+        font-size: 0.5rem;
+        line-height: 11px;
+        color: var(--accentLight);
+        border: 1px solid var(--accentLight);
+        border-radius: 1px;
+        padding: 1px 3px;
+        min-width: 40px;
+        text-align: center;
+    }
+
+    .tree-item-header .route {
+        font-size: var(--fontSizeSm);
+        line-height: 18px;
+        color: var(--textDark);
+    }
+
+    .tree-item-header:hover .route {
+        color: var(--accentLight);
+    }
+
+    .tree-item-header.active {
+        background: var(--accent) !important;
+    }
+
+        .tree-item-header.active .icon {
+            color: #fff;
+            border: 1px solid #fff;
+        }
+
+        .tree-item-header.active .route {
+            color: #fff;
+        }

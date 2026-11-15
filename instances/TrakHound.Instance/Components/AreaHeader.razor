@@ -1,0 +1,110 @@
+@* The header of an Admin interface area : its icon and title, then the Breadcrumbs of the page being shown (or the area's description on its first page), and a link to the page's docs on the TrakHound website *@
+@implements IDisposable
+@inject AreaBreadcrumbService breadcrumbService
+@inject NavigationManager navigationManager
+@using Microsoft.AspNetCore.Components.Routing
+
+<div class="area-header">
+    <nav class="area-header-trail" aria-label="Breadcrumb">
+        <span class="area-icon @Icon"></span>
+
+        @if (breadcrumbService.Items.Count > 0)
+        {
+            <a class="area-title" href="@Link">@Title</a>
+
+            var last = breadcrumbService.Items.Count - 1;
+            for (var i = 0; i <= last; i++)
+            {
+                var item = breadcrumbService.Items[i];
+
+                <svg class="divider" width="1em" height="1em" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>
+
+                if (i < last && !string.IsNullOrEmpty(item.Link))
+                {
+                    <a class="crumb" href="@item.Link">@item.Display</a>
+                }
+                else
+                {
+                    <span class="crumb @(i == last ? "current" : null)" aria-current="@(i == last ? "page" : null)">@item.Display</span>
+                }
+            }
+        }
+        else
+        {
+            <span class="area-title">@Title</span>
+            @if (!string.IsNullOrEmpty(Subtitle))
+            {
+                <span class="area-subtitle">@Subtitle</span>
+            }
+        }
+    </nav>
+
+    @if (ChildContent != null || helpLink != null)
+    {
+        <div class="area-header-tools">
+            @ChildContent
+
+            @if (helpLink != null)
+            {
+                <a class="area-help" href="@helpLink" target="_blank" rel="noopener" title="Help for this page (opens the TrakHound docs)" aria-label="Help for this page"><span class="icon fa-solid fa-sharp fa-circle-question"></span></a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string Title { get; set; }
+
+    // Shown on the area's first page (a page that sets no Breadcrumbs)
+    [Parameter]
+    public string Subtitle { get; set; }
+
+    // The area's first page
+    [Parameter]
+    public string Link { get; set; }
+
+    // The area's tools (shown on the right)
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+
+    private string helpLink;
+
+
+    protected override void OnInitialized()
+    {
+        breadcrumbService.Changed += BreadcrumbsChanged;
+        navigationManager.LocationChanged += LocationChanged;
+        UpdateHelpLink();
+    }
+
+    void IDisposable.Dispose()
+    {
+        breadcrumbService.Changed -= BreadcrumbsChanged;
+        navigationManager.LocationChanged -= LocationChanged;
+    }
+
+    // The docs page is picked from the page's path (TrakHoundWebsite.GetAdminHelpLink), so pages don't each set one
+    private void UpdateHelpLink()
+    {
+        helpLink = TrakHoundWebsite.GetAdminHelpLink(navigationManager.ToBaseRelativePath(navigationManager.Uri));
+    }
+
+    private void LocationChanged(object sender, LocationChangedEventArgs args)
+    {
+        UpdateHelpLink();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // Pages set their Breadcrumbs after the Layout has rendered for the navigation
+    private void BreadcrumbsChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+}

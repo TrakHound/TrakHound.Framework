@@ -1,0 +1,131 @@
+@implements IDisposable
+@inject ClientService clientService
+@inject JavascriptService javascriptService
+@using TrakHound.Blazor.Services
+
+@if (clientService.SelectedPath != null)
+{
+    var message = clientService.GetMessage(clientService.SelectedPath);
+
+    if (message != null)
+    {
+        var content = clientService.GetString(message, selectedContentType);
+        var size = ClientService.GetContentBytes(message)?.Length ?? 0;
+        var timestamp = message.Timestamp.ToLocalTime();
+
+        <div class="message-value-panel">
+            <div class="top-container">
+                <div class="title-container">
+                    <span class="title">Value</span>
+                </div>
+                <div class="toolbar-container">
+                    <button class="btn btn-toolbar" title="Copy Value" aria-label="Copy Value" @onclick="() => CopyValue(content)">
+                        <span class="icon fa-solid fa-sharp @(copied ? "fa-check copied" : "fa-copy")"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="information-container">
+                <span class="badge" title="Quality of Service">QoS @message.Qos</span>
+                @if (message.Retain)
+                {
+                    <span class="badge retained" title="Retained by the Broker">Retained</span>
+                }
+                <span class="size" title="@size.ToString("N0") bytes">@(((long)size).ToFileSize())</span>
+                <span class="timestamp" title="@message.Timestamp.ToString("o")">@FormatTimestamp(timestamp)</span>
+            </div>
+            <div class="middle-container">
+                <div class="format-buttons" role="group" aria-label="Format">
+                    @foreach (var format in _formats)
+                    {
+                        <button class="btn btn-format @(selectedContentType == format.ContentType ? "active" : "")" title="@format.Title" @onclick="() => ContentTypeSelected(format.ContentType)">@format.Name</button>
+                    }
+                </div>
+            </div>
+            <div class="content-container">
+                @if (size > 0)
+                {
+                    <pre class="content">@content</pre>
+                }
+                else
+                {
+                    <div class="content empty">(empty)</div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+
+    private static readonly (string Name, string Title, MessageContentType? ContentType)[] _formats = new (string, string, MessageContentType?)[]
+    {
+        ("Auto", "Format JSON, otherwise show Text", null),
+        ("Text", "Show the Content as UTF-8 Text", MessageContentType.Text),
+        ("JSON", "Format the Content as JSON", MessageContentType.Json),
+        ("Bytes", "Show the Content as Hex", MessageContentType.Bytes)
+    };
+
+    private MessageContentType? selectedContentType;
+    private CancellationTokenSource copiedReset;
+    private bool copied;
+
+
+    protected override void OnInitialized()
+    {
+        clientService.PathSelected += PathSelected;
+        clientService.ValueUpdated += ValueUpdated;
+    }
+
+    public void Dispose()
+    {
+        copiedReset?.Cancel();
+        clientService.PathSelected -= PathSelected;
+        clientService.ValueUpdated -= ValueUpdated;
+    }
+
+    private async void PathSelected(object sender, string path)
+    {
+        // Keep the selected Format so it applies to the newly selected Message as well
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void ValueUpdated(string path, string value)
+    {
+        if (path == clientService.SelectedPath)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ContentTypeSelected(MessageContentType? contentType)
+    {
+        selectedContentType = contentType;
+    }
+
+    private async Task CopyValue(string content)
+    {
+        await javascriptService.CopyClipboard(content ?? "");
+
+        // Show the "Copied" check briefly, then return to the Copy icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copied = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            copied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        return timestamp.Date == DateTime.Now.Date ? timestamp.ToString("HH:mm:ss.fff") : timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff");
+    }
+
+}

@@ -1,0 +1,11 @@
+﻿{
+  "id": "TrakHound.Functions.Retention.Function",
+  "category": "function",
+  "version": "0.2",
+  "metadata": {
+    "publisher": "",
+    "description": "",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Functions.Retention.Function"
+  }
+}

@@ -1,0 +1,27 @@
+TrakHound Framework
+Copyright (c) 2026 TrakHound Inc.
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes the following third-party code, which keeps its own license:
+
+Z.Blazor.Diagrams (libraries/TrakHound.Blazor.Diagrams)
+  Copyright (c) 2018 zHaytam. MIT License (libraries/TrakHound.Blazor.Diagrams/LICENSE).
+  https://github.com/Blazor-Diagrams/Blazor.Diagrams
+
+Cronos (modules/TrakHound.ScheduledTasks.Worker/Cron)
+  Copyright (c) 2017 Hangfire OÜ. MIT License (in each file's header).
+  https://github.com/HangfireIO/Cronos
+
+ASP.NET Core and .NET (instances/TrakHound.Instance/Routing: HotReloadManager.cs, RouteKey.cs,
+RouteTable.cs, RouteTableFactory.cs; modules/TrakHound.ScheduledTasks.Worker/Cron/CalendarHelper.cs)
+  Copyright (c) .NET Foundation and Contributors. MIT License.
+  https://github.com/dotnet/aspnetcore
+
+Bootstrap (libraries/TrakHound.Blazor.Hosting/Styles/base.css, parts of v5.1)
+  Copyright (c) 2011-2021 The Bootstrap Authors. MIT License.
+  https://github.com/twbs/bootstrap
+
+Roboto (libraries/TrakHound.Blazor.Hosting/wwwroot/css/roboto)
+  Copyright 2011 The Roboto Project Authors. SIL Open Font License, Version 1.1
+  (libraries/TrakHound.Blazor.Hosting/wwwroot/css/roboto/LICENSE.txt).

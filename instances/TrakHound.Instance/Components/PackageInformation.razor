@@ -1,0 +1,594 @@
+﻿@using TrakHound.Extensions
+@using TrakHound.Licenses
+@using TrakHound.Packages
+
+@if (Package != null)
+{
+    var publisher = Package.GetMetadata(TrakHoundPackage.PublisherName);
+    var description = Package.GetMetadata(TrakHoundPackage.DescriptionName);
+    var image = Package.GetMetadata(TrakHoundPackage.ImageName);
+    var licenseRequired = Package.Metadata != null && Package.Metadata.ContainsKey(".licenseRequired") ? Package.Metadata[".licenseRequired"].ToBoolean() : false;
+    var licenseRequestUrl = Package.GetMetadata(".licenseRequestUrl");
+    var licensePublisherId = Package.GetMetadata(".licensePublisherId");
+    var licenseProductId = Package.GetMetadata(".licenseProductId");
+
+    var downloadLink = PackageClient?.GetDownloadUrl(Package.Uuid);
+
+    if (!string.IsNullOrEmpty(licenseRequestUrl))
+    {
+        licenseRequestUrl = Url.AddQueryParameter(licenseRequestUrl, "productId", licenseProductId);
+
+        var licenseManager = TrakHoundLicenseManagers.Get(licensePublisherId);
+        if (licenseManager != null)
+        {
+            licenseRequestUrl = Url.AddQueryParameter(licenseRequestUrl, "deviceId", licenseManager.GetDeviceId());
+        }
+    }
+
+    // Metadata shown in its own Section (the Description and Publisher are shown in the Header, '.' keys are configuration)
+    var sourceMetadata = _sourceKeys.Where(o => Package.MetadataExists(o)).ToList();
+    var otherMetadata = Package.Metadata?
+        .Where(o => !o.Key.StartsWith('.') && !_sourceKeys.Contains(o.Key) && o.Key != TrakHoundPackage.DescriptionName && o.Key != TrakHoundPackage.PublisherName)
+        .ToList();
+
+    var canCheck = PackageManager != null && PackageClient != null;
+
+    <div class="package-information">
+
+        @* Toolbar *@
+        @if (canCheck || !string.IsNullOrEmpty(downloadLink))
+        {
+            <div class="information-toolbar">
+                @if (canCheck)
+                {
+                    <button class="btn btn-light" disabled="@verifying" @onclick="CheckPackage" title="Download v@(Package.Version) and check its files and who signed it, without installing it"><span class="icon fa-solid fa-sharp @(verifying ? "fa-loader spin" : "fa-shield-check")"></span>@(verifying ? "Checking.." : verification != null ? "Check Again" : "Check Package")</button>
+                }
+                @if (!string.IsNullOrEmpty(downloadLink))
+                {
+                    <a href="@downloadLink" class="btn btn-light" title="Download the Package file (@TrakHoundPackage.FileExtension)"><span class="icon fa-sharp fa-solid fa-download"></span>Download</a>
+                }
+            </div>
+        }
+
+        <div class="information-content">
+
+            @* Header *@
+            <div class="header-panel">
+                <div class="icon-container">
+                    <PackageIcon Src="@image" Class="icon" />
+                </div>
+                <div class="header-text">
+                    <span class="title">@Package.Id</span>
+                    <div class="subtitle">
+                        @if (!string.IsNullOrEmpty(publisher))
+                        {
+                            <span class="publisher">by @publisher</span>
+                        }
+                        @if (!string.IsNullOrEmpty(Package.Category))
+                        {
+                            <span class="category-chip">@Package.Category.ToTitleCase()</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Description *@
+            @if (!string.IsNullOrEmpty(description))
+            {
+                <p class="description">@description</p>
+            }
+
+            @* License *@
+            @if (licenseRequired)
+            {
+                <div class="license-panel">
+                    <span class="license-icon fa-solid fa-sharp fa-key"></span>
+                    <div class="license-text">
+                        <span class="license-title">License required</span>
+                        <span class="license-description">This Package requires a License for Product ID <span class="license-product-id">@licenseProductId</span></span>
+                    </div>
+                    @if (IsWebUrl(licenseRequestUrl))
+                    {
+                        <a href="@licenseRequestUrl" target="_blank" class="btn btn-sm btn-light btn-license">Request License<span class="icon-right fa-solid fa-sharp fa-arrow-up-right-from-square"></span></a>
+                    }
+                </div>
+            }
+
+            @* Version *@
+            <div class="version-panel">
+                <span class="field-label">Version</span>
+                <RadzenDropDown TValue="string" Value=@selectedVersion Data="@versions" ValueChanged="VersionChanged" />
+                <span class="build-date" title="@Package.BuildDate.ToLocalTime()">Built @Package.BuildDate.ToLocalTime().ToString("g")</span>
+            </div>
+
+            @* Verification *@
+            @if (canCheck)
+            {
+                <div class="section">
+                    <span class="section-title">Verification</span>
+                    @if (verification == null)
+                    {
+                        var manifest = ManifestCheck?.Manifest;
+
+                        @if (ManifestCheck?.State == TrakHoundPackageManifestState.Trusted)
+                        {
+                            <p class="verification-hint">Signed by a Trusted Publisher. The details below are from the signed Manifest. Its files haven't been checked: use Check Package, or install it, which always checks them.</p>
+                            <div class="properties verification-properties">
+                                <span class="property-label">Signed by</span>
+                                <span class="property-value">@ManifestCheck.Publisher?.Name</span>
+                                @if (manifest.RepositoryCommit != null)
+                                {
+                                    <span class="property-label">Built from</span>
+                                    <span class="property-value"><span class="mono" title="@manifest.RepositoryCommit">@GetSourceDisplay(TrakHoundPackage.RepositoryCommitName, manifest.RepositoryCommit)</span>@(manifest.RepositoryDirty == true ? " with uncommitted changes" : "")</span>
+                                }
+                                @if (manifest.Builder != null)
+                                {
+                                    <span class="property-label">Built by</span>
+                                    <span class="property-value">
+                                        @if (IsWebUrl(manifest.Builder))
+                                        {
+                                            <a href="@manifest.Builder" target="_blank" rel="noopener noreferrer">@manifest.Builder</a>
+                                        }
+                                        else
+                                        {
+                                            @manifest.Builder
+                                        }
+                                    </span>
+                                }
+                                @if (manifest.BuildConfiguration != null)
+                                {
+                                    <span class="property-label">Build</span>
+                                    <span class="property-value">@manifest.BuildConfiguration@(manifest.DotnetSdkVersion != null ? $" · .NET SDK {manifest.DotnetSdkVersion}" : "")</span>
+                                }
+                            </div>
+                        }
+                        else if (ManifestCheck?.State == TrakHoundPackageManifestState.Invalid)
+                        {
+                            <p class="verification-hint">The Manifest from the Package Source can't be trusted.</p>
+                            @foreach (var error in ManifestCheck.Errors)
+                            {
+                                <span class="verification-problem">@error</span>
+                            }
+                        }
+                        else
+                        {
+                            <p class="verification-hint">The details on this page come from the Package Source and aren't proven. Download v@(Package.Version) to check its files and who signed it, without installing it.</p>
+                        }
+                    }
+                    else
+                    {
+                        <div class="verification-result">
+                            <span class="verification @GetVerificationClass(verification)" title="@verification.Description">@TrakHoundPackageVerificationPolicy.GetStateText(verification.State)</span>
+                            <span class="verification-version">v@(checkedVersion)</span>
+                            @if (verification.Refused)
+                            {
+                                <span class="verification-problem">This Instance would refuse this Package</span>
+                            }
+                        </div>
+                        <div class="properties verification-properties">
+                            @* The signature only covers the Manifest, so a Modified Package isn't what the Publisher signed *@
+                            @if (verification.Publisher != null && verification.State != TrakHoundPackageVerificationState.Modified)
+                            {
+                                <span class="property-label">Signed by</span>
+                                <span class="property-value">@verification.Publisher</span>
+                            }
+                            else if (verification.KeyId != null)
+                            {
+                                <span class="property-label">Signing key</span>
+                                <span class="property-value mono">@verification.KeyId</span>
+                            }
+                            @if (verification.RepositoryCommit != null)
+                            {
+                                <span class="property-label">Built from</span>
+                                <span class="property-value"><span class="mono" title="@verification.RepositoryCommit">@GetSourceDisplay(TrakHoundPackage.RepositoryCommitName, verification.RepositoryCommit)</span>@(verification.RepositoryDirty == true ? " with uncommitted changes" : "")</span>
+                            }
+                            @if (verification.Builder != null)
+                            {
+                                <span class="property-label">Built by</span>
+                                <span class="property-value">
+                                    @if (IsWebUrl(verification.Builder))
+                                    {
+                                        <a href="@verification.Builder" target="_blank" rel="noopener noreferrer">@verification.Builder</a>
+                                    }
+                                    else
+                                    {
+                                        @verification.Builder
+                                    }
+                                </span>
+                            }
+                            @if (verification.BuildConfiguration != null)
+                            {
+                                <span class="property-label">Build</span>
+                                <span class="property-value">@verification.BuildConfiguration@(verification.DotnetSdkVersion != null ? $" · .NET SDK {verification.DotnetSdkVersion}" : "")</span>
+                            }
+                            @if (verificationComponents != null)
+                            {
+                                <span class="property-label">NuGet Packages</span>
+                                <span class="property-value">
+                                    <details>
+                                        <summary>@verificationComponents.Count listed in the SBOM</summary>
+                                        @foreach (var component in verificationComponents)
+                                        {
+                                            <span class="sbom-component">@component.Name <span class="dependency-version">@component.Version</span></span>
+                                        }
+                                    </details>
+                                </span>
+                            }
+                        </div>
+                        @foreach (var problem in GetProblems(verification))
+                        {
+                            <span class="verification-problem">@problem</span>
+                        }
+                    }
+                    @if (verificationError != null)
+                    {
+                        <span class="verification-problem">@verificationError</span>
+                    }
+                </div>
+            }
+
+            @* Dependencies *@
+            <div class="section">
+                <span class="section-title">Dependencies</span>
+                @if (!Package.Dependencies.IsNullOrEmpty())
+                {
+                    <div class="dependencies">
+                        @foreach (var dependency in Package.Dependencies)
+                        {
+                            <span class="dependency-chip" title="Installed with this Package">
+                                <span class="dependency-id">@dependency.Id</span>
+                                <span class="dependency-version">@TrakHoundPackageDependency.ToVersionString(dependency)</span>
+                            </span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <span class="none">None</span>
+                }
+            </div>
+
+            @* Source *@
+            @if (sourceMetadata.Count > 0)
+            {
+                <div class="section">
+                    <span class="section-title">Source</span>
+                    <div class="properties">
+                        @foreach (var key in sourceMetadata)
+                        {
+                            var value = Package.GetMetadata(key);
+                            var link = GetSourceLink(Package, key);
+
+                            <span class="property-label">@GetLabel(key)</span>
+                            <span class="property-value @(key == TrakHoundPackage.RepositoryCommitName ? "mono" : "")">
+                                @if (IsWebUrl(link))
+                                {
+                                    <a href="@link" target="_blank" title="@value">@GetSourceDisplay(key, value)</a>
+                                }
+                                else
+                                {
+                                    @GetSourceDisplay(key, value)
+                                }
+                            </span>
+                        }
+                    </div>
+                </div>
+            }
+
+            @* Details *@
+            @if (!otherMetadata.IsNullOrEmpty())
+            {
+                <div class="section">
+                    <span class="section-title">Details</span>
+                    <div class="properties">
+                        @foreach (var metadata in otherMetadata)
+                        {
+                            <span class="property-label">@GetLabel(metadata.Key)</span>
+                            <span class="property-value">@metadata.Value</span>
+                        }
+                    </div>
+                </div>
+            }
+
+            @* Identifiers *@
+            <div class="section">
+                <span class="section-title">Identifiers</span>
+                <div class="properties identifiers">
+                    <span class="property-label">UUID</span>
+                    <span class="property-value mono">@Package.Uuid</span>
+                    <span class="property-label">Hash</span>
+                    <span class="property-value mono">@Package.Hash</span>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+}
+
+
+@code {
+
+    // Source Metadata (in display order)
+    private static readonly string[] _sourceKeys = new[]
+    {
+        TrakHoundPackage.RepositoryName,
+        TrakHoundPackage.RepositoryBranchName,
+        TrakHoundPackage.RepositoryCommitName,
+        TrakHoundPackage.RepositoryDirectoryName,
+        TrakHoundPackage.ProjectName
+    };
+
+    IEnumerable<string> versions;
+    string selectedVersion;
+    string previousPackageId;
+    TrakHoundPackageClient previousPackageClient;
+    string previousPackagePath;
+    int versionsLoad;
+
+    TrakHoundPackageVerificationInformation verification;
+    List<TrakHoundPackageSbomComponent> verificationComponents;
+    string verificationError;
+    string checkedVersion;
+    string verificationPackageUuid;
+    int verificationLoad;
+    bool verifying;
+
+
+    [Parameter]
+    public TrakHoundPackage Package { get; set; }
+
+    [Parameter]
+    public TrakHoundPackageClient PackageClient { get; set; }
+
+    /// <summary>
+    /// Used to check a Package from the Source before it's installed. The check isn't offered when not set
+    /// </summary>
+    [Parameter]
+    public TrakHoundPackageManager PackageManager { get; set; }
+
+    /// <summary>
+    /// Who signed the Package's Manifest, known without downloading it (null if the Source doesn't provide Manifests or it hasn't loaded)
+    /// </summary>
+    [Parameter]
+    public TrakHoundPackageManifestCheck ManifestCheck { get; set; }
+
+    [Parameter]
+    public string PackagePath { get; set; }
+
+    [Parameter]
+    public EventCallback<string> VersionSelected { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (Package != null)
+        {
+            selectedVersion = Package.Version;
+
+            // A result only applies to the Package it was checked for
+            if (Package.Uuid != verificationPackageUuid)
+            {
+                verificationPackageUuid = Package.Uuid;
+                verificationLoad++;
+                verification = null;
+                verificationComponents = null;
+                verificationError = null;
+                verifying = false;
+            }
+
+            // Only reload the Versions when the Package (or where it comes from) changes, not on every parent render
+            if (Package.Id != previousPackageId || PackageClient != previousPackageClient || PackagePath != previousPackagePath)
+            {
+                previousPackageId = Package.Id;
+                previousPackageClient = PackageClient;
+                previousPackagePath = PackagePath;
+
+                var package = Package;
+                var load = ++versionsLoad;
+                IEnumerable<string> result = null;
+
+                try
+                {
+                    if (PackageClient != null)
+                    {
+                        result = await PackageClient.GetVersions(package.Id);
+                    }
+                    else
+                    {
+                        result = TrakHoundPackage.GetInstalledVersions(package.Category, package.Id, PackagePath)?.Select(o => o.Version);
+                    }
+
+                    result = result?.OrderBy(o => o, new VersionComparer()).ToList();
+                }
+                catch (Exception)
+                {
+                    // Show the current Version only (the Source may be unreachable)
+                    result = !string.IsNullOrEmpty(package.Version) ? new[] { package.Version } : null;
+                }
+
+                // A newer Package was set while the Versions were loading
+                if (load != versionsLoad) return;
+
+                versions = result;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CheckPackage()
+    {
+        var package = Package;
+        var load = ++verificationLoad;
+
+        verifying = true;
+        verificationError = null;
+
+        TrakHoundPackageVerificationInformation result = null;
+        List<TrakHoundPackageSbomComponent> components = null;
+        string error = null;
+
+        try
+        {
+            var packageBytes = await PackageClient.Download(package.Id, package.Version);
+            if (!packageBytes.IsNullOrEmpty())
+            {
+                await Task.Run(() =>
+                {
+                    result = PackageManager.CheckPackageFile(packageBytes);
+                    components = TrakHoundPackageSbom.ReadArchive(packageBytes)?.ToList();
+                });
+
+                // The Source chose what to send, so the result says nothing about the Package that was asked for
+                if (result.Id != package.Id || result.Version != package.Version)
+                {
+                    error = $"The Source sent {result.Id} v{result.Version} instead of {package.Id} v{package.Version}";
+                    result = null;
+                    components = null;
+                }
+            }
+            else
+            {
+                error = $"Could not download v{package.Version} from the Package Source";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        // Another Package was selected during the check
+        if (load != verificationLoad) return;
+
+        verification = result;
+        verificationComponents = components;
+        verificationError = error;
+        checkedVersion = package.Version;
+        verifying = false;
+    }
+
+    private static string GetVerificationClass(TrakHoundPackageVerificationInformation information)
+    {
+        if (information.Refused || information.State == TrakHoundPackageVerificationState.Modified) return "problem";
+        return information.State == TrakHoundPackageVerificationState.Verified ? "verified" : "unverified";
+    }
+
+    private static IEnumerable<string> GetProblems(TrakHoundPackageVerificationInformation information)
+    {
+        return (information.Errors ?? Enumerable.Empty<string>())
+            .Concat((information.Changed ?? Enumerable.Empty<string>()).Select(o => $"Changed : {o}"))
+            .Concat((information.Missing ?? Enumerable.Empty<string>()).Select(o => $"Missing : {o}"))
+            .Concat((information.Added ?? Enumerable.Empty<string>()).Select(o => $"Added : {o}"));
+    }
+
+    private async Task VersionChanged(string version)
+    {
+        selectedVersion = version;
+
+        await VersionSelected.InvokeAsync(version);
+    }
+
+    // Package Metadata is set by the Package author, so only http(s) URLs are rendered as links (not javascript: etc.)
+    private static bool IsWebUrl(string url)
+    {
+        return !string.IsNullOrEmpty(url) &&
+            Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private static string GetLabel(string key)
+    {
+        switch (key)
+        {
+            case TrakHoundPackage.ProjectName: return "Project";
+            case TrakHoundPackage.RepositoryName: return "Repository";
+            case TrakHoundPackage.RepositoryBranchName: return "Branch";
+            case TrakHoundPackage.RepositoryCommitName: return "Commit";
+            case TrakHoundPackage.RepositoryDirectoryName: return "Directory";
+            case TrakHoundPackage.TrakHoundVersionName: return "Built for TrakHound";
+        }
+
+        if (string.IsNullOrEmpty(key)) return key;
+
+        // Split camelCase keys into words (ex. "buildNumber" => "Build Number")
+        var label = new System.Text.StringBuilder();
+        for (var i = 0; i < key.Length; i++)
+        {
+            var c = key[i];
+            if (i == 0) label.Append(char.ToUpperInvariant(c));
+            else if (char.IsUpper(c) && !char.IsUpper(key[i - 1])) label.Append(' ').Append(c);
+            else if (c == '_' || c == '-') label.Append(' ');
+            else label.Append(c);
+        }
+        return label.ToString();
+    }
+
+    private static string GetSourceDisplay(string key, string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+
+        switch (key)
+        {
+            case TrakHoundPackage.RepositoryName:
+            case TrakHoundPackage.ProjectName:
+                // Show the URL without the scheme (ex. "github.com/TrakHound/TrakHound")
+                var display = value;
+                var schemeIndex = display.IndexOf("://");
+                if (schemeIndex >= 0) display = display.Substring(schemeIndex + 3);
+                if (display.EndsWith(".git")) display = display.Substring(0, display.Length - 4);
+                return display.TrimEnd('/');
+
+            case TrakHoundPackage.RepositoryCommitName:
+                // Short commit hash
+                return value.Length > 10 ? value.Substring(0, 10) : value;
+        }
+
+        return value;
+    }
+
+    private static string GetSourceLink(TrakHoundPackage package, string key)
+    {
+        switch (key)
+        {
+            case TrakHoundPackage.ProjectName:
+            case TrakHoundPackage.RepositoryName:
+                return package.GetMetadata(key);
+
+            case TrakHoundPackage.RepositoryBranchName: return GetRepositoryBranchLink(package);
+            case TrakHoundPackage.RepositoryDirectoryName: return GetRepositoryDirectoryLink(package);
+            case TrakHoundPackage.RepositoryCommitName: return GetRepositoryCommitLink(package);
+        }
+
+        return null;
+    }
+
+    private static string GetRepositoryBranchLink(TrakHoundPackage package)
+    {
+        var baseUrl = package.GetMetadata(TrakHoundPackage.RepositoryName);
+        var branch = package.GetMetadata(TrakHoundPackage.RepositoryBranchName);
+        if (string.IsNullOrEmpty(baseUrl)) return null;
+
+        return Url.Combine(baseUrl, "tree", branch); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryDirectoryLink(TrakHoundPackage package)
+    {
+        var baseUrl = package.GetMetadata(TrakHoundPackage.RepositoryName);
+        var branch = package.GetMetadata(TrakHoundPackage.RepositoryBranchName);
+        var directory = package.GetMetadata(TrakHoundPackage.RepositoryDirectoryName);
+        if (string.IsNullOrEmpty(baseUrl)) return null;
+
+        return Url.Combine(baseUrl, "tree", branch, directory); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryCommitLink(TrakHoundPackage package)
+    {
+        var baseUrl = package.GetMetadata(TrakHoundPackage.RepositoryName);
+        var commit = package.GetMetadata(TrakHoundPackage.RepositoryCommitName);
+        if (string.IsNullOrEmpty(baseUrl)) return null;
+
+        return Url.Combine(baseUrl, "commit", commit); // May need to revise this as this might only be valid for GitHub
+    }
+
+}

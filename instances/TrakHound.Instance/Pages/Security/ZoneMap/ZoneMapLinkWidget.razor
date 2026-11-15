@@ -1,0 +1,48 @@
+@using TrakHound.Blazor.Diagrams
+@using TrakHound.Blazor.Diagrams.Components.Renderers
+
+@{
+    var result = Link.PathGeneratorResult;
+    if (result == null) return;
+
+    var color = Link.Color;
+    var dashes = Link.Edge.Kind == ZoneMapEdgeKind.Denied || Link.Edge.Kind == ZoneMapEdgeKind.WouldDeny || Link.Edge.Kind == ZoneMapEdgeKind.Router ? "6 4" : null;
+}
+
+@* A wide, invisible line that makes the line easy to click *@
+<path d="@result.FullPath.ToString()"
+      class="zone-map-link-hit"
+      stroke-width="14"
+      stroke-opacity="0"
+      fill="none"
+      stroke="@color" />
+
+<path d="@result.FullPath.ToString()"
+      class="zone-map-link"
+      stroke-width="@(Link.Width.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+      stroke-dasharray="@dashes"
+      fill="none"
+      stroke="@color" />
+
+@if (Link.TargetMarker != null && result.TargetMarkerAngle != null && result.TargetMarkerPosition != null)
+{
+    <g transform="@(FormattableString.Invariant($"translate({result.TargetMarkerPosition.X}, {result.TargetMarkerPosition.Y}) rotate({result.TargetMarkerAngle})"))">
+        <path d="@Link.TargetMarker.Path" fill="@color"></path>
+    </g>
+}
+
+@foreach (var label in Link.Labels)
+{
+    <LinkLabelRenderer @key="label.Id" Label="@label" Path="@result.FullPath" />
+}
+
+@code {
+
+    [CascadingParameter]
+    public BlazorDiagram BlazorDiagram { get; set; } = null!;
+
+    // Filled by the Diagram
+    [Parameter]
+    public ZoneMapLinkModel Link { get; set; } = null!;
+
+}

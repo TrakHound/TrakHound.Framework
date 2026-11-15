@@ -1,0 +1,458 @@
+@using System.Text.Json
+
+<div class="endpoint-view">
+
+    <div class="endpoint-view-toolbar">
+        <button class="btn btn-light btn-sm" @onclick="OnBack"><span class="icon fa-solid fa-sharp fa-arrow-left"></span>Back</button>
+        <span class="endpoint-view-breadcrumb">@Endpoint.Api?.Name / @Endpoint.GroupName</span>
+    </div>
+
+    @* Summary *@
+    <div class="endpoint-summary">
+        <div class="endpoint-summary-route">
+            <span class="method-badge lg @Endpoint.MethodLabel.ToLowerInvariant()">@Endpoint.MethodLabel</span>
+            <code class="endpoint-url">@GetDisplayUrl()</code>
+            <button class="btn btn-light btn-sm icon-only" title="Copy URL" @onclick="() => Copy(GetRequestUrl())"><span class="fa-solid fa-sharp fa-copy"></span></button>
+        </div>
+        @if (!string.IsNullOrEmpty(Endpoint.Description))
+        {
+            <div class="endpoint-summary-description">@Endpoint.Description</div>
+        }
+        <div class="endpoint-summary-tags">
+            @if (Endpoint.AuthenticationRequired)
+            {
+                <span class="tag auth"><span class="icon fa-solid fa-sharp fa-lock"></span>Requires Authentication (@ApiKeyHeader header, Bearer Token, or signed in Session)</span>
+            }
+            else
+            {
+                <span class="tag"><span class="icon fa-solid fa-sharp fa-lock-open"></span>No Authentication required</span>
+            }
+            @if (Endpoint.IsStream)
+            {
+                <span class="tag"><span class="icon fa-solid fa-sharp fa-tower-broadcast"></span>Stream (WebSocket)</span>
+            }
+        </div>
+    </div>
+
+    <div class="endpoint-columns">
+
+        @* Left : Reference and Try It *@
+        <div class="endpoint-column">
+
+            <section class="endpoint-section">
+                <h3>Parameters</h3>
+                @if (Endpoint.Parameters.Count == 0)
+                {
+                    <div class="muted">This Endpoint has no Parameters.</div>
+                }
+                else
+                {
+                    <table class="reference-table">
+                        <thead>
+                            <tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var parameter in Endpoint.Parameters)
+                            {
+                                <tr>
+                                    <td>
+                                        <code>@parameter.Name</code>
+                                        @if (parameter.Required)
+                                        {
+                                            <span class="required" title="Required">*</span>
+                                        }
+                                    </td>
+                                    <td><span class="in-chip">@(parameter.Type?.ToLowerInvariant())</span></td>
+                                    <td class="muted">@parameter.DataType@(parameter.IsBody ? $" ({parameter.BodyContentType})" : "")</td>
+                                    <td>
+                                        @parameter.Description
+                                        @if (!string.IsNullOrEmpty(parameter.DefaultValue))
+                                        {
+                                            <span class="muted"> Default : <code>@parameter.DefaultValue</code></span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </section>
+
+            @if (Endpoint.Responses.Count > 0)
+            {
+                <section class="endpoint-section">
+                    <h3>Responses</h3>
+                    <table class="reference-table">
+                        <thead>
+                            <tr><th>Status</th><th>Content Type</th><th>Schema</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var response in Endpoint.Responses.OrderBy(o => o.StatusCode))
+                            {
+                                <tr>
+                                    <td><span class="status-chip @GetStatusClass(response.StatusCode)">@response.StatusCode</span></td>
+                                    <td class="muted">@response.ContentType</td>
+                                    <td>
+                                        @if (response.Schema != null)
+                                        {
+                                            <code>@response.Schema.Name</code>
+                                            @if (response.Schema.Properties != null && response.Schema.Properties.Count > 0)
+                                            {
+                                                <ul class="schema-properties">
+                                                    @foreach (var property in response.Schema.Properties)
+                                                    {
+                                                        <li><code>@property.Name</code> <span class="muted">@property.DataType</span>@(string.IsNullOrEmpty(property.Description) ? "" : $" : {property.Description}")</li>
+                                                    }
+                                                </ul>
+                                            }
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+
+            @* Try It *@
+            <section class="endpoint-section try-it">
+                <h3>Try It</h3>
+                @if (Endpoint.IsStream)
+                {
+                    <div class="muted">Stream Endpoints are WebSockets and can't be tried here. See the Code Samples to connect from your application.</div>
+                }
+                else
+                {
+                    @if (Endpoint.AuthenticationRequired && string.IsNullOrEmpty(ApiKey) && !Authenticated)
+                    {
+                        <div class="notice warning"><span class="icon fa-solid fa-sharp fa-key"></span><span>This Endpoint requires Authentication. Use an API Key (at the top of the page) or sign in.</span></div>
+                    }
+
+                    @foreach (var parameter in Endpoint.RouteParameters.Concat(Endpoint.QueryParameters))
+                    {
+                        <label class="field">
+                            <span class="field-label">
+                                @parameter.Name
+                                <span class="in-chip">@(parameter.Type?.ToLowerInvariant())</span>
+                                @if (parameter.Required)
+                                {
+                                    <span class="required">*</span>
+                                }
+                            </span>
+                            <input type="text" placeholder="@(parameter.DefaultValue ?? parameter.DataType)" value="@GetValue(parameter.Name)" @oninput="e => SetValue(parameter.Name, e.Value?.ToString())" />
+                        </label>
+                    }
+
+                    @foreach (var parameter in Endpoint.HeaderParameters)
+                    {
+                        <label class="field">
+                            <span class="field-label">
+                                @parameter.Name
+                                <span class="in-chip">header</span>
+                                @if (parameter.Required)
+                                {
+                                    <span class="required">*</span>
+                                }
+                            </span>
+                            <input type="text" placeholder="@(parameter.DefaultValue ?? parameter.DataType)" value="@headerValues.GetValueOrDefault(parameter.Name)" @oninput="e => headerValues[parameter.Name] = e.Value?.ToString()" />
+                        </label>
+                    }
+
+                    @if (bodyParameter != null)
+                    {
+                        <label class="field">
+                            <span class="field-label">
+                                Request Body
+                                <span class="in-chip">@bodyParameter.BodyContentType</span>
+                                @if (bodyParameter.Required)
+                                {
+                                    <span class="required">*</span>
+                                }
+                            </span>
+                            <textarea rows="8" spellcheck="false" @bind="body" @bind:event="oninput"></textarea>
+                        </label>
+                        @if (bodyIsJson && body?.Trim().Length > 0 && !IsValidJson(body))
+                        {
+                            <div class="field-hint warning">The Request Body is not valid JSON.</div>
+                        }
+                    }
+
+                    <div class="try-it-actions">
+                        <button class="btn btn-primary" disabled="@(sending || missingRequired)" @onclick="Send">
+                            <span class="icon fa-solid fa-sharp @(sending ? "fa-loader spin" : "fa-paper-plane")"></span>Send Request
+                        </button>
+                        @if (missingRequired)
+                        {
+                            <span class="muted">Fill in the Required Route Parameters</span>
+                        }
+                    </div>
+
+                    @if (response != null)
+                    {
+                        <div class="response-panel">
+                            @if (!response.Success)
+                            {
+                                <div class="notice error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span><span>The Request failed : @response.Error</span></div>
+                            }
+                            else
+                            {
+                                <div class="response-status">
+                                    <span class="status-chip @GetStatusClass(response.Status)">@response.Status @response.StatusText</span>
+                                    <span class="muted">@response.DurationMs ms</span>
+                                    <span class="muted">@FormatSize(response.Size)</span>
+                                    @if (!string.IsNullOrEmpty(response.ContentType))
+                                    {
+                                        <span class="muted">@response.ContentType</span>
+                                    }
+                                    <span class="response-actions">
+                                        @if (response.IsText && !string.IsNullOrEmpty(response.Body))
+                                        {
+                                            <button class="btn btn-light btn-sm" @onclick="() => Copy(response.Body)"><span class="icon fa-solid fa-sharp fa-copy"></span>Copy</button>
+                                        }
+                                        @if (response.Size > 0)
+                                        {
+                                            <button class="btn btn-light btn-sm" @onclick="SaveResponse"><span class="icon fa-solid fa-sharp fa-download"></span>Save</button>
+                                        }
+                                    </span>
+                                </div>
+
+                                @if (response.Status == 401 || response.Status == 403)
+                                {
+                                    <div class="notice warning">
+                                        <span class="icon fa-solid fa-sharp fa-key"></span>
+                                        <span>@(response.Status == 401 ? "Authentication is required. Use an API Key or sign in." : "Your Credentials don't allow access to this Endpoint.")</span>
+                                    </div>
+                                }
+
+                                <details class="response-headers">
+                                    <summary>Headers (@(response.Headers?.Count ?? 0))</summary>
+                                    <table class="reference-table compact">
+                                        @foreach (var header in response.Headers ?? new List<ApiExplorerHeader>())
+                                        {
+                                            <tr><td><code>@header.Name</code></td><td>@header.Value</td></tr>
+                                        }
+                                    </table>
+                                </details>
+
+                                @if (response.IsText)
+                                {
+                                    @if (!string.IsNullOrEmpty(response.Body))
+                                    {
+                                        <pre class="code-block response-body">@FormatBody(response.Body, response.ContentType)</pre>
+                                    }
+                                    else
+                                    {
+                                        <div class="muted">No content</div>
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="muted">Binary content (@FormatSize(response.Size)). Use Save to download it.</div>
+                                }
+                            }
+                        </div>
+                    }
+                }
+            </section>
+        </div>
+
+        @* Right : Code Samples *@
+        <div class="endpoint-column">
+            <section class="endpoint-section code-samples">
+                <h3>Code Samples</h3>
+                <div class="code-tabs">
+                    @foreach (var language in CodeSamples.Languages)
+                    {
+                        <button class="code-tab @(language.Id == selectedLanguage ? "active" : "")" @onclick="() => selectedLanguage = language.Id">@language.Title</button>
+                    }
+                    <button class="btn btn-light btn-sm icon-only code-copy" title="Copy" @onclick="() => Copy(GetCodeSample())"><span class="fa-solid fa-sharp fa-copy"></span></button>
+                </div>
+                <pre class="code-block">@GetCodeSample()</pre>
+                @if (Endpoint.AuthenticationRequired)
+                {
+                    <div class="field-hint">Replace <code>@CodeSamples.ApiKeyPlaceholder</code> with your API Key. Keys can also be sent as <code>Authorization: Bearer &lt;key&gt;</code>.</div>
+                }
+            </section>
+        </div>
+    </div>
+
+    @if (toast != null)
+    {
+        <div class="toast-message">@toast</div>
+    }
+</div>
+
+@code {
+
+    [Parameter]
+    public ApiCatalogEndpoint Endpoint { get; set; }
+
+    [Parameter]
+    public string BaseUri { get; set; }
+
+    [Parameter]
+    public string ApiKey { get; set; }
+
+    [Parameter]
+    public string ApiKeyHeader { get; set; }
+
+    [Parameter]
+    public bool Authenticated { get; set; }
+
+    [Parameter]
+    public ApiExplorerInterop Interop { get; set; }
+
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+
+    private readonly Dictionary<string, string> values = new Dictionary<string, string>();
+    private readonly Dictionary<string, string> headerValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private ApiCatalogParameter bodyParameter;
+    private bool bodyIsJson;
+    private string body;
+    private bool sending;
+    private ApiExplorerResponse response;
+    private string selectedLanguage = "curl";
+    private string toast;
+
+    private bool missingRequired => Endpoint.RouteParameters.Any(o => string.IsNullOrEmpty(GetValue(o.Name)));
+
+
+    protected override void OnInitialized()
+    {
+        bodyParameter = Endpoint.BodyParameter;
+        bodyIsJson = bodyParameter != null && bodyParameter.BodyContentType.Contains("json");
+        if (bodyIsJson) body = bodyParameter.DataType?.EndsWith("[]") == true ? "[]" : "{}";
+
+        foreach (var parameter in Endpoint.QueryParameters)
+        {
+            if (!string.IsNullOrEmpty(parameter.DefaultValue)) values[parameter.Name] = parameter.DefaultValue;
+        }
+    }
+
+
+    private string GetValue(string name) => values.TryGetValue(name, out var value) ? value : null;
+
+    private void SetValue(string name, string value) => values[name] = value;
+
+    private string GetBaseUrl() => (BaseUri ?? "/").TrimEnd('/');
+
+    // The URL with the values entered (Route Parameters without a value are shown as "{name}")
+    private string GetRequestUrl() => GetBaseUrl() + Endpoint.GetPath(values) + Endpoint.GetQueryString(values);
+
+    private string GetDisplayUrl() => GetBaseUrl() + Endpoint.Route;
+
+    private string GetSampleUrl()
+    {
+        var url = GetBaseUrl() + Endpoint.GetPath(values) + Endpoint.GetQueryString(values, includePlaceholders: true);
+        if (Endpoint.IsStream)
+        {
+            if (url.StartsWith("https://")) url = "wss://" + url.Substring("https://".Length);
+            else if (url.StartsWith("http://")) url = "ws://" + url.Substring("http://".Length);
+        }
+        return url;
+    }
+
+    private string GetCodeSample()
+    {
+        var request = new CodeSampleRequest
+        {
+            Method = Endpoint.MethodLabel,
+            Url = GetSampleUrl(),
+            IsStream = Endpoint.IsStream,
+            ApiKeyHeader = Endpoint.AuthenticationRequired ? ApiKeyHeader : null,
+            ContentType = bodyParameter?.BodyContentType,
+            Body = bodyParameter != null ? (body ?? "") : null,
+            ResponseContentType = Endpoint.Responses.Where(o => o.StatusCode >= 200 && o.StatusCode < 300).Select(o => o.ContentType).FirstOrDefault()
+        };
+
+        return CodeSamples.Create(selectedLanguage, request);
+    }
+
+
+    private async Task Send()
+    {
+        sending = true;
+        response = null;
+        StateHasChanged();
+
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var header in headerValues.Where(o => !string.IsNullOrEmpty(o.Value))) headers[header.Key] = header.Value;
+        if (!string.IsNullOrEmpty(ApiKey)) headers[ApiKeyHeader] = ApiKey;
+
+        string requestBody = null;
+        if (bodyParameter != null && Endpoint.MethodLabel != "GET" && Endpoint.MethodLabel != "HEAD")
+        {
+            requestBody = body ?? "";
+            headers["Content-Type"] = bodyParameter.BodyContentType;
+        }
+
+        response = await Interop.Send(GetRequestUrl(), Endpoint.MethodLabel, headers, requestBody);
+
+        sending = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveResponse()
+    {
+        var segments = Endpoint.GetPath(values).Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var name = segments.Length > 0 ? segments.Last() : "response";
+        if (response?.ContentType?.Contains("json") == true) name += ".json";
+        await Interop.SaveResponse(name);
+    }
+
+    private async Task Copy(string text)
+    {
+        var copied = await Interop.Copy(text);
+        toast = copied ? "Copied" : "Copy failed";
+        StateHasChanged();
+        await Task.Delay(1500);
+        toast = null;
+        StateHasChanged();
+    }
+
+
+    private static string FormatBody(string body, string contentType)
+    {
+        if (contentType != null && contentType.Contains("json"))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(body);
+                return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+            }
+            catch { }
+        }
+
+        return body;
+    }
+
+    private static bool IsValidJson(string value)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(value);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string GetStatusClass(int statusCode)
+    {
+        if (statusCode >= 200 && statusCode < 300) return "success";
+        if (statusCode >= 300 && statusCode < 400) return "redirect";
+        if (statusCode >= 400 && statusCode < 500) return "client-error";
+        return "server-error";
+    }
+
+    private static string FormatSize(long size)
+    {
+        if (size < 1024) return $"{size} B";
+        if (size < 1024 * 1024) return $"{size / 1024.0:0.#} KB";
+        return $"{size / (1024.0 * 1024.0):0.#} MB";
+    }
+}

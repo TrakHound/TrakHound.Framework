@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "UserPackageId (Authenticate a token)": {
+      "commandName": "Project",
+      "commandLineArgs": "example-token"
+    },
+    "UserPackageId (Authenticate without a token)": {
+      "commandName": "Project"
+    }
+  }
+}

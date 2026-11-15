@@ -1,0 +1,276 @@
+@using TrakHound.Packages
+
+<div class="upload-panel">
+    <div class="upload-content">
+
+        @* Drop Zone (the file input covers the whole area, so files can be dropped or selected) *@
+        <div class="drop-zone @(dragging ? "dragging" : "") @(reading ? "reading" : "")">
+            <InputFile OnChange="FilesSelected" multiple accept="@TrakHoundPackage.FileExtension" title="" class="drop-input"
+                       @ondragenter="() => dragging = true" @ondragleave="() => dragging = false" @ondrop="() => dragging = false" />
+            <span class="drop-icon fa-solid fa-sharp @(reading ? "fa-loader spin" : "fa-cloud-arrow-up")"></span>
+            <span class="drop-title">@(reading ? "Reading packages.." : "Drop package files here, or click to select")</span>
+            <span class="drop-description">TrakHound package files (@TrakHoundPackage.FileExtension), up to @PackagesContext.FormatSize(_maxFileSize) each. Dependencies are downloaded from the selected Package Source.</span>
+        </div>
+
+        @if (items.Count > 0)
+        {
+            var readyCount = items.Count(o => o.Status == UploadStatus.Ready);
+
+            <div class="upload-toolbar">
+                <span class="upload-summary">@items.Count @(items.Count == 1 ? "file" : "files") · @readyCount ready to install</span>
+                <div class="upload-buttons">
+                    <button class="btn btn-light" @onclick="Clear" disabled="@installing"><span class="icon fa-solid fa-sharp fa-xmark"></span>Clear</button>
+                    @if (!installing)
+                    {
+                        <button class="admin-write btn btn-primary @(readyCount == 0 ? "disabled" : "")" disabled="@(readyCount == 0)" @onclick="InstallAll"><span class="icon fa-solid fa-sharp fa-down-to-bracket"></span>Install @readyCount @(readyCount == 1 ? "Package" : "Packages")</button>
+                    }
+                    else
+                    {
+                        <button class="admin-write btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Installing..</button>
+                    }
+                </div>
+            </div>
+
+            <div class="upload-list">
+                @foreach (var item in items)
+                {
+                    <div class="upload-item status-@item.Status.ToString().ToLower()">
+                        <span class="upload-status-icon fa-solid fa-sharp @GetStatusIcon(item.Status)"></span>
+
+                        <div class="upload-info">
+                            @if (item.Package != null)
+                            {
+                                <div class="upload-title">
+                                    <span class="upload-id">@item.Package.Id</span>
+                                    <span class="version-chip">v@(item.Package.Version)</span>
+                                    <span class="category-chip @item.Package.Category?.ToLower()">@item.Package.Category?.ToTitleCase()</span>
+                                </div>
+                                <div class="upload-details">
+                                    <span>@item.FileName · @PackagesContext.FormatSize(item.Size)</span>
+                                    <span>Built @item.Package.BuildDate.ToLocalTime().ToString("g")</span>
+                                    @if (!item.Package.Dependencies.IsNullOrEmpty())
+                                    {
+                                        <span>Dependencies : @string.Join(", ", item.Package.Dependencies.Select(o => $"{o.Id} {TrakHoundPackageDependency.ToVersionString(o)}"))</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="upload-title"><span class="upload-id">@item.FileName</span></div>
+                                <div class="upload-details"><span>@PackagesContext.FormatSize(item.Size)</span></div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(item.Message))
+                            {
+                                <div class="upload-message">@item.Message</div>
+                            }
+                        </div>
+
+                        <span class="upload-state">@GetStatusText(item)</span>
+
+                        <button class="admin-write btn btn-link btn-remove-item" title="Remove from the list" @onclick="() => items.Remove(item)" disabled="@(installing)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+
+    private const long _maxFileSize = 512L * 1024 * 1024;
+    private const int _maxFiles = 25;
+
+    private enum UploadStatus { Ready, Invalid, Installing, Installed, Failed }
+
+    private class UploadItem
+    {
+        public string FileName { get; set; }
+        public long Size { get; set; }
+        public byte[] Bytes { get; set; }
+        public TrakHoundPackage Package { get; set; }
+        public UploadStatus Status { get; set; }
+        public string Message { get; set; }
+        public string InstalledVersion { get; set; }
+        public bool SameBuildInstalled { get; set; }
+    }
+
+
+    private readonly List<UploadItem> items = new List<UploadItem>();
+    private bool dragging;
+    private bool reading;
+    private bool installing;
+
+
+    [CascadingParameter]
+    public PackagesContext Packages { get; set; }
+
+
+    private async Task FilesSelected(InputFileChangeEventArgs args)
+    {
+        dragging = false;
+        reading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var files = args.GetMultipleFiles(_maxFiles);
+            foreach (var file in files)
+            {
+                var item = new UploadItem { FileName = file.Name, Size = file.Size };
+
+                if (file.Size > _maxFileSize)
+                {
+                    item.Status = UploadStatus.Invalid;
+                    item.Message = $"The file is larger than {PackagesContext.FormatSize(_maxFileSize)}";
+                }
+                else
+                {
+                    try
+                    {
+                        using (var output = new MemoryStream())
+                        using (var input = file.OpenReadStream(_maxFileSize))
+                        {
+                            await input.CopyToAsync(output);
+                            item.Bytes = output.ToArray();
+                        }
+
+                        ReadPackage(item);
+                    }
+                    catch (Exception ex)
+                    {
+                        item.Status = UploadStatus.Invalid;
+                        item.Message = $"Could not read the file : {ex.Message}";
+                    }
+                }
+
+                // Replace an earlier selection of the same file
+                items.RemoveAll(o => o.FileName == item.FileName && o.Status != UploadStatus.Installed);
+                items.Add(item);
+                await InvokeAsync(StateHasChanged);
+            }
+
+            if (args.FileCount > _maxFiles)
+            {
+                Packages.Notify(PackageNotificationType.Warning, "Too Many Files", $"Only the first {_maxFiles} files were added");
+            }
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, "Error Reading Files", ex.Message);
+        }
+        finally
+        {
+            reading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ReadPackage(UploadItem item)
+    {
+        TrakHoundPackage package = null;
+        try
+        {
+            package = TrakHoundPackage.ReadInformationFromPackage(item.Bytes);
+        }
+        catch { }
+
+        if (package == null || string.IsNullOrEmpty(package.Id) || string.IsNullOrEmpty(package.Category))
+        {
+            item.Status = UploadStatus.Invalid;
+            item.Message = "Not a valid TrakHound package (package information could not be read)";
+            item.Bytes = null;
+            return;
+        }
+
+        item.Package = package;
+        item.Status = UploadStatus.Ready;
+
+        var installed = Packages.PackageManager.Get(package.Id, package.Version);
+        var latest = Packages.PackageManager.GetLatest(package.Id);
+        item.InstalledVersion = latest?.Version;
+        item.SameBuildInstalled = installed != null && installed.BuildDate.ToUniversalTime() == package.BuildDate.ToUniversalTime();
+    }
+
+    private async Task InstallAll()
+    {
+        installing = true;
+        await InvokeAsync(StateHasChanged);
+
+        foreach (var item in items.Where(o => o.Status == UploadStatus.Ready).ToList())
+        {
+            item.Status = UploadStatus.Installing;
+            item.Message = null;
+            await InvokeAsync(StateHasChanged);
+
+            try
+            {
+                var results = (await Packages.Install(item.Bytes))?.ToList();
+                var success = await Packages.ReportInstallResults(results, item.Package.Id, item.Package.Version);
+
+                var failed = results?.Where(o => !o.Success).Select(o => string.IsNullOrEmpty(o.Message) ? $"{o.PackageId} {o.PackageVersion}".Trim() : o.Message).Where(o => !string.IsNullOrEmpty(o)).ToList();
+                var dependencies = results?.Where(o => o.Success && o.PackageId != item.Package.Id).Select(o => $"{o.PackageId} v{o.PackageVersion}").ToList();
+
+                item.Status = success ? UploadStatus.Installed : UploadStatus.Failed;
+                if (success)
+                {
+                    item.Message = !dependencies.IsNullOrEmpty() ? $"Also installed : {string.Join(", ", dependencies)}" : null;
+                    if (!failed.IsNullOrEmpty()) item.Message = $"{item.Message} Failed : {string.Join(", ", failed)}".Trim();
+                    item.Bytes = null;
+                }
+                else
+                {
+                    item.Message = !failed.IsNullOrEmpty() ? $"Failed : {string.Join(", ", failed)}" : "The package could not be installed";
+                }
+            }
+            catch (Exception ex)
+            {
+                item.Status = UploadStatus.Failed;
+                item.Message = ex.Message;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+
+        installing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void Clear()
+    {
+        items.Clear();
+    }
+
+    private static string GetStatusIcon(UploadStatus status)
+    {
+        switch (status)
+        {
+            case UploadStatus.Invalid:
+            case UploadStatus.Failed: return "fa-circle-exclamation";
+            case UploadStatus.Installing: return "fa-loader spin";
+            case UploadStatus.Installed: return "fa-circle-check";
+            default: return "fa-box";
+        }
+    }
+
+    private static string GetStatusText(UploadItem item)
+    {
+        switch (item.Status)
+        {
+            case UploadStatus.Invalid: return "Invalid";
+            case UploadStatus.Installing: return "Installing..";
+            case UploadStatus.Installed: return "Installed";
+            case UploadStatus.Failed: return "Failed";
+        }
+
+        if (item.SameBuildInstalled) return "Reinstall (same build installed)";
+        if (item.InstalledVersion == null) return "New";
+        if (item.InstalledVersion == item.Package.Version) return "Replaces installed build";
+
+        return TrakHound.Extensions.VersionComparer.Default.Compare(item.Package.Version, item.InstalledVersion) > 0
+            ? $"Update from v{item.InstalledVersion}"
+            : $"Older than installed v{item.InstalledVersion}";
+    }
+
+}

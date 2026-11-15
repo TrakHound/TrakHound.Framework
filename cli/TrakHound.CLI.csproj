@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AssemblyName>th</AssemblyName>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<!-- Lets the Builder restore once for both installer Runtimes, then publish them in parallel -->
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<RuntimeIdentifiers>win-x64;win-x86</RuntimeIdentifiers>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="LibGit2Sharp" Version="0.30.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="cli.config.yaml">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
+	</ItemGroup>
+
+	<!-- The Package version and Publish Target logic is tested in tests/TrakHound.CLI.Tests -->
+	<ItemGroup>
+	  <InternalsVisibleTo Include="TrakHound.CLI.Tests" />
+	</ItemGroup>
+
+</Project>

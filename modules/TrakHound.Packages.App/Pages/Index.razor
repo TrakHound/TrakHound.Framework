@@ -1,0 +1,217 @@
+@page "/"
+@inherits TrakHoundComponentBase
+@layout Layout
+
+<div class="packages-app">
+
+    @* Header *@
+    <div class="header-panel">
+        <div class="header-panel-content">
+            <div class="header-panel-icon">
+                <div class="header-icon-outline">
+                    <span class="icon fa-solid fa-sharp fa-boxes-packing"></span>
+                </div>
+            </div>
+            <div class="header-panel-text">
+                <span class="header-panel-title">Package Manager</span>
+                <span class="header-panel-subtitle">Upload, download and copy Packages between Package Servers</span>
+            </div>
+        </div>
+    </div>
+
+    @* Tabs *@
+    <nav class="packages-nav" aria-label="Package Manager Sections">
+        @foreach (var tab in _tabs)
+        {
+            var active = tab.Id == selectedTab ? "active" : "";
+
+            <button class="packages-nav-item @active" @onclick="() => selectedTab = tab.Id" aria-current="@(active != "" ? "page" : null)">
+                <span class="icon @tab.Icon"></span>
+                <span>@tab.Title</span>
+                @if (tab.Id == "servers")
+                {
+                    <span class="nav-count">@context.Servers.Count.ToString("N0")</span>
+                }
+            </button>
+        }
+    </nav>
+
+    @* Content *@
+    <div class="packages-content">
+        @if (!context.IsLoaded)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-loader spin"></span>
+                <span class="empty-title">Loading Servers..</span>
+            </div>
+        }
+        else if (selectedTab != "servers" && context.Servers.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-server"></span>
+                <span class="empty-title">No Package Servers</span>
+                <span class="empty-description">Add a Package Server (an Instance running the Packages API, or a TrakHound Package Manager) to upload, download and copy Packages.</span>
+                <div class="empty-actions">
+                    <button class="btn btn-primary" @onclick="@(() => selectedTab = "servers")"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Server</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <CascadingValue Value="context" IsFixed="true">
+                @switch (selectedTab)
+                {
+                    case "upload":
+                        <Upload />
+                        break;
+
+                    case "servers":
+                        <Servers />
+                        break;
+
+                    default:
+                        <Browse />
+                        break;
+                }
+            </CascadingValue>
+        }
+    </div>
+
+    @* Overwrite Dialog *@
+    @{
+        var overwrite = context.PendingOverwrite;
+    }
+    <Modal Class="packages-modal" Visible="@(overwrite != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+            <span class="modal-header-title">Overwrite @overwrite?.PackageId v@(overwrite?.PackageVersion)?</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (overwrite != null)
+            {
+                <p class="modal-description"><strong>@overwrite.PackageId v@(overwrite.PackageVersion)</strong> already exists on <strong>@overwrite.Target?.DisplayName</strong>. Overwriting replaces the existing build with the one being uploaded.</p>
+
+                <div class="compare-list">
+                    <div class="compare-item">
+                        <span class="compare-label">Existing on @overwrite.Target?.DisplayName</span>
+                        <span class="compare-value">Built @(PackagesAppContext.FormatBuildDate(overwrite.Existing) ?? "(unknown)")</span>
+                    </div>
+                    <div class="compare-item">
+                        <span class="compare-label">Being uploaded</span>
+                        <span class="compare-value">
+                            Built @(PackagesAppContext.FormatBuildDate(overwrite.Incoming) ?? "(unknown)")
+                            @if (overwrite.Incoming != null && overwrite.Existing != null && overwrite.Incoming.BuildDate.ToUniversalTime() == overwrite.Existing.BuildDate.ToUniversalTime())
+                            {
+                                <span class="compare-note">Same build</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+
+                @if (overwrite.HasRemaining)
+                {
+                    <label class="apply-remaining">
+                        <input type="checkbox" @bind="applyToRemaining" />
+                        <span>Apply to the remaining Packages that already exist</span>
+                    </label>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            @if (overwrite?.HasRemaining == true)
+            {
+                <button class="btn btn-light btn-cancel-all" @onclick="() => Resolve(OverwriteDecision.Cancel)"><span class="icon fa-solid fa-sharp fa-ban"></span>Cancel Remaining</button>
+            }
+            <button class="btn btn-secondary" @onclick="() => Resolve(OverwriteDecision.Skip)"><span class="icon fa-solid fa-sharp fa-forward"></span>Skip</button>
+            <button class="btn btn-danger" @onclick="() => Resolve(OverwriteDecision.Overwrite)"><span class="icon fa-solid fa-sharp fa-file-import"></span>Overwrite</button>
+        </FooterContent>
+    </Modal>
+
+    @* Notifications *@
+    @if (context.Notifications.Count > 0)
+    {
+        <div class="notifications-panel" role="status" aria-live="polite">
+            @foreach (var notification in context.Notifications.ToList())
+            {
+                var icon = notification.Type switch
+                {
+                    PackageNotificationType.Success => "fa-circle-check",
+                    PackageNotificationType.Warning => "fa-triangle-exclamation",
+                    _ => "fa-circle-exclamation"
+                };
+
+                <div class="notification @notification.Type.ToString().ToLower()">
+                    <span class="notification-icon fa-solid fa-sharp @icon"></span>
+                    <div class="notification-text">
+                        <span class="notification-title">@notification.Title</span>
+                        @if (!string.IsNullOrEmpty(notification.Message))
+                        {
+                            <span class="notification-message">@notification.Message</span>
+                        }
+                    </div>
+                    <button class="btn btn-link notification-close" title="Close" @onclick="() => context.Dismiss(notification.Id)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                </div>
+            }
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private record PackagesTab(string Id, string Title, string Icon);
+
+    private static readonly PackagesTab[] _tabs = new[]
+    {
+        new PackagesTab("packages", "Packages", "fa-solid fa-sharp fa-boxes-stacked"),
+        new PackagesTab("upload", "Upload", "fa-solid fa-sharp fa-upload"),
+        new PackagesTab("servers", "Servers", "fa-solid fa-sharp fa-server")
+    };
+
+    private readonly PackagesAppContext context = new PackagesAppContext();
+    private string selectedTab = _tabs[0].Id;
+    private bool applyToRemaining;
+    private bool loadStarted;
+
+
+    protected override void OnInitialized()
+    {
+        context.Changed += ContextChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // The Volume is a Cascading Parameter (not available until the parameters are set)
+        if (!loadStarted)
+        {
+            loadStarted = true;
+            await context.Load(Volume);
+
+            if (context.Servers.Count == 0) selectedTab = "servers";
+        }
+    }
+
+    public override void Dispose()
+    {
+        context.Changed -= ContextChanged;
+
+        // Don't leave a transfer waiting on a question that can no longer be answered
+        context.ResolveOverwrite(OverwriteDecision.Cancel, false);
+
+        base.Dispose();
+    }
+
+
+    private void ContextChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void Resolve(OverwriteDecision decision)
+    {
+        var apply = applyToRemaining;
+        applyToRemaining = false;
+        context.ResolveOverwrite(decision, apply);
+    }
+
+}

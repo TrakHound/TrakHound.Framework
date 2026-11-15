@@ -1,0 +1,257 @@
+.create-panel {
+    height: 100%;
+    overflow: auto;
+}
+
+.create-content {
+    max-width: 950px;
+    padding: 20px 25px 80px;
+}
+
+.muted {
+    color: var(--textMild);
+}
+
+.spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+/* Result */
+
+.result-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColor);
+    border-left-width: 4px;
+    border-radius: 6px;
+}
+
+    .result-card.success {
+        border-left-color: var(--bs-success, #198754);
+    }
+
+    .result-card.error {
+        border-left-color: var(--bs-danger, #dc3545);
+    }
+
+.result-icon {
+    font-size: 20px;
+}
+
+.result-card.success .result-icon {
+    color: var(--bs-success, #198754);
+}
+
+.result-card.error .result-icon {
+    color: var(--bs-danger, #dc3545);
+}
+
+.result-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 200px;
+}
+
+.result-title {
+    font-weight: 600;
+    color: var(--textDark);
+}
+
+.result-details,
+.result-hint {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+.btn-download {
+    height: 34px;
+    padding: 0 14px;
+    white-space: nowrap;
+}
+
+/* Fields */
+
+.choice-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.chip {
+    height: 28px;
+    padding: 0 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: transparent;
+    border: 1px solid var(--borderColor);
+    border-radius: 14px;
+    cursor: pointer;
+}
+
+    .chip:hover:not(:disabled) {
+        background: var(--panelItemBackground);
+    }
+
+    .chip.active {
+        color: #fff;
+        background: var(--accent);
+        border-color: var(--accent);
+    }
+
+    .chip:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+
+.profile-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+}
+
+.profile-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: var(--fontSizeBase);
+    color: var(--textDark);
+}
+
+.category-actions {
+    margin-top: 10px;
+}
+
+.switch-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--fontSizeSm);
+}
+
+.secrets-warning {
+    margin-top: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .secrets-warning .icon {
+        margin-right: 6px;
+        color: var(--bs-warning, #ffc107);
+    }
+
+/* Footer : Preview and Create */
+
+.create-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    margin-bottom: 6px;
+    padding: 14px 18px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 6px;
+}
+
+.preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .preview strong {
+        color: var(--textDark);
+    }
+
+.btn-create {
+    white-space: nowrap;
+}
+
+.create-hint {
+    display: block;
+    margin-bottom: 20px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    text-align: right;
+}
+
+/* History */
+
+/* Wider than the section body by the cell padding, so the text lines up with the section's fields and the row hover runs past it */
+.history-table {
+    width: calc(100% + 24px);
+    margin: 8px -12px;
+    font-size: var(--fontSizeBase);
+    border-collapse: collapse;
+}
+
+    .history-table th {
+        padding: 9px 12px;
+        font-size: var(--fontSizeSm);
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--textMild);
+        background: transparent;
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+    .history-table td {
+        padding: 10px 12px;
+        vertical-align: top;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .history-table tbody tr:hover {
+        background: var(--panelItemBackground);
+    }
+
+    .history-table tr:last-child td {
+        border-bottom: none;
+    }
+
+.history-name {
+    display: block;
+    font-weight: 600;
+}
+
+.history-description {
+    display: block;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.col-size {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.col-download {
+    width: 1%;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.history-download .icon {
+    margin-right: 5px;
+}
+
+@media (max-width: 700px) {
+    .create-content {
+        padding: 16px 16px 60px;
+    }
+}

@@ -1,0 +1,538 @@
+@inject ITrakHoundInstance instance
+@inject RemotesConfiguration remotesConfiguration
+@inject IServiceProvider services
+@using Microsoft.Extensions.DependencyInjection
+@using TrakHound.Instance.Configurations
+@using TrakHound.Instance.PackageSources
+@using TrakHound.Packages
+@using TrakHound.Instances
+
+<div class="sources-panel">
+
+    <div class="toolbar-panel">
+        <span class="toolbar-description">Package Sources are TrakHound Package Servers that Packages are browsed, installed and updated from.</span>
+        <div class="toolbar-buttons">
+            <button class="btn btn-light" @onclick="TestAll" disabled="@(!remotesConfiguration.Remotes.Any())"><span class="icon fa-solid fa-sharp fa-plug-circle-check"></span>Test All</button>
+            <button class="admin-write btn btn-primary" @onclick="OpenAdd"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Source</button>
+        </div>
+    </div>
+
+    <div class="table-panel">
+        @if (remotesConfiguration.Remotes == null || !remotesConfiguration.Remotes.Any())
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-signal-slash"></span>
+                <span class="empty-title">No Package Sources</span>
+                <span class="empty-description">Add a Package Source to browse and install Packages, or to check installed Packages for updates.</span>
+                <div class="empty-actions">
+                    <button class="admin-write btn btn-primary" @onclick="OpenAdd"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Source</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <table class="sources-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Base URL</th>
+                        <th>Organization</th>
+                        <th class="col-token">Access Token</th>
+                        <th class="col-status">Status</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var source in remotesConfiguration.Remotes)
+                    {
+                        var selected = Packages.SelectedSource?.Id == source.Id;
+                        var test = testResults.GetValueOrDefault(source.Id);
+
+                        <tr>
+                            <td>
+                                <span class="source-name">@source.Name</span>
+                                @if (selected)
+                                {
+                                    <span class="selected-badge" title="The Source used by the Browse and Installed tabs">Selected</span>
+                                }
+                                @if (source.PackageManager)
+                                {
+                                    <span class="package-manager-badge" title="A TrakHound Package Manager : the installed Packages are reported to it, and the publishers it verified are trusted">Package Manager</span>
+                                }
+                                <span class="source-id">@source.Id</span>
+                            </td>
+                            <td class="col-url">@source.BaseUrl</td>
+                            <td>@source.Organization</td>
+                            <td class="col-token">
+                                @if (!string.IsNullOrEmpty(source.AccessTokenCode))
+                                {
+                                    <span title="@source.AccessTokenName"><span class="icon fa-solid fa-sharp fa-key"></span>@(string.IsNullOrEmpty(source.AccessTokenName) ? "Set" : source.AccessTokenName)</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">None</span>
+                                }
+                            </td>
+                            <td class="col-status">
+                                @if (test == null)
+                                {
+                                    <span class="muted">Not tested</span>
+                                }
+                                else if (test.Testing)
+                                {
+                                    <span class="test-status"><span class="icon fa-solid fa-sharp fa-loader spin"></span>Testing..</span>
+                                }
+                                else if (test.Success)
+                                {
+                                    <span class="test-status online" title="Tested @test.Time.ToString("T")"><span class="status-dot"></span>@test.PackageCount.ToString("N0") packages</span>
+                                }
+                                else
+                                {
+                                    <span class="test-status offline" title="@test.Error"><span class="status-dot"></span>Unreachable</span>
+                                }
+                            </td>
+                            <td class="col-actions">
+                                <button class="btn btn-sm btn-command" title="Test the connection" @onclick="() => Test(source)" disabled="@(test?.Testing == true)"><span class="icon fa-solid fa-sharp fa-plug-circle-check"></span>Test</button>
+                                <button class="admin-write btn btn-sm btn-command" title="Edit" @onclick="() => OpenEdit(source)"><span class="icon fa-solid fa-sharp fa-pen-to-square"></span>Edit</button>
+                                <button class="btn btn-sm btn-command" title="Add a new Source with the same settings" @onclick="() => OpenCopy(source)"><span class="icon fa-regular fa-sharp fa-copy"></span>Copy</button>
+                                <button class="admin-write btn btn-sm btn-command btn-remove" title="Remove" @onclick="() => removeSource = source"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @* Add / Edit Dialog *@
+    <Modal Class="packages-modal" Visible="@editVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-signal"></span>
+            <span class="modal-header-title">@(editOriginalId != null ? $"Edit {editOriginalId}" : copyFromId != null ? $"Copy {copyFromId}" : "Add Package Source")</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="form-row">
+                <div class="form-field">
+                    <label>Name</label>
+                    <RadzenTextBox @bind-Value="@editName" @bind-Value:after="NameChanged" Placeholder="ex. TrakHound Public" />
+                    @if (submitted && string.IsNullOrWhiteSpace(editName))
+                    {
+                        <span class="field-error">Name is required</span>
+                    }
+                </div>
+                <div class="form-field">
+                    <label>ID</label>
+                    <RadzenTextBox @bind-Value="@editId" @bind-Value:after="() => idEdited = true" Placeholder="ex. trakhound-public" />
+                    @if (submitted && GetIdError() != null)
+                    {
+                        <span class="field-error">@GetIdError()</span>
+                    }
+                    else
+                    {
+                        <span class="field-hint">A unique identifier for this Source</span>
+                    }
+                </div>
+            </div>
+            <div class="form-field">
+                <label>Base URL</label>
+                <RadzenTextBox @bind-Value="@editBaseUrl" Placeholder="ex. https://packages.trakhound.com" />
+                @if (submitted && GetUrlError() != null)
+                {
+                    <span class="field-error">@GetUrlError()</span>
+                }
+                else
+                {
+                    <span class="field-hint">The URL of the TrakHound Package Server</span>
+                }
+            </div>
+            <div class="form-field">
+                <label>Organization</label>
+                <RadzenTextBox @bind-Value="@editOrganization" Placeholder="ex. Public" />
+                @if (submitted && string.IsNullOrWhiteSpace(editOrganization))
+                {
+                    <span class="field-error">Organization is required</span>
+                }
+                else
+                {
+                    <span class="field-hint">The Organization whose Packages are shown</span>
+                }
+            </div>
+            <div class="form-row">
+                <div class="form-field">
+                    <label>Access Token Name <span class="optional">(optional)</span></label>
+                    <RadzenTextBox @bind-Value="@editTokenName" Placeholder="ex. instance-01" />
+                </div>
+                <div class="form-field">
+                    <label>Access Token <span class="optional">(optional)</span></label>
+                    <div class="secret-input">
+                        <input class="form-control" type="@(showToken ? "text" : "password")" @bind="editTokenCode" autocomplete="off" spellcheck="false" placeholder="Required for private Organizations" />
+                        <button class="btn btn-link" type="button" title="@(showToken ? "Hide" : "Show")" @onclick="() => showToken = !showToken"><span class="fa-solid fa-sharp @(showToken ? "fa-eye-slash" : "fa-eye")"></span></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <div class="checkbox-field">
+                    <RadzenCheckBox TValue="bool" @bind-Value="@editPackageManager" Name="sourcePackageManager" />
+                    <RadzenLabel Text="TrakHound Package Manager" Component="sourcePackageManager" />
+                </div>
+                <span class="field-hint">Reports the installed Packages to this Source and trusts the publishers it verified (shown in Security, Trusted Publishers)</span>
+            </div>
+
+            <div class="test-panel">
+                @if (!editTesting)
+                {
+                    <button class="btn btn-light" @onclick="TestForm" disabled="@(GetUrlError() != null || string.IsNullOrWhiteSpace(editOrganization))"><span class="icon fa-solid fa-sharp fa-plug-circle-check"></span>Test Connection</button>
+                }
+                else
+                {
+                    <button class="btn btn-light disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Testing..</button>
+                }
+
+                @if (editTest != null && !editTesting)
+                {
+                    @if (editTest.Success)
+                    {
+                        <span class="test-status online"><span class="status-dot"></span>Connected · @editTest.PackageCount.ToString("N0") packages</span>
+                    }
+                    else
+                    {
+                        <span class="test-status offline"><span class="status-dot"></span>@editTest.Error</span>
+                    }
+                }
+            </div>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseEdit" disabled="@saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            @if (!saving)
+            {
+                <button class="admin-write btn btn-primary" @onclick="SaveEdit"><span class="icon fa-solid fa-sharp @(editOriginalId == null ? "fa-plus" : "fa-floppy-disk")"></span>@(editOriginalId == null ? "Add Source" : "Save")</button>
+            }
+            else
+            {
+                <button class="admin-write btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Saving..</button>
+            }
+        </FooterContent>
+    </Modal>
+
+    @* Remove Dialog *@
+    <Modal Class="packages-modal" Visible="@(removeSource != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Remove @removeSource?.Name</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="modal-description">Remove the Package Source <strong>@removeSource?.Name</strong> (@removeSource?.BaseUrl)? Installed Packages are not affected.</p>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => removeSource = null" disabled="@saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            @if (!saving)
+            {
+                <button class="admin-write btn btn-danger" @onclick="ConfirmRemove"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove Source</button>
+            }
+            else
+            {
+                <button class="admin-write btn btn-danger disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Removing..</button>
+            }
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private class TestResult
+    {
+        public bool Testing { get; set; }
+        public bool Success { get; set; }
+        public int PackageCount { get; set; }
+        public string Error { get; set; }
+        public DateTime Time { get; set; }
+    }
+
+
+    private readonly Dictionary<string, TestResult> testResults = new Dictionary<string, TestResult>();
+
+    private bool editVisible;
+    private string editOriginalId;
+    private string copyFromId;
+    private string editId;
+    private string editName;
+    private string editBaseUrl;
+    private string editOrganization;
+    private string editTokenName;
+    private string editTokenCode;
+    private bool editPackageManager;
+    private bool idEdited;
+    private bool showToken;
+    private bool submitted;
+    private bool editTesting;
+    private TestResult editTest;
+    private bool saving;
+
+    private RemoteConfiguration removeSource;
+
+
+    [CascadingParameter]
+    public PackagesContext Packages { get; set; }
+
+
+    #region "Test"
+
+    private async Task<TestResult> RunTest(RemoteConfiguration source)
+    {
+        var client = PackagesContext.CreateClient(source);
+        var (packages, error) = await PackagesContext.QueryLatest(client);
+
+        return new TestResult
+        {
+            Success = packages != null,
+            PackageCount = packages?.Count() ?? 0,
+            Error = error,
+            Time = DateTime.Now
+        };
+    }
+
+    private async Task Test(RemoteConfiguration source)
+    {
+        testResults[source.Id] = new TestResult { Testing = true };
+        await InvokeAsync(StateHasChanged);
+
+        testResults[source.Id] = await RunTest(source);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task TestAll()
+    {
+        await Task.WhenAll(remotesConfiguration.Remotes.ToList().Select(Test));
+    }
+
+    private async Task TestForm()
+    {
+        editTesting = true;
+        editTest = null;
+        await InvokeAsync(StateHasChanged);
+
+        editTest = await RunTest(CreateFromForm());
+        editTesting = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    #endregion
+
+    #region "Add / Edit"
+
+    private void OpenAdd()
+    {
+        // Start with an empty form (not the values from a previous Edit)
+        editOriginalId = null;
+        copyFromId = null;
+        editId = null;
+        editName = null;
+        editBaseUrl = null;
+        editOrganization = null;
+        editTokenName = null;
+        editTokenCode = null;
+        editPackageManager = false;
+        idEdited = false;
+        OpenForm();
+    }
+
+    private void OpenEdit(RemoteConfiguration source)
+    {
+        editOriginalId = source.Id;
+        copyFromId = null;
+        editId = source.Id;
+        editName = source.Name;
+        editBaseUrl = source.BaseUrl;
+        editOrganization = source.Organization;
+        editTokenName = source.AccessTokenName;
+        editTokenCode = source.AccessTokenCode;
+        editPackageManager = source.PackageManager;
+        idEdited = true;
+        OpenForm();
+    }
+
+    // Add a new Source that starts with the settings of an existing one (Access Token included)
+    private void OpenCopy(RemoteConfiguration source)
+    {
+        editOriginalId = null;
+        copyFromId = source.Id;
+        editId = GetCopyId(source.Id);
+        editName = $"{source.Name} (Copy)";
+        editBaseUrl = source.BaseUrl;
+        editOrganization = source.Organization;
+        editTokenName = source.AccessTokenName;
+        editTokenCode = source.AccessTokenCode;
+        editPackageManager = source.PackageManager;
+        idEdited = true;
+        OpenForm();
+    }
+
+    private string GetCopyId(string id)
+    {
+        var copyId = $"{id}-copy";
+        for (var i = 2; remotesConfiguration.Remotes.Any(o => o.Id == copyId); i++) copyId = $"{id}-copy-{i}";
+        return copyId;
+    }
+
+    private void OpenForm()
+    {
+        showToken = false;
+        submitted = false;
+        editTest = null;
+        editVisible = true;
+    }
+
+    private void CloseEdit()
+    {
+        editVisible = false;
+        editTokenCode = null;
+    }
+
+    // Suggest an ID from the Name for new Sources
+    private void NameChanged()
+    {
+        if (!idEdited && !string.IsNullOrWhiteSpace(editName))
+        {
+            editId = new string(editName.Trim().ToLower().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
+            while (editId.Contains("--")) editId = editId.Replace("--", "-");
+        }
+    }
+
+    private string GetIdError()
+    {
+        if (string.IsNullOrWhiteSpace(editId)) return "ID is required";
+
+        var id = editId.Trim();
+        if (remotesConfiguration.Remotes.Any(o => o.Id == id && o.Id != editOriginalId)) return $"A Source with the ID '{id}' already exists";
+
+        return null;
+    }
+
+    private string GetUrlError()
+    {
+        if (string.IsNullOrWhiteSpace(editBaseUrl)) return "Base URL is required";
+        if (!Uri.TryCreate(editBaseUrl.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return "Enter a full http:// or https:// URL";
+
+        return null;
+    }
+
+    private RemoteConfiguration CreateFromForm()
+    {
+        return new RemoteConfiguration
+        {
+            Id = editId?.Trim(),
+            Name = editName?.Trim(),
+            BaseUrl = editBaseUrl?.Trim().TrimEnd('/'),
+            Organization = editOrganization?.Trim(),
+            AccessTokenName = string.IsNullOrWhiteSpace(editTokenName) ? null : editTokenName.Trim(),
+            AccessTokenCode = string.IsNullOrWhiteSpace(editTokenCode) ? null : editTokenCode.Trim(),
+            PackageManager = editPackageManager
+        };
+    }
+
+    private async Task SaveEdit()
+    {
+        submitted = true;
+        if (string.IsNullOrWhiteSpace(editName) || GetIdError() != null || GetUrlError() != null || string.IsNullOrWhiteSpace(editOrganization)) return;
+
+        var source = CreateFromForm();
+        var sources = remotesConfiguration.Remotes?.ToList() ?? new List<RemoteConfiguration>();
+
+        // Replace the edited Source in place (also when its ID was changed)
+        var index = editOriginalId != null ? sources.FindIndex(o => o.Id == editOriginalId) : -1;
+        if (index >= 0) sources[index] = source;
+        else sources.Add(source);
+
+        var selectedId = Packages.SelectedSource?.Id;
+        if (selectedId == editOriginalId) selectedId = source.Id;
+
+        if (await Save(sources, editOriginalId == null ? $"Added {source.Name}" : $"Saved {source.Name}"))
+        {
+            if (editOriginalId != null && editOriginalId != source.Id) testResults.Remove(editOriginalId);
+            if (editTest != null && !editTest.Testing) testResults[source.Id] = editTest;
+
+            editVisible = false;
+            editTokenCode = null;
+
+            // Reload the selected Source (it may be the one that was edited, or the first Source added)
+            await Packages.SelectSource(selectedId ?? source.Id);
+        }
+    }
+
+    #endregion
+
+    #region "Remove"
+
+    private async Task ConfirmRemove()
+    {
+        if (removeSource == null) return;
+
+        var source = removeSource;
+        var sources = remotesConfiguration.Remotes.Where(o => o.Id != source.Id).ToList();
+
+        if (await Save(sources, $"Removed {source.Name}"))
+        {
+            testResults.Remove(source.Id);
+            removeSource = null;
+
+            if (Packages.SelectedSource?.Id == source.Id) await Packages.SelectSource(null);
+            else Packages.NotifyChanged();
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Apply a change to the Package Manager Sources now rather than on the next hourly sync or Heartbeat. Runs in the background, since a Source can be slow to answer
+    /// </summary>
+    private void SyncPackageManagers()
+    {
+        var publisherSync = services.GetService<TrakHoundPackageManagerPublisherSync>();
+        var approvalSync = services.GetService<TrakHoundPackageManagerApprovalSync>();
+        var inventoryReporter = services.GetService<TrakHoundPackageInventoryReporter>();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (publisherSync != null) await publisherSync.Sync();
+                if (approvalSync != null) await approvalSync.Sync();
+                if (inventoryReporter != null) await inventoryReporter.Report(TrakHoundPackageInventoryReason.Change);
+            }
+            catch { } // Logged by each
+        });
+    }
+
+    private async Task<bool> Save(List<RemoteConfiguration> sources, string successMessage)
+    {
+        saving = true;
+        await InvokeAsync(StateHasChanged);
+
+        var previous = remotesConfiguration.Remotes;
+        try
+        {
+            TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.PackageSources);
+
+            remotesConfiguration.Remotes = sources;
+            await Task.Run(() => RemotesConfiguration.Write(remotesConfiguration, Path.Combine(instance.ConfigurationProfile.Path, RemotesConfiguration.Filename)));
+
+            Packages.Notify(PackageNotificationType.Success, successMessage);
+            SyncPackageManagers();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            remotesConfiguration.Remotes = previous;
+            Packages.Notify(PackageNotificationType.Error, "Error Saving Package Sources", ex.Message);
+            return false;
+        }
+        finally
+        {
+            saving = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

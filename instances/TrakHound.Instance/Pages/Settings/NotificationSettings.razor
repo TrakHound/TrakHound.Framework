@@ -1,0 +1,41 @@
+<div class="settings-notifications">
+    <SettingsSection Title="Package Updates" Description="Check the Package Sources for newer versions of the installed Packages and show the Updates available in Notifications" Icon="fa-solid fa-sharp fa-up-to-line">
+        <SettingsField Label="Check for Package Updates" Description="The Package Sources are configured on the Packages page (Sources). Applied when saved.">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.PackageUpdateCheckEnabled" @bind-Value:after="EditContext.Changed" />
+                <span class="switch-label">@(Model.PackageUpdateCheckEnabled ? "Enabled" : "Disabled")</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Check Interval" Description="How often the Package Sources are checked (also checked shortly after the Instance Starts)" Class="@(Model.PackageUpdateCheckEnabled ? "" : "disabled")">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="int" @bind-Value="@Model.PackageUpdateCheckInterval" @bind-Value:after="EditContext.Changed" Min="1" Max="168" Disabled="@(!Model.PackageUpdateCheckEnabled)" />
+                <span class="units">hours</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+
+    <SettingsSection Title="Package Inventory" Description="Report the installed Packages to the Package Sources marked as TrakHound Package Manager, which keep a record of each Instance's Packages. Reported when the Instance starts and after Packages change" Icon="fa-solid fa-sharp fa-clipboard-list">
+        <SettingsField Label="Heartbeat" Description="Also report on an interval when nothing has changed, so the Package Manager knows the Instance is running. Applied when saved.">
+            <div class="switch-control">
+                <RadzenSwitch @bind-Value="@Model.PackageInventoryReportEnabled" @bind-Value:after="EditContext.Changed" />
+                <span class="switch-label">@(Model.PackageInventoryReportEnabled ? "Enabled" : "Disabled")</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Heartbeat Interval" Description="How long after the last report the Packages are reported again" Class="@(Model.PackageInventoryReportEnabled ? "" : "disabled")">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="int" @bind-Value="@Model.PackageInventoryReportInterval" @bind-Value:after="EditContext.Changed" Min="1" Max="168" Disabled="@(!Model.PackageInventoryReportEnabled)" />
+                <span class="units">hours</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+</div>
+
+@code {
+
+    [Parameter]
+    public InstanceSettingsModel Model { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+}

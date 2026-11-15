@@ -1,0 +1,17 @@
+﻿@page "/_admin"
+@page "/_admin/explorer"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Instance, TrakHound.Instance.Security.TrakHoundAdminSecurity.Modules, TrakHound.Instance.Security.TrakHoundAdminSecurity.Services, TrakHound.Instance.Security.TrakHoundAdminSecurity.Logs)]
+@layout ExplorerLayout
+@inject ExplorerService explorerService
+
+<TrakHoundPageTitle />
+
+@code {
+
+    // The area's first page : the header shows the Explorer's description instead of the last page's Breadcrumbs
+    protected override void OnInitialized()
+    {
+        explorerService.BreadcrumbItems = null;
+    }
+
+}

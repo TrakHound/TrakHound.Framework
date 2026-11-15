@@ -1,0 +1,70 @@
+﻿<TrakHoundAppRouter>
+    <Found Context="routeData">
+        <CascadingValue Name="RouteManager" Value="@routeData.RouteManager">
+            <CascadingValue Name="AppId" Value="@routeData.AppId">
+                <CascadingValue Name="AppName" Value="@routeData.AppName">
+                    <CascadingValue Name="AppConnection" Value="@routeData.AppConnection">
+                        <CascadingValue Name="Package" Value="@routeData.Package">
+                            <CascadingValue Name="Client" Value="@routeData.Client">
+                                <CascadingValue Name="Volume" Value="@routeData.Volume">
+                                    <CascadingValue Name="Variables" Value="@routeData.Variables">
+                                        <CascadingValue Name="Logger" Value="@routeData.Logger">
+                                            <CascadingValue Name="Session" Value="@routeData.Session">
+                                                <CascadingValue Name="BaseUrl" Value="@routeData.BaseUrl">
+                                                    <CascadingValue Name="BasePath" Value="@routeData.BasePath">
+                                                        <CascadingValue Name="BaseLocation" Value="@routeData.BaseLocation">
+                                                            <CascadingValue Name="Parameters" Value="@routeData.Parameters">
+                                                                @* Records how the page is being used (shown on App Connections) and Cascades "AppActivity" to the App Pages *@
+                                                                <TrakHoundAppActivityTracker>
+                                                                    <AppUpdateBanner AppId="@routeData.AppId" AppName="@routeData.AppName" Package="@routeData.Package" Connection="@routeData.AppConnection" />
+                                                                    <AppIdentifyBadge AppId="@routeData.AppId" AppName="@routeData.AppName" PackageId="@routeData.Package?.Id" Connection="@routeData.AppConnection" />
+                                                                    <AppMessageBanner AppId="@routeData.AppId" Connection="@routeData.AppConnection" />
+                                                                    @* Outside the ErrorBoundary so that an exception doesn't remove the App's Theme, Stylesheets and Scripts *@
+                                                                    <TrakHoundAppSessionTracker AppId="@routeData.AppId" Package="@routeData.Package" />
+                                                                    <TrakHoundTheme Key="@TrakHound.Blazor.Services.TrakHoundThemeService.GetAppKey(routeData.AppId)" />
+                                                                    <TrakHoundAppPackageStylesheets AppId="@routeData.AppId" />
+                                                                    <TrakHoundAppPackageScripts AppId="@routeData.AppId" />
+                                                                    @{ RecoverOnNavigation(routeData); }
+                                                                    <ErrorBoundary @ref="_errorBoundary">
+                                                                        <ChildContent>
+                                                                            <RouteView RouteData="@routeData.Data" DefaultLayout="@(routeData.DefaultLayout ?? typeof(AppLayout))" />
+                                                                        </ChildContent>
+                                                                        <ErrorContent Context="exception">
+                                                                            <AppException Exception="@exception" />
+                                                                        </ErrorContent>
+                                                                    </ErrorBoundary>
+                                                                </TrakHoundAppActivityTracker>
+                                                            </CascadingValue>
+                                                        </CascadingValue>
+                                                    </CascadingValue>
+                                                </CascadingValue>
+                                            </CascadingValue>
+                                        </CascadingValue>
+                                    </CascadingValue>
+                                </CascadingValue>
+                            </CascadingValue>
+                        </CascadingValue>
+                    </CascadingValue>
+                </CascadingValue>
+            </CascadingValue>
+        </CascadingValue>
+    </Found>
+</TrakHoundAppRouter>
+
+@code {
+
+    private ErrorBoundary _errorBoundary;
+    private RouteData _lastRouteData;
+
+
+    // An ErrorBoundary shows its Error Content until Recover is called, so a new Page clears the previous Page's exception
+    // (each Navigation creates new RouteData, so a Page that keeps throwing doesn't loop)
+    private void RecoverOnNavigation(TrakHoundRouteData routeData)
+    {
+        if (!ReferenceEquals(routeData.Data, _lastRouteData))
+        {
+            _lastRouteData = routeData.Data;
+            _errorBoundary?.Recover();
+        }
+    }
+}

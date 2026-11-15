@@ -1,0 +1,74 @@
+.example-page {
+    padding: 1rem;
+    max-width: 60rem;
+}
+
+.example-header {
+    margin-bottom: 1rem;
+}
+
+    .example-header h3 {
+        margin: 0;
+    }
+
+.example-subtitle {
+    opacity: 0.7;
+    font-size: 0.875rem;
+}
+
+.example-error {
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    color: #fff;
+    background-color: #c0392b;
+}
+
+.example-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.example-card {
+    flex: 1 1 16rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    border: 1px solid rgba(128, 128, 128, 0.3);
+    border-radius: 6px;
+}
+
+.example-card-label {
+    font-size: 0.875rem;
+    opacity: 0.7;
+}
+
+.example-card-value {
+    font-size: 2.5rem;
+    font-weight: 600;
+}
+
+.example-card-detail {
+    font-size: 0.875rem;
+}
+
+.example-summary {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.25rem 1rem;
+}
+
+.example-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+    .example-table th,
+    .example-table td {
+        padding: 0.25rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+    }

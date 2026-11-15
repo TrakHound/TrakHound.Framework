@@ -1,0 +1,435 @@
+@inject DeploymentsService deploymentsService
+@inject TrakHoundStartupDeployments startupDeployments
+@using TrakHound.Deployments
+@using TrakHound.Instance.Pages.Packages
+
+<div class="install-panel">
+    <div class="install-content">
+
+        @if (operation != null)
+        {
+            @* Install in progress / finished *@
+            <div class="operation-card @(operation.Running ? "running" : operation.Result?.Success == true && operation.Result.Restarted ? "success" : "error")">
+                <div class="operation-header">
+                    <span class="operation-icon fa-solid fa-sharp @(operation.Running ? "fa-loader spin" : operation.Result?.Success == true && operation.Result.Restarted ? "fa-circle-check" : "fa-circle-exclamation")"></span>
+                    <span class="operation-title">@GetOperationTitle()</span>
+                </div>
+                <ol class="operation-steps">
+                    @foreach (var step in operation.Steps)
+                    {
+                        <li>@step</li>
+                    }
+                </ol>
+                @if (operation.Result != null)
+                {
+                    @foreach (var error in operation.Result.Errors)
+                    {
+                        <div class="operation-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</div>
+                    }
+                    <div class="operation-actions">
+                        @if (!string.IsNullOrEmpty(operation.Result.BackupPath))
+                        {
+                            <span class="muted">Backup : @operation.Result.BackupPath</span>
+                            <a class="btn btn-light" href="_admin/deployments/backups"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Restore from Backup..</a>
+                        }
+                        <button class="btn btn-light" @onclick="Clear"><span class="icon fa-solid fa-sharp fa-xmark"></span>Done</button>
+                    </div>
+                }
+            </div>
+        }
+        else if (plan == null)
+        {
+            @* Drop Zone *@
+            <div class="drop-zone @(dragging ? "dragging" : "") @(reading ? "reading" : "")">
+                <InputFile OnChange="FileSelected" accept="@TrakHoundDeployment.FileExtension" class="drop-input" title=""
+                           @ondragenter="() => dragging = true" @ondragleave="() => dragging = false" @ondrop="() => dragging = false" />
+                <span class="drop-icon fa-solid fa-sharp @(reading ? "fa-loader spin" : "fa-cloud-arrow-up")"></span>
+                <span class="drop-title">@(reading ? readingMessage : "Drop a deployment file here, or click to select")</span>
+                <span class="drop-description">TrakHound deployment files (@TrakHoundDeployment.FileExtension). Nothing is changed until you review the changes and select Install.</span>
+            </div>
+            @if (readError != null)
+            {
+                <div class="read-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@readError</div>
+            }
+
+            @* Startup Deployments *@
+            <div class="change-list startup-list">
+                <div class="change-list-header">
+                    <span>Installed at Startup</span>
+                </div>
+                <div class="startup-description muted">
+                    Deployment files in <code>@startupDeployments.SourcePath</code> are installed, with a backup, the next time the Instance starts.
+                    @if (startupPending.Count > 0)
+                    {
+                        <strong>@startupPending.Count waiting : @string.Join(", ", startupPending.Select(Path.GetFileName))</strong>
+                    }
+                </div>
+                @if (startupRecords.Count > 0)
+                {
+                    <ul>
+                        @foreach (var record in startupRecords.Take(10))
+                        {
+                            <li class="@(record.Success ? "" : "startup-failed")">
+                                <span class="icon fa-solid fa-sharp @(record.Success ? "fa-circle-check" : "fa-circle-exclamation")"></span>
+                                @record.Timestamp.ToLocalTime().ToString("g") · <code>@record.Filename</code>
+                                @if (!string.IsNullOrEmpty(record.ProfileId))
+                                {
+                                    <span> (@record.ProfileId v@(record.Version))</span>
+                                }
+                                @if (!record.Success)
+                                {
+                                    <span> · @record.Errors.FirstOrDefault()@(record.Restored ? " · Backup restored" : "")</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+        else
+        {
+            @* Plan *@
+            var info = plan.Information;
+            var configurationRemoves = plan.Count(TrakHoundDeploymentPlan.ConfigurationKind, TrakHoundDeploymentPlanAction.Remove);
+            var packageRemoves = plan.Count(TrakHoundDeploymentPlan.PackageKind, TrakHoundDeploymentPlanAction.Remove);
+
+            <div class="plan-header">
+                <div class="plan-info">
+                    <span class="plan-title">@info.ProfileId v@(info.Version)</span>
+                    <span class="plan-details">
+                        @(plan.IsIncremental ? "Incremental" : "Full") deployment · built @info.BuildDate.ToLocalTime().ToString("g") · @fileName (@PackagesContext.FormatSize(fileSize))
+                    </span>
+                    @if (!string.IsNullOrEmpty(info.Description))
+                    {
+                        <span class="plan-description">@info.Description</span>
+                    }
+                    <span class="plan-details">Profiles : @string.Join(", ", plan.Profiles)</span>
+                    <span class="plan-details">Configurations : @(plan.Categories != null ? (plan.Categories.Count > 0 ? string.Join(", ", plan.Categories.Select(DeploymentsService.GetCategoryLabel)) : "None") : "All")</span>
+                    @if (!string.IsNullOrEmpty(info.TargetDeviceId))
+                    {
+                        <span class="plan-details">For Device ID : <code>@info.TargetDeviceId</code></span>
+                    }
+                </div>
+                <button class="btn btn-light" @onclick="Clear"><span class="icon fa-solid fa-sharp fa-xmark"></span>Choose Another File</button>
+            </div>
+
+            @foreach (var error in plan.Errors)
+            {
+                <div class="plan-alert error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</div>
+            }
+            @foreach (var warning in plan.Warnings)
+            {
+                <div class="plan-alert warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@warning</div>
+            }
+
+            @if (plan.IsValid)
+            {
+                <div class="change-grid">
+                    @foreach (var kind in _kinds.Where(o => o == TrakHoundDeploymentPlan.ConfigurationKind || o == TrakHoundDeploymentPlan.PackageKind || plan.Items.Any(i => i.Kind == o)))
+                    {
+                        <div class="change-card">
+                            <span class="change-title">@GetKindTitle(kind)</span>
+                            <div class="change-counts">
+                                @foreach (var action in _actions)
+                                {
+                                    var count = plan.Count(kind, action);
+                                    // Volume files and Variables are never removed
+                                    if (count > 0 || (action != TrakHoundDeploymentPlanAction.Missing && (action != TrakHoundDeploymentPlanAction.Remove || kind == TrakHoundDeploymentPlan.ConfigurationKind || kind == TrakHoundDeploymentPlan.PackageKind)))
+                                    {
+                                        <button class="change-count @action.ToString().ToLower() @(expanded == (kind, action) ? "active" : "")" @onclick="() => ToggleExpanded(kind, action)" disabled="@(count == 0)">
+                                            <span class="count">@count.ToString("N0")</span>
+                                            <span class="label">@GetActionLabel(action)</span>
+                                        </button>
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @if (expanded.HasValue)
+                {
+                    var items = plan.Get(expanded.Value.Kind, expanded.Value.Action).OrderBy(o => o.RelativePath ?? o.Id).ToList();
+
+                    <div class="change-list">
+                        <div class="change-list-header">
+                            <span>@GetActionLabel(expanded.Value.Action) @GetKindTitle(expanded.Value.Kind).ToLower() (@items.Count.ToString("N0"))</span>
+                            <button class="btn btn-link" @onclick="() => expanded = null"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                        </div>
+                        <ul>
+                            @foreach (var item in items.Take(500))
+                            {
+                                <li><code>@(item.IsLicense ? $"{item.Profile} : {item.Category} / {item.Id}" : item.RelativePath ?? $"{item.Profile}/{item.Category}/{item.Id}")</code></li>
+                            }
+                            @if (items.Count > 500)
+                            {
+                                <li class="muted">.. and @((items.Count - 500).ToString("N0")) more</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <div class="install-footer">
+                    <label class="backup-option">
+                        <input type="checkbox" @bind="backup" />
+                        <span>
+                            Back up first
+                            <span class="muted">Copies the affected configuration profiles, package versions, volume files and package variables so the install can be undone from Backups</span>
+                        </span>
+                    </label>
+                    <button class="admin-write btn btn-primary btn-install" @onclick="() => confirmVisible = true" disabled="@deploymentsService.IsBusy"><span class="icon fa-solid fa-sharp fa-down-to-bracket"></span>Install..</button>
+                </div>
+
+                <div class="paths muted">
+                    Configuration : <code>@deploymentsService.ConfigurationPath</code> · Packages : <code>@deploymentsService.PackagesPath</code>
+                    @if (plan.Items.Any(o => o.IsVolume || o.IsVariable))
+                    {
+                        <span> · Volumes : <code>@deploymentsService.VolumesPath</code> · Variables : <code>@deploymentsService.VariablesPath</code></span>
+                    }
+                </div>
+            }
+        }
+
+    </div>
+
+    @* Confirm *@
+    <Modal Class="packages-modal" Visible="@confirmVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+            <span class="modal-header-title">Install @plan?.Information?.ProfileId v@(plan?.Information?.Version)?</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (plan != null)
+            {
+                <p class="modal-description">Installing will:</p>
+                <ul class="confirm-list">
+                    <li><strong>Stop this Instance</strong> (Apps, Apis, Workers and Services are unavailable) and start it again afterwards</li>
+                    <li>Add or update <strong>@((plan.Count(TrakHoundDeploymentPlan.ConfigurationKind, TrakHoundDeploymentPlanAction.Add) + plan.Count(TrakHoundDeploymentPlan.ConfigurationKind, TrakHoundDeploymentPlanAction.Update)).ToString("N0"))</strong> configuration files and <strong>@((plan.Count(TrakHoundDeploymentPlan.PackageKind, TrakHoundDeploymentPlanAction.Add) + plan.Count(TrakHoundDeploymentPlan.PackageKind, TrakHoundDeploymentPlanAction.Update)).ToString("N0"))</strong> package versions</li>
+                    @{
+                        var volumeChanges = plan.Count(TrakHoundDeploymentPlan.VolumeKind, TrakHoundDeploymentPlanAction.Add) + plan.Count(TrakHoundDeploymentPlan.VolumeKind, TrakHoundDeploymentPlanAction.Update);
+                        var variableChanges = plan.Count(TrakHoundDeploymentPlan.VariableKind, TrakHoundDeploymentPlanAction.Add) + plan.Count(TrakHoundDeploymentPlan.VariableKind, TrakHoundDeploymentPlanAction.Update);
+                    }
+                    @if (volumeChanges > 0 || variableChanges > 0)
+                    {
+                        <li>Add or replace <strong>@volumeChanges.ToString("N0")</strong> volume files and <strong>@variableChanges.ToString("N0")</strong> package variable collections</li>
+                    }
+                    @if (plan.Count(TrakHoundDeploymentPlan.LicenseKind, TrakHoundDeploymentPlanAction.Add) > 0)
+                    {
+                        <li>Add <strong>@plan.Count(TrakHoundDeploymentPlan.LicenseKind, TrakHoundDeploymentPlanAction.Add).ToString("N0")</strong> licenses for this device (its other licenses are kept)</li>
+                    }
+                    <li>Delete <strong>@plan.Count(TrakHoundDeploymentPlan.ConfigurationKind, TrakHoundDeploymentPlanAction.Remove).ToString("N0")</strong> configuration files and <strong>@plan.Count(TrakHoundDeploymentPlan.PackageKind, TrakHoundDeploymentPlanAction.Remove).ToString("N0")</strong> package versions that aren't in the deployment</li>
+                    <li>@(backup ? "Create a backup first, which can be restored from Backups" : "Not create a backup. The deleted files can't be recovered.")</li>
+                </ul>
+                @if (plan.Warnings.Count > 0)
+                {
+                    <p class="confirm-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@plan.Warnings.Count @(plan.Warnings.Count == 1 ? "warning" : "warnings") above. Review them before installing.</p>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => confirmVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="RunInstall"><span class="icon fa-solid fa-sharp fa-down-to-bracket"></span>Stop Instance and Install</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private static readonly TrakHoundDeploymentPlanAction[] _actions = new[]
+    {
+        TrakHoundDeploymentPlanAction.Add,
+        TrakHoundDeploymentPlanAction.Update,
+        TrakHoundDeploymentPlanAction.Remove,
+        TrakHoundDeploymentPlanAction.Unchanged,
+        TrakHoundDeploymentPlanAction.Missing
+    };
+
+    private static readonly string[] _kinds = new[]
+    {
+        TrakHoundDeploymentPlan.ConfigurationKind,
+        TrakHoundDeploymentPlan.PackageKind,
+        TrakHoundDeploymentPlan.VolumeKind,
+        TrakHoundDeploymentPlan.VariableKind,
+        TrakHoundDeploymentPlan.LicenseKind
+    };
+
+    private static string GetKindTitle(string kind)
+    {
+        switch (kind)
+        {
+            case TrakHoundDeploymentPlan.PackageKind: return "Package Versions";
+            case TrakHoundDeploymentPlan.VolumeKind: return "Volume Files";
+            case TrakHoundDeploymentPlan.VariableKind: return "Package Variables";
+            case TrakHoundDeploymentPlan.LicenseKind: return "Licenses";
+            default: return "Configuration Files";
+        }
+    }
+
+    private const long _maxFileSize = 4L * 1024 * 1024 * 1024;
+
+    private class OperationState
+    {
+        public bool Running { get; set; }
+        public List<string> Steps { get; } = new List<string>();
+        public DeploymentOperationResult Result { get; set; }
+    }
+
+    private bool dragging;
+    private bool reading;
+    private string readingMessage;
+    private string readError;
+    private byte[] deploymentBytes;
+    private string fileName;
+    private long fileSize;
+    private TrakHoundDeploymentPlan plan;
+    private (string Kind, TrakHoundDeploymentPlanAction Action)? expanded;
+    private bool backup = true;
+    private bool confirmVisible;
+    private OperationState operation;
+    private List<TrakHoundStartupDeploymentRecord> startupRecords = new List<TrakHoundStartupDeploymentRecord>();
+    private List<string> startupPending = new List<string>();
+
+
+    [CascadingParameter]
+    public PackagesContext Notifications { get; set; }
+
+    [Parameter]
+    public EventCallback Changed { get; set; }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pending files are hashed to skip ones already installed (can be large), so read once in the background
+        await Task.Run(() =>
+        {
+            startupRecords = startupDeployments.ReadRecords();
+            startupPending = startupDeployments.GetPendingFiles().ToList();
+        });
+    }
+
+    private async Task FileSelected(InputFileChangeEventArgs args)
+    {
+        dragging = false;
+        reading = true;
+        readError = null;
+        readingMessage = "Reading deployment..";
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var file = args.File;
+            fileName = file.Name;
+            fileSize = file.Size;
+
+            if (file.Size > _maxFileSize)
+            {
+                readError = $"The file is larger than {PackagesContext.FormatSize(_maxFileSize)}";
+                return;
+            }
+
+            using (var output = new MemoryStream())
+            using (var input = file.OpenReadStream(_maxFileSize))
+            {
+                await input.CopyToAsync(output);
+                deploymentBytes = output.ToArray();
+            }
+
+            readingMessage = "Comparing with this Instance..";
+            await InvokeAsync(StateHasChanged);
+
+            var bytes = deploymentBytes;
+            var result = await Task.Run(() => TrakHoundDeployment.CreatePlan(bytes, deploymentsService.CreateInstallOptions(false)));
+
+            if (result.Information == null)
+            {
+                readError = result.Errors.FirstOrDefault() ?? "Not a valid TrakHound deployment";
+                deploymentBytes = null;
+                return;
+            }
+
+            plan = result;
+
+            // Start with the deletions shown (the most important changes to review)
+            if (plan.Count(TrakHoundDeploymentPlan.ConfigurationKind, TrakHoundDeploymentPlanAction.Remove) > 0) expanded = (TrakHoundDeploymentPlan.ConfigurationKind, TrakHoundDeploymentPlanAction.Remove);
+            else if (plan.Count(TrakHoundDeploymentPlan.PackageKind, TrakHoundDeploymentPlanAction.Remove) > 0) expanded = (TrakHoundDeploymentPlan.PackageKind, TrakHoundDeploymentPlanAction.Remove);
+        }
+        catch (Exception ex)
+        {
+            readError = $"Could not read the file : {ex.Message}";
+            deploymentBytes = null;
+        }
+        finally
+        {
+            reading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ToggleExpanded(string kind, TrakHoundDeploymentPlanAction action)
+    {
+        expanded = expanded == (kind, action) ? null : (kind, action);
+    }
+
+    private static string GetActionLabel(TrakHoundDeploymentPlanAction action)
+    {
+        switch (action)
+        {
+            case TrakHoundDeploymentPlanAction.Add: return "Added";
+            case TrakHoundDeploymentPlanAction.Update: return "Updated";
+            case TrakHoundDeploymentPlanAction.Remove: return "Deleted";
+            case TrakHoundDeploymentPlanAction.Unchanged: return "Unchanged";
+            case TrakHoundDeploymentPlanAction.Missing: return "Missing";
+            default: return action.ToString();
+        }
+    }
+
+    private void Clear()
+    {
+        plan = null;
+        deploymentBytes = null;
+        expanded = null;
+        readError = null;
+        operation = null;
+        confirmVisible = false;
+    }
+
+    private string GetOperationTitle()
+    {
+        if (operation.Running) return $"Installing {plan?.Information?.ProfileId} v{plan?.Information?.Version}..";
+        if (operation.Result?.Success == true && operation.Result.Restarted) return $"{plan?.Information?.ProfileId} v{plan?.Information?.Version} installed";
+        if (operation.Result?.Success == true) return "Installed, but the Instance did not start";
+        return "The deployment was not installed successfully";
+    }
+
+    private async Task RunInstall()
+    {
+        confirmVisible = false;
+        operation = new OperationState { Running = true };
+        await InvokeAsync(StateHasChanged);
+
+        var progress = new Progress<string>(message =>
+        {
+            operation.Steps.Add(message);
+            _ = InvokeAsync(StateHasChanged);
+        });
+
+        var info = plan.Information;
+        operation.Result = await deploymentsService.Install(deploymentBytes, backup, progress);
+        operation.Running = false;
+
+        if (operation.Result.Success && operation.Result.Restarted)
+        {
+            Notifications?.Notify(PackageNotificationType.Success, $"Installed {info.ProfileId} v{info.Version}", "The Instance was restarted");
+        }
+        else
+        {
+            Notifications?.Notify(PackageNotificationType.Error, $"Install {info.ProfileId} v{info.Version} Failed", operation.Result.Errors.FirstOrDefault());
+        }
+
+        deploymentBytes = null;
+        await Changed.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

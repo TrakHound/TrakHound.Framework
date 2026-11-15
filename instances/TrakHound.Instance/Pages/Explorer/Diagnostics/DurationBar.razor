@@ -1,0 +1,32 @@
+﻿@* A bar showing Value between Min and Max (ex. a Request Duration against the slowest Request shown) *@
+@{
+    var span = Max - Min;
+    if (span < 0) span = 0;
+
+    var value = Value - Min;
+    if (value < 0) value = 0;
+    if (value > span) value = span;
+
+    var percentage = span > 0 ? value / span : 0;
+    var style = $"width: {(percentage * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%;";
+}
+
+
+<div class="duration-bar">
+    <div class="duration-bar-container">
+        <div class="duration-bar-value" style="@style"></div>
+    </div>
+</div>
+
+@code {
+
+    [Parameter]
+    public double Max { get; set; }
+
+    [Parameter]
+    public double Min { get; set; }
+
+    [Parameter]
+    public double Value { get; set; }
+
+}

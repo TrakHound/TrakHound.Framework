@@ -1,0 +1,632 @@
+@implements IDisposable
+@inject DeploymentsService deploymentsService
+@inject TrakHound.Blazor.Services.TrakHoundDownloadService downloadService
+@using TrakHound.Blazor.Services
+@using TrakHound.Deployments
+@using TrakHound.Instance.Configurations
+@using TrakHound.Instance.Pages.Packages
+@using TrakHound.Instance.Pages.Settings
+@using TrakHound.Packages
+
+<div class="create-panel">
+    <div class="create-content">
+
+        @* Result of the last Create *@
+        @if (result != null)
+        {
+            <div class="result-card @(result.Success ? "success" : "error")">
+                <span class="result-icon fa-solid fa-sharp @(result.Success ? "fa-circle-check" : "fa-circle-exclamation")"></span>
+                <div class="result-text">
+                    @if (result.Success)
+                    {
+                        <span class="result-title">@result.Information.ProfileId v@(result.Information.Version) created</span>
+                        <span class="result-details">
+                            @(createdIncremental ? "Incremental" : "Full") · @result.Contents.ConfigurationFileCount.ToString("N0") configuration files · @result.Contents.PackageCount.ToString("N0") package versions@(result.Contents.VolumeFileCount > 0 ? $" · {result.Contents.VolumeFileCount:N0} volume files" : "")@(result.Contents.VariableCount > 0 ? $" · {result.Contents.VariableCount:N0} variable collections" : "") · @PackagesContext.FormatSize(result.FileSize)
+                            @if (!createdSecrets)
+                            {
+                                <span> · secrets not included</span>
+                            }
+                        </span>
+                        <span class="result-hint">The download link is available for 1 hour.</span>
+                    }
+                    else
+                    {
+                        <span class="result-title">The deployment could not be created</span>
+                        @foreach (var error in result.Errors)
+                        {
+                            <span class="result-details">@error</span>
+                        }
+                    }
+                </div>
+                @if (result.Success && downloadKey != null)
+                {
+                    <a class="btn btn-primary btn-download" href="@($"_download/{downloadKey}")" download="@downloadFilename"><span class="icon fa-solid fa-sharp fa-download"></span>Download @downloadFilename</a>
+                }
+            </div>
+        }
+
+        @* Deployment *@
+        <SettingsSection Title="Deployment" Description="Identifies the deployment when it is installed" Icon="fa-solid fa-sharp fa-tag">
+            <SettingsField Label="Profile ID" Description="The name of this deployment (ex. the line or site it is for)">
+                <RadzenTextBox Immediate="true" @bind-Value="@profileId" @bind-Value:after="SchedulePreview" />
+            </SettingsField>
+            <SettingsField Label="Version" Description="@(lastVersion != null ? $"The last deployment created was v{lastVersion}" : "ex. 1.0.0")">
+                <RadzenTextBox Immediate="true" @bind-Value="@version" />
+            </SettingsField>
+            <SettingsField Label="Description" Description="What changed (shown when it is installed)">
+                <RadzenTextArea Immediate="true" @bind-Value="@description" Rows="2" />
+            </SettingsField>
+        </SettingsSection>
+
+        @* Type *@
+        <SettingsSection Title="Type" Icon="fa-solid fa-sharp fa-layer-group">
+            <SettingsField Label="Deployment Type">
+                <DescriptionContent>
+                    @if (incremental)
+                    {
+                        <span>Only files changed since the last deployment (@lastCreated?.ToLocalTime().ToString("g")). Install it only on Instances that have the previous deployment installed.</span>
+                    }
+                    else
+                    {
+                        <span>Everything selected below. Can be installed on any Instance.</span>
+                    }
+                </DescriptionContent>
+                <ChildContent>
+                    <div class="choice-group" role="group">
+                        <button class="chip @(!incremental ? "active" : "")" @onclick="() => SetIncremental(false)">Full</button>
+                        <button class="chip @(incremental ? "active" : "")" @onclick="() => SetIncremental(true)" disabled="@(lastCreated == null)" title="@(lastCreated == null ? "Available after the first deployment is created" : null)">Incremental</button>
+                    </div>
+                </ChildContent>
+            </SettingsField>
+        </SettingsSection>
+
+        @* Contents *@
+        <SettingsSection Title="Contents" Description="What the deployment includes" Icon="fa-solid fa-sharp fa-boxes-stacked">
+            <SettingsField Label="Configuration Profiles" Description="Installing replaces these profiles' configurations on the target. Other profiles are not changed.">
+                <div class="profile-list">
+                    @foreach (var profile in profiles)
+                    {
+                        <label class="profile-option">
+                            <input type="checkbox" checked="@selectedProfiles.Contains(profile)" @onchange="e => ToggleProfile(profile, (bool)e.Value)" />
+                            <span>@profile</span>
+                        </label>
+                    }
+                </div>
+            </SettingsField>
+            <SettingsField Label="Configurations">
+                <DescriptionContent>
+                    @if (AllCategoriesSelected)
+                    {
+                        <span>Installing replaces all of the selected profiles' configurations on the target.</span>
+                    }
+                    else
+                    {
+                        <span>Installing replaces only these configurations on the target (ex. to copy the Services from one Instance to another). Other configurations are not changed.</span>
+                    }
+                </DescriptionContent>
+                <ChildContent>
+                    <div class="profile-list">
+                        @foreach (var category in categories)
+                        {
+                            <label class="profile-option" title="@(category == TrakHoundDeployment.ProfileSettingsCategory ? "Files at the root of the profile (ex. instance.config.yaml, logs.config.yaml, remotes.config.yaml)" : $"The '{category}' directory")">
+                                <input type="checkbox" checked="@selectedCategories.Contains(category)" @onchange="e => ToggleCategory(category, (bool)e.Value)" />
+                                <span>@DeploymentsService.GetCategoryLabel(category)</span>
+                            </label>
+                        }
+                    </div>
+                    <div class="choice-group category-actions" role="group">
+                        <button class="chip" @onclick="() => SelectAllCategories(true)" disabled="@AllCategoriesSelected">Select all</button>
+                        <button class="chip" @onclick="() => SelectAllCategories(false)" disabled="@(selectedCategories.Count == 0)">Clear</button>
+                    </div>
+                </ChildContent>
+            </SettingsField>
+            <SettingsField Label="Packages" Description="@PackagesDescription">
+                <div class="choice-group" role="group">
+                    <button class="chip @(packageMode == PackageMode.All ? "active" : "")" @onclick="() => SetPackageMode(PackageMode.All)">All installed</button>
+                    <button class="chip @(packageMode == PackageMode.Used ? "active" : "")" @onclick="() => SetPackageMode(PackageMode.Used)">Only used by @(AllCategoriesSelected ? "configurations" : "selected configurations")</button>
+                    <button class="chip @(packageMode == PackageMode.None ? "active" : "")" @onclick="() => SetPackageMode(PackageMode.None)">None</button>
+                </div>
+            </SettingsField>
+            <SettingsField Label="Volumes" Description="Package data files (ex. settings a package saved). Installing adds or replaces these files on the target. Its other volume files are kept.">
+                @if (volumes.Count > 0)
+                {
+                    <div class="profile-list">
+                        @foreach (var volume in volumes)
+                        {
+                            <label class="profile-option" title="@volume.FileCount.ToString("N0") @(volume.FileCount == 1 ? "file" : "files")">
+                                <input type="checkbox" checked="@selectedVolumes.Contains(volume.Id)" @onchange="e => ToggleData(selectedVolumes, volume.Id, (bool)e.Value)" />
+                                <span>@volume.Id <span class="muted">@PackagesContext.FormatSize(volume.Size)</span></span>
+                            </label>
+                        }
+                    </div>
+                    <div class="choice-group category-actions" role="group">
+                        <button class="chip" @onclick="() => SelectAllData(selectedVolumes, volumes, true)" disabled="@(selectedVolumes.Count == volumes.Count)">Select all</button>
+                        <button class="chip" @onclick="() => SelectAllData(selectedVolumes, volumes, false)" disabled="@(selectedVolumes.Count == 0)">Clear</button>
+                    </div>
+                }
+                else
+                {
+                    <span class="muted">No volumes</span>
+                }
+            </SettingsField>
+            <SettingsField Label="Package Variables" Description="Values packages keep between restarts (ex. the last run time), one collection per configuration. Installing replaces these collections on the target.">
+                @if (variables.Count > 0)
+                {
+                    <div class="profile-list">
+                        @foreach (var variable in variables)
+                        {
+                            <label class="profile-option">
+                                <input type="checkbox" checked="@selectedVariables.Contains(variable.Id)" @onchange="e => ToggleData(selectedVariables, variable.Id, (bool)e.Value)" />
+                                <span>@variable.Id <span class="muted">@PackagesContext.FormatSize(variable.Size)</span></span>
+                            </label>
+                        }
+                    </div>
+                    <div class="choice-group category-actions" role="group">
+                        <button class="chip" @onclick="() => SelectAllData(selectedVariables, variables, true)" disabled="@(selectedVariables.Count == variables.Count)">Select all</button>
+                        <button class="chip" @onclick="() => SelectAllData(selectedVariables, variables, false)" disabled="@(selectedVariables.Count == 0)">Clear</button>
+                    </div>
+                }
+                else
+                {
+                    <span class="muted">No package variables</span>
+                }
+                @if (selectedVolumes.Count > 0 || selectedVariables.Count > 0)
+                {
+                    <div class="secrets-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Volume files and package variables are copied as they are. Include Secrets doesn't apply to them.</div>
+                }
+            </SettingsField>
+            <SettingsField Label="Include Secrets">
+                <DescriptionContent>
+                    The admin login, Users and API Keys (Security), Package Source access tokens, and passwords, tokens and keys in configuration parameters.
+                    When not included, the target keeps its existing values. The keys that protect sign-ins and the revoked sessions are never included.
+                </DescriptionContent>
+                <ChildContent>
+                    <div class="switch-control">
+                        <RadzenSwitch @bind-Value="@includeSecrets" @bind-Value:after="SchedulePreview" />
+                        <span class="muted">@(includeSecrets ? "Included" : "Not included")</span>
+                    </div>
+                    @if (includeSecrets)
+                    {
+                        <div class="secrets-warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Anyone with the deployment file can read these secrets. Keep it private.</div>
+                    }
+                </ChildContent>
+            </SettingsField>
+        </SettingsSection>
+
+        @* Preview and Create *@
+        <div class="create-footer">
+            <div class="preview">
+                @if (previewLoading && preview == null)
+                {
+                    <span class="muted"><span class="icon fa-solid fa-sharp fa-loader spin"></span> Calculating..</span>
+                }
+                else if (preview != null)
+                {
+                    <span class="preview-item"><strong>@preview.ConfigurationFileCount.ToString("N0")</strong> configuration files</span>
+                    <span class="preview-item"><strong>@preview.PackageCount.ToString("N0")</strong> package versions</span>
+                    @if (preview.VolumeFileCount > 0)
+                    {
+                        <span class="preview-item"><strong>@preview.VolumeFileCount.ToString("N0")</strong> volume files</span>
+                    }
+                    @if (preview.VariableCount > 0)
+                    {
+                        <span class="preview-item"><strong>@preview.VariableCount.ToString("N0")</strong> variable collections</span>
+                    }
+                    <span class="preview-item"><strong>@PackagesContext.FormatSize(preview.TotalBytes)</strong> uncompressed</span>
+                    @if (!includeSecrets && preview.SecretFilesExcluded > 0)
+                    {
+                        <span class="preview-item muted">@preview.SecretFilesExcluded secret @(preview.SecretFilesExcluded == 1 ? "file" : "files") excluded</span>
+                    }
+                }
+            </div>
+            @if (!creating)
+            {
+                <button class="admin-write btn btn-primary btn-create @(CanCreate ? "" : "disabled")" disabled="@(!CanCreate)" @onclick="CreateDeployment"><span class="icon fa-solid fa-sharp fa-box-archive"></span>Create Deployment</button>
+            }
+            else
+            {
+                <button class="btn btn-primary btn-create disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>@(progressMessage ?? "Creating..")</button>
+            }
+        </div>
+        @if (!CanCreate && !creating)
+        {
+            <span class="create-hint">@GetCreateHint()</span>
+        }
+
+        @* Recent Deployments *@
+        @if (history.Count > 0)
+        {
+            <SettingsSection Title="Recent Deployments" Description="Deployments created on this Instance" Icon="fa-solid fa-sharp fa-clock-rotate-left">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Deployment</th>
+                            <th>Created</th>
+                            <th>Type</th>
+                            <th>Contents</th>
+                            <th class="col-size">Size</th>
+                            <th class="col-download"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in history)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="history-name">@item.ProfileId v@(item.Version)</span>
+                                    @if (!string.IsNullOrEmpty(item.Description))
+                                    {
+                                        <span class="history-description">@item.Description</span>
+                                    }
+                                </td>
+                                <td>@item.Created.ToLocalTime().ToString("g")</td>
+                                <td>@(item.Incremental ? "Incremental" : "Full")@(item.SecretsIncluded ? " · with secrets" : "")</td>
+                                <td>
+                                    @item.ConfigurationFiles.ToString("N0") files · @item.Packages.ToString("N0") packages@(item.VolumeFiles > 0 ? $" · {item.VolumeFiles:N0} volume files" : "")@(item.Variables > 0 ? $" · {item.Variables:N0} variable collections" : "")<span class="muted"> · @string.Join(", ", item.Profiles)</span>
+                                    @if (item.Categories != null)
+                                    {
+                                        <span class="history-description">@(item.Categories.Count > 0 ? string.Join(", ", item.Categories.Select(DeploymentsService.GetCategoryLabel)) : "No configurations")</span>
+                                    }
+                                </td>
+                                <td class="col-size">@PackagesContext.FormatSize(item.Size)</td>
+                                <td class="col-download">
+                                    @{
+                                        var historyDownloadKey = GetHistoryDownloadKey(item);
+                                    }
+                                    @if (historyDownloadKey != null)
+                                    {
+                                        <a class="history-download" href="@($"_download/{historyDownloadKey}")" download="@item.Filename" title="Download @item.Filename"><span class="icon fa-solid fa-sharp fa-download"></span>Download</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted" title="Deployment files are deleted an hour after they are created">Expired</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </SettingsSection>
+        }
+
+    </div>
+</div>
+
+@code {
+
+    private string profileId;
+    private string version;
+    private string description;
+    private string lastVersion;
+    private DateTime? lastCreated;
+    private bool incremental;
+    private enum PackageMode { All, Used, None }
+
+    private PackageMode packageMode;
+    private bool includeSecrets;
+    private List<string> profiles = new List<string>();
+    private readonly HashSet<string> selectedProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private List<string> categories = new List<string>();
+    private readonly HashSet<string> selectedCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private List<TrakHoundDeploymentDataItem> volumes = new List<TrakHoundDeploymentDataItem>();
+    private readonly HashSet<string> selectedVolumes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private List<TrakHoundDeploymentDataItem> variables = new List<TrakHoundDeploymentDataItem>();
+    private readonly HashSet<string> selectedVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private List<DeploymentHistoryItem> history = new List<DeploymentHistoryItem>();
+
+    private TrakHoundDeploymentPreview preview;
+    private bool previewLoading;
+    private CancellationTokenSource previewDelay;
+
+    private bool creating;
+    private string progressMessage;
+    private TrakHoundDeploymentCreateFileResult result;
+    private bool createdIncremental;
+    private bool createdSecrets;
+    private string downloadKey;
+    private string downloadFilename;
+    private readonly Dictionary<string, string> historyDownloads = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+
+    [CascadingParameter]
+    public PackagesContext Notifications { get; set; }
+
+    private bool CanCreate => !string.IsNullOrWhiteSpace(profileId) && !string.IsNullOrWhiteSpace(version) && (selectedProfiles.Count > 0 && selectedCategories.Count > 0 || (preview?.PackageCount ?? 0) > 0 || (preview?.VolumeFileCount ?? 0) > 0 || (preview?.VariableCount ?? 0) > 0) && !deploymentsService.IsBusy;
+
+    private bool AllCategoriesSelected => categories.All(o => selectedCategories.Contains(o));
+
+    private string PackagesDescription
+    {
+        get
+        {
+            if (packageMode == PackageMode.None) return "Package versions on the target are not changed";
+            if (AllCategoriesSelected) return "Installing removes package versions on the target that aren't in the deployment";
+            return "Installing adds or updates these package versions. Other package versions on the target are kept.";
+        }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        var configuration = deploymentsService.ReadDeploymentConfiguration();
+        profileId = !string.IsNullOrEmpty(configuration.ProfileId) ? configuration.ProfileId : deploymentsService.Instance.Id;
+        lastVersion = configuration.Version;
+        version = configuration.GetNextVersion();
+        description = null;
+        lastCreated = configuration.LastUpdated > 0 ? configuration.LastUpdated.ToDateTime() : null;
+        history = configuration.History ?? new List<DeploymentHistoryItem>();
+
+        profiles = deploymentsService.GetProfiles().ToList();
+        foreach (var profile in profiles) selectedProfiles.Add(profile);
+
+        categories = deploymentsService.GetCategories().ToList();
+        foreach (var category in categories) selectedCategories.Add(category);
+
+        // Not selected by default (they hold data, not configuration)
+        volumes = deploymentsService.GetVolumes().ToList();
+        variables = deploymentsService.GetVariables().ToList();
+
+        SchedulePreview();
+    }
+
+    public void Dispose()
+    {
+        previewDelay?.Cancel();
+
+        // The created file's own download (which deletes the file) is left to expire
+        foreach (var key in historyDownloads.Values.Where(o => o != downloadKey)) downloadService.RemoveItem(key);
+    }
+
+    /// <summary>
+    /// A download for the History item's file (null if the file no longer exists)
+    /// </summary>
+    private string GetHistoryDownloadKey(DeploymentHistoryItem item)
+    {
+        if (string.IsNullOrEmpty(item.FilePath) || !File.Exists(item.FilePath)) return null;
+
+        if (historyDownloads.TryGetValue(item.FilePath, out var key) && downloadService.GetItem(key) != null) return key;
+
+        // Doesn't delete the file (it is deleted by the download added when it was created)
+        key = downloadService.AddItem(new TrakHoundDownloadItem
+        {
+            Filename = Path.GetFileName(item.FilePath),
+            ContentType = "application/zip",
+            FilePath = item.FilePath
+        }, TimeSpan.FromHours(1));
+
+        historyDownloads[item.FilePath] = key;
+        return key;
+    }
+
+
+    private void SetIncremental(bool value)
+    {
+        incremental = value;
+        SchedulePreview();
+    }
+
+    private void SetPackageMode(PackageMode value)
+    {
+        packageMode = value;
+        SchedulePreview();
+    }
+
+    private void ToggleCategory(string category, bool selected)
+    {
+        if (selected) selectedCategories.Add(category);
+        else selectedCategories.Remove(category);
+        SchedulePreview();
+    }
+
+    private void SelectAllCategories(bool selected)
+    {
+        selectedCategories.Clear();
+        if (selected) foreach (var category in categories) selectedCategories.Add(category);
+        SchedulePreview();
+    }
+
+    private void ToggleData(HashSet<string> selected, string id, bool value)
+    {
+        if (value) selected.Add(id);
+        else selected.Remove(id);
+        SchedulePreview();
+    }
+
+    private void SelectAllData(HashSet<string> selected, List<TrakHoundDeploymentDataItem> items, bool value)
+    {
+        selected.Clear();
+        if (value) foreach (var item in items) selected.Add(item.Id);
+        SchedulePreview();
+    }
+
+    private void ToggleProfile(string profile, bool selected)
+    {
+        if (selected) selectedProfiles.Add(profile);
+        else selectedProfiles.Remove(profile);
+        SchedulePreview();
+    }
+
+    private string GetCreateHint()
+    {
+        if (string.IsNullOrWhiteSpace(profileId)) return "Enter a Profile ID";
+        if (string.IsNullOrWhiteSpace(version)) return "Enter a Version";
+        if (deploymentsService.IsBusy) return "Another deployment operation is running";
+        return "Select at least one Configuration Profile and Configuration, or include packages, volumes or package variables";
+    }
+
+
+    private TrakHoundDeploymentCreateOptions CreateOptions(IProgress<string> progress = null)
+    {
+        // Null for all Categories (the target's other Categories are only kept when Categories are selected)
+        var selectedCategoryList = AllCategoriesSelected ? null : categories.Where(o => selectedCategories.Contains(o)).ToList();
+
+        Func<string, string, string, bool> packageFilter = null;
+        if (packageMode == PackageMode.None)
+        {
+            packageFilter = (category, id, packageVersion) => false;
+        }
+        else if (packageMode == PackageMode.Used)
+        {
+            var instance = deploymentsService.Instance;
+            var usages = instance.GetPackageUsage();
+            if (selectedCategoryList != null) usages = usages.Where(o => selectedCategoryList.Contains(o.ConfigurationCategory, StringComparer.OrdinalIgnoreCase));
+            var used = new HashSet<string>(usages.Select(o => o.PackageUuid).Where(o => o != null));
+            packageFilter = (category, id, packageVersion) =>
+            {
+                var uuid = TrakHoundPackage.GenerateUuid(id, packageVersion);
+                if (used.Contains(uuid)) return true;
+
+                // Packages applied by the Configuration Profile aren't referenced by a configuration
+                var package = instance.PackageManager.Get(id, packageVersion);
+                return package != null && instance.IsProfilePackage(package);
+            };
+        }
+
+        return new TrakHoundDeploymentCreateOptions
+        {
+            ConfigurationPath = deploymentsService.ConfigurationPath,
+            PackagesPath = deploymentsService.PackagesPath,
+            VolumesPath = deploymentsService.VolumesPath,
+            VariablesPath = deploymentsService.VariablesPath,
+            Volumes = selectedVolumes.ToList(),
+            Variables = selectedVariables.ToList(),
+            Profiles = selectedProfiles.ToList(),
+            Categories = selectedCategoryList,
+            IncrementalSince = incremental ? lastCreated : null,
+            PackageFilter = packageFilter,
+            IncludeSecrets = includeSecrets,
+            Progress = progress
+        };
+    }
+
+    private void SchedulePreview()
+    {
+        previewDelay?.Cancel();
+        previewDelay = new CancellationTokenSource();
+        var token = previewDelay.Token;
+        previewLoading = true;
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(300, token);
+            var options = CreateOptions();
+            var value = TrakHoundDeployment.Preview(options);
+            if (token.IsCancellationRequested) return;
+
+            await InvokeAsync(() =>
+            {
+                preview = value;
+                previewLoading = false;
+                StateHasChanged();
+            });
+        }, token);
+    }
+
+
+    private async Task CreateDeployment()
+    {
+        creating = true;
+        result = null;
+        progressMessage = "Creating..";
+        await InvokeAsync(StateHasChanged);
+
+        var progress = new Progress<string>(message =>
+        {
+            progressMessage = message;
+            _ = InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            var deployment = new TrakHoundDeployment
+            {
+                ProfileId = profileId.Trim(),
+                Version = version.Trim(),
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+                BuildDate = DateTime.UtcNow
+            };
+
+            var options = CreateOptions(progress);
+            createdIncremental = options.IncrementalSince.HasValue;
+            createdSecrets = options.IncludeSecrets;
+
+            result = await deploymentsService.Create(deployment, options);
+
+            if (result.Success)
+            {
+                // Downloaded from disk (not held in memory) and deleted after an hour
+                downloadFilename = Path.GetFileName(result.FilePath);
+                downloadKey = downloadService.AddItem(new TrakHoundDownloadItem
+                {
+                    Filename = downloadFilename,
+                    ContentType = "application/zip",
+                    FilePath = result.FilePath,
+                    DeleteFileWhenRemoved = true
+                }, TimeSpan.FromHours(1));
+                historyDownloads[result.FilePath] = downloadKey;
+
+                SaveHistory(deployment, options);
+                Notifications?.Notify(PackageNotificationType.Success, $"Created {deployment.ProfileId} v{deployment.Version}", $"{PackagesContext.FormatSize(result.FileSize)}. Use the Download button to save it.");
+
+                // Ready for the next deployment
+                lastVersion = deployment.Version;
+                version = new DeploymentConfiguration { Version = deployment.Version }.GetNextVersion();
+                description = null;
+            }
+            else
+            {
+                Notifications?.Notify(PackageNotificationType.Error, "Create Deployment Failed", string.Join(" ", result.Errors));
+            }
+        }
+        catch (Exception ex)
+        {
+            result = new TrakHoundDeploymentCreateFileResult();
+            result.Errors.Add(ex.Message);
+        }
+        finally
+        {
+            creating = false;
+            progressMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SaveHistory(TrakHoundDeployment deployment, TrakHoundDeploymentCreateOptions options)
+    {
+        try
+        {
+            var configuration = deploymentsService.ReadDeploymentConfiguration();
+            configuration.ProfileId = deployment.ProfileId;
+            configuration.Version = deployment.Version;
+            configuration.Description = deployment.Description;
+            configuration.LastUpdated = deployment.BuildDate.ToUnixTime();
+            configuration.AddHistory(new DeploymentHistoryItem
+            {
+                ProfileId = deployment.ProfileId,
+                Version = deployment.Version,
+                Description = deployment.Description,
+                Created = deployment.BuildDate,
+                Incremental = options.IncrementalSince.HasValue,
+                SecretsIncluded = options.IncludeSecrets,
+                Profiles = result.Contents.Profiles.ToList(),
+                Categories = result.Contents.Categories?.ToList(),
+                ConfigurationFiles = result.Contents.ConfigurationFileCount,
+                Packages = result.Contents.PackageCount,
+                VolumeFiles = result.Contents.VolumeFileCount,
+                Variables = result.Contents.VariableCount,
+                Size = result.FileSize,
+                Filename = Path.GetFileName(result.FilePath),
+                FilePath = result.FilePath
+            });
+            configuration.Save(deploymentsService.DeploymentConfigurationPath);
+
+            lastCreated = deployment.BuildDate;
+            history = configuration.History;
+        }
+        catch (Exception ex)
+        {
+            Notifications?.Notify(PackageNotificationType.Warning, "Deployment History Not Saved", ex.Message);
+        }
+    }
+
+}

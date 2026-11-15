@@ -1,0 +1,33 @@
+/* Loaded instead of Font Awesome in builds without it (see TrakHoundIconAssets): a generic outline wherever an icon would be.
+   It's drawn where Font Awesome draws its glyph (::before), so rules that position icons work the same */
+
+.fa,
+.fas,
+.far,
+.fab,
+.fad,
+.fal,
+[class^="fa-"],
+[class*=" fa-"] {
+    display: inline-block;
+    line-height: 1;
+}
+
+    .fa::before,
+    .fas::before,
+    .far::before,
+    .fab::before,
+    .fad::before,
+    .fal::before,
+    [class^="fa-"]::before,
+    [class*=" fa-"]::before {
+        content: "";
+        display: inline-block;
+        box-sizing: border-box;
+        width: 1em;
+        height: 1em;
+        vertical-align: top;
+        border: 0.125em solid currentColor;
+        border-radius: 0.2em;
+        opacity: 0.6;
+    }

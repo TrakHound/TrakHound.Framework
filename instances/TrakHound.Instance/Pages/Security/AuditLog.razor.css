@@ -1,0 +1,17 @@
+/* A log can have hundreds of Records, so each stays on one line where the width allows */
+
+.table-container .data-table.audit-table > tbody > tr > td {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: var(--fontSizeSm);
+}
+
+.table-container .data-table.audit-table > thead > tr > th {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.table-container .data-table.audit-table .col-narrow {
+    width: 1%;
+    white-space: nowrap;
+}

@@ -1,0 +1,779 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/connections/apps/pages"
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHoundAppConnectionManager connectionManager
+@inject ExplorerService explorerService
+@using TrakHound.Apps
+@using TrakHound.Instance.Apps
+@using TrakHound.Instance.Pages.Explorer.Apps
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="App Connections - Diagnostics" />
+
+<div class="app-page-connections-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-plug"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">App Connections</span>
+                <span class="header-description">Browser connections to @(AppFilter != null ? GetAppFilterName() : "Apps") on this Instance (@instance.Id)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <a class="btn btn-light" href="@TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId)" title="Access Log : the page views of every App (client, page and time on page)"><span class="icon fa-solid fa-sharp fa-file-lines"></span>Access Log</a>
+
+        @if (AppFilter != null)
+        {
+            <span class="app-filter" title="Only the connections to this App">
+                <span class="icon fa-solid fa-sharp fa-filter"></span>App : <span class="app-filter-name">@GetAppFilterName()</span>
+                <a class="app-filter-clear" href="@TrakHoundAppConnectionManager.GetLink(explorerService.SelectedInstanceId)" title="Show the connections to every App" aria-label="Show every App"><span class="fa-solid fa-sharp fa-xmark"></span></a>
+            </span>
+        }
+        else
+        {
+            <label class="toolbar-toggle" title="Include connections to the Admin pages (including this page)">
+                <input type="checkbox" checked="@showAdmin" @onchange="ShowAdminChanged" />
+                <span>Show Admin</span>
+            </label>
+        }
+
+        @if (!string.IsNullOrEmpty(actionMessage))
+        {
+            <span class="action-message @(actionPrompt ? "prompt" : null)" role="status"><span class="icon fa-solid fa-sharp @(actionPrompt ? "fa-circle-question" : "fa-circle-check")"></span>@actionMessage</span>
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="summary-panel">
+
+            @if (IsRemoteInstanceSelected)
+            {
+                <div class="remote-notice">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    Connections are only available for this Instance (@instance.Id), not the selected Instance (@explorerService.SelectedInstanceId).
+                </div>
+            }
+
+            <div class="summary-tiles">
+                <button class="summary-tile connections @(statusFilter == null ? "selected" : null)" title="Show all Connections" @onclick="() => SetStatusFilter(null)">
+                    <span class="tile-label"><span class="icon fa-solid fa-sharp fa-plug"></span>Connections</span>
+                    <span class="tile-value">@_appItems.Count().ToString("N0")</span>
+                    <span class="tile-detail">@Plural(_appItems.Select(o => o.ClientDisplay).Distinct().Count(), "Client")</span>
+                </button>
+                <div class="summary-tile static">
+                    <span class="tile-label"><span class="icon fa-solid fa-sharp fa-grid-2"></span>Apps</span>
+                    <span class="tile-value">@_appItems.Select(o => o.AppId).Distinct().Count().ToString("N0")</span>
+                    <span class="tile-detail">with open connections</span>
+                </div>
+                <button class="summary-tile current @(statusFilter == CurrentStatus ? "selected" : null)" title="Show Connections running the current Version" @onclick="() => SetStatusFilter(CurrentStatus)">
+                    <span class="tile-label"><span class="icon fa-solid fa-sharp fa-circle-check"></span>Current</span>
+                    <span class="tile-value">@CurrentCount.ToString("N0")</span>
+                    <span class="tile-detail">Running the current Version</span>
+                </button>
+                <button class="summary-tile retired @(RetiredCount > 0 ? null : "zero") @(statusFilter == RetiredStatus ? "selected" : null)" title="Show Connections running a Retired Version" @onclick="() => SetStatusFilter(RetiredStatus)">
+                    <span class="tile-label"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Retired</span>
+                    <span class="tile-value">@RetiredCount.ToString("N0")</span>
+                    <span class="tile-detail">@(RetiredCount > 0 ? "Update pending" : "None")</span>
+                </button>
+                <button class="summary-tile safe @(SafeCount > 0 ? null : "zero") @(statusFilter == SafeFilter ? "selected" : null)" title="Show Connections that are safe to reload (idle for @_idleText, or in a Background tab, without unsaved changes)" @onclick="() => SetStatusFilter(SafeFilter)">
+                    <span class="tile-label"><span class="icon fa-solid fa-sharp fa-moon"></span>Safe to Reload</span>
+                    <span class="tile-value">@SafeCount.ToString("N0")</span>
+                    <span class="tile-detail">@(InUseCount > 0 ? $"{InUseCount:N0} in use" : "None in use")</span>
+                </button>
+            </div>
+
+            @if (!_retiredVersions.IsNullOrEmpty())
+            {
+                <div class="retired-panel">
+                    <div class="retired-header">
+                        <span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>
+                        <span class="retired-title">Retired Versions in use</span>
+                        <span class="retired-description">Kept loaded until the connections using them reload (on their next page change, after a few minutes of inactivity, or with Notify / Reload)</span>
+                    </div>
+                    <div class="retired-items">
+                        @foreach (var retiredVersion in _retiredVersions)
+                        {
+                            var reloadKey = $"version:{retiredVersion.ConfigurationId}:{retiredVersion.PackageVersion}";
+                            <div class="retired-item">
+                                <span class="retired-name" title="@retiredVersion.PackageId">@retiredVersion.Name</span>
+                                <span class="retired-version">v@(retiredVersion.PackageVersion)</span>
+                                <span class="retired-arrow fa-solid fa-sharp fa-arrow-right"></span>
+                                <span class="retired-version">@(retiredVersion.CurrentVersion != null ? $"v{retiredVersion.CurrentVersion}" : "Removed")</span>
+                                <span class="retired-count">@Plural(retiredVersion.SessionCount, "connection")</span>
+                                @if (!retiredVersion.ConnectionIds.IsNullOrEmpty())
+                                {
+                                    var reloadIdleKey = $"{reloadKey}:idle";
+                                    var idleConnections = retiredVersion.GetSafeConnections(DateTime.UtcNow);
+
+                                    <button class="btn btn-sm btn-link" title="Show a banner on each connection, which reloads on its next page change or when idle" @onclick="() => NotifyVersionClicked(retiredVersion)">Notify All</button>
+                                    @if (idleConnections.Count > 0)
+                                    {
+                                        <button class="btn btn-sm btn-link @(confirmKey == reloadIdleKey ? "btn-confirm" : null)" title="Reload only the connections that are safe to reload now (idle, or in a Background tab, without unsaved changes)" @onclick="() => ReloadIdleVersionClicked(retiredVersion, reloadIdleKey)">@(confirmKey == reloadIdleKey ? "Confirm Reload Idle?" : $"Reload Idle ({idleConnections.Count:N0})")</button>
+                                    }
+                                    <button class="btn btn-sm btn-link @(confirmKey == reloadKey ? "btn-confirm" : null)" title="Reload every connection now (unsaved changes on those pages are lost) · @retiredVersion.GetActivitySummary(DateTime.UtcNow)" @onclick="() => ReloadVersionClicked(retiredVersion, reloadKey)">@(confirmKey == reloadKey ? "Confirm Reload All?" : "Reload All")</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        <div class="table-panel">
+
+            @if (!_displayItems.IsNullOrEmpty())
+            {
+                <RadzenDataGrid Data="@_displayItems"
+                                TItem="TableItem"
+                                Density="Density.Compact"
+                                AllowFiltering="true"
+                                FilterMode="FilterMode.Simple"
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                AllowSorting="true"
+                                AllowColumnResize="true">
+                    <Columns>
+                        @* Frozen first so the Actions stay visible when the table scrolls sideways (a confirming click only changes the icon, never the width) *@
+                        <RadzenDataGridColumn TItem="TableItem" Title="Actions" Width="152px" Filterable="false" Sortable="false" Frozen="true">
+                            <Template Context="context">
+                                @{
+                                    var reloadKey = $"connection:{context.ConnectionId}";
+                                    var confirming = confirmKey == reloadKey;
+                                }
+                                <span class="actions">
+                                    @if (context.AppId != null)
+                                    {
+                                        <button class="btn-action" title="Identify : show this connection's Code (@context.Code) in the lower right corner of its page for @TrakHoundAppIdentifyRequest.DefaultSeconds seconds" aria-label="Identify" @onclick="() => IdentifyConnectionClicked(context)"><span class="icon fa-solid fa-sharp fa-location-crosshairs"></span></button>
+                                        <a class="btn-action" href="@GetAccessLogLink(context)" title="Access Log : the page views of this connection (@context.Code) in every App" aria-label="Access Log"><span class="icon fa-solid fa-sharp fa-file-lines"></span></a>
+                                        <button class="btn-action" title="Notify : show a banner on the page, which reloads on its next page change or when idle (nothing is lost)" aria-label="Notify" @onclick="() => NotifyConnectionClicked(context)"><span class="icon fa-solid fa-sharp fa-bell"></span></button>
+                                        <button class="btn-action" title="Send Message : show a Message on this page until dismissed (it is lost if the page reloads)" aria-label="Send Message" @onclick="() => messageItem = context"><span class="icon fa-solid fa-sharp fa-message"></span></button>
+                                    }
+                                    <button class="btn-action @(confirming ? "btn-confirm" : null)" title="@(confirming ? "Click again to reload the page now" : "Reload : reload the page now (unsaved changes on the page are lost)")" aria-label="@(confirming ? "Confirm Reload" : "Reload")" @onclick="() => ReloadConnectionClicked(context, reloadKey)"><span class="icon fa-solid fa-sharp @(confirming ? "fa-check" : "fa-arrows-rotate")"></span></button>
+                                </span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="Code" Title="Code" Width="80px">
+                            <Template Context="context">
+                                <span class="connection-code" title="Shown on the page by Identify">@context.Code</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="AppName" Title="App" Width="200px">
+                            <Template Context="context">
+                                <span title="@context.Name">@context.AppName</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="PackageVersion" SortProperty="VersionSort" Title="Version" Width="90px" />
+                        <RadzenDataGridColumn TItem="TableItem" Property="Status" Title="Status" Width="200px">
+                            <Template Context="context">
+                                @if (context.Status != null)
+                                {
+                                    <span class="status-badge @context.Status.ToLower()" title="@context.StatusDescription"><span class="status-dot"></span>@context.Status@(context.CurrentVersion != null && context.Status == RetiredStatus ? $" (v{context.CurrentVersion} pending)" : "")</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="ActivityDescription" SortProperty="ActivitySort" Title="Activity" Width="190px" Filterable="false">
+                            <Template Context="context">
+                                @if (context.AppId != null)
+                                {
+                                    <span class="status-badge activity @context.ActivityStatus.ToString().ToLower()" title="@context.ActivityDetails"><span class="status-dot"></span>@context.ActivityDescription</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="ClientDisplay" Title="Client" Width="200px">
+                            <Template Context="context">
+                                <span title="@context.ClientTooltip">@context.ClientDisplay</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="RequestedPath" Title="Path" />
+                        <RadzenDataGridColumn TItem="TableItem" Property="LastUpdated" Title="Last Page Change" Width="140px" Filterable="false">
+                            <Template Context="context">
+                                @if (context.LastUpdated > DateTime.MinValue)
+                                {
+                                    <span title="@context.LastUpdated.ToLocalTime()">@((DateTime.UtcNow - context.LastUpdated).ToFormattedString()) ago</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="Duration" Title="Duration" Width="110px" Filterable="false">
+                            <Template Context="context">
+                                <span>@context.Duration.ToFormattedString()</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TableItem" Property="Created" Title="Created" Width="170px" Filterable="false">
+                            <Template Context="context">
+                                <span>@context.Created.ToLocalTime()</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+            else
+            {
+                <div class="empty-message">@(statusFilter != null ? $"No {statusFilter} connections" : "No App connections")</div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+    <AppMessageDialog Visible="@(messageItem != null)" Description="@GetMessageDescription()" Send="SendMessage" Cancel="() => messageItem = null" />
+
+</div>
+
+@code {
+
+    private const string CurrentStatus = "Current";
+    private const string RetiredStatus = "Retired";
+    private const string AdminName = "Admin";
+    private const string SafeFilter = "Safe";
+    private static readonly string _idleText = $"{TrakHoundAppConnectionActivity.IdleTime.TotalMinutes:0} minutes";
+
+    private IEnumerable<TableItem> _allItems = Enumerable.Empty<TableItem>();
+    private IEnumerable<TableItem> _appItems = Enumerable.Empty<TableItem>();
+    private IEnumerable<TableItem> _displayItems = Enumerable.Empty<TableItem>();
+    private IEnumerable<RetiredVersion> _retiredVersions = Enumerable.Empty<RetiredVersion>();
+    private System.Timers.Timer _updateTimer;
+    private TrakHoundAppProvider _appProvider;
+    private volatile bool _changed;
+    private volatile bool _disposed;
+    private int _tick;
+
+    private string previousInstanceId;
+    private string previousAppFilter;
+    private bool showAdmin;
+    private string statusFilter;
+
+    private string confirmKey;
+    private DateTime confirmExpires;
+    private string actionMessage;
+    private bool actionPrompt;
+    private DateTime actionMessageExpires;
+    private TableItem messageItem;
+
+    private bool loading;
+    private string loadingMessage;
+
+
+    private bool IsRemoteInstanceSelected => explorerService.SelectedInstanceId != null && explorerService.SelectedInstanceId != instance.Id;
+
+    private int CurrentCount => _appItems.Count(o => o.Status == CurrentStatus);
+
+    private int RetiredCount => _appItems.Count(o => o.Status == RetiredStatus);
+
+    private int SafeCount => _appItems.Count(o => o.IsSafeToReload);
+
+    private int InUseCount => _appItems.Count(o => o.ActivityStatus == TrakHoundAppActivityStatus.Active || o.ActivityStatus == TrakHoundAppActivityStatus.Editing || o.ActivityStatus == TrakHoundAppActivityStatus.Unsaved);
+
+
+    /// <summary>
+    /// Only show the connections to this App (ex. linked from the App's page)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "app")]
+    public string AppFilter { get; set; }
+
+
+    class TableItem : TrakHoundAppConnection
+    {
+        public TimeSpan Duration => DateTime.UtcNow - Created;
+
+        /// <summary>
+        /// The App Configuration's Name (or the Package ID when it has no Name)
+        /// </summary>
+        public string AppName { get; set; }
+
+        /// <summary>
+        /// The Hostname, or the Address when there is no Reverse DNS entry
+        /// </summary>
+        public string ClientDisplay => !string.IsNullOrEmpty(ClientHostname) ? ClientHostname : ClientAddress;
+
+        public string ClientTooltip => string.Join("\n", new[] { ClientAddress, ClientAgent }.Where(o => !string.IsNullOrEmpty(o)));
+
+        /// <summary>
+        /// Sorts Versions numerically (so 0.10.0 sorts after 0.9.0)
+        /// </summary>
+        public Version VersionSort => PackageVersion?.ToVersion();
+
+        /// <summary>
+        /// Current, Retired (a newer Version of the App was loaded since the connection's page was loaded), or null for non-App pages
+        /// </summary>
+        public string Status { get; set; }
+
+        public string StatusDescription { get; set; }
+
+        /// <summary>
+        /// The App's currently loaded Version (when the connection is running a Retired Version)
+        /// </summary>
+        public string CurrentVersion { get; set; }
+
+        public TrakHoundAppActivityStatus ActivityStatus => TrakHoundAppConnectionActivity.GetStatus(this, DateTime.UtcNow);
+
+        public string ActivityDescription => TrakHoundAppConnectionActivity.GetDescription(this, DateTime.UtcNow);
+
+        public string ActivityDetails => TrakHoundAppConnectionActivity.GetDetails(this, DateTime.UtcNow);
+
+        public bool IsSafeToReload => TrakHoundAppConnectionActivity.IsSafeToReload(this, DateTime.UtcNow);
+
+        /// <summary>
+        /// Safe to reload first (longest idle first), then in use, then unknown
+        /// </summary>
+        public double ActivitySort
+        {
+            get
+            {
+                var group = IsSafeToReload ? 0 : ActivityStatus == TrakHoundAppActivityStatus.Unknown ? 2 : 1;
+                return group * 1e9 - TrakHoundAppConnectionActivity.GetIdleTime(this, DateTime.UtcNow).TotalSeconds;
+            }
+        }
+
+        public TableItem(TrakHoundAppConnection connection)
+        {
+            ConnectionId = connection.ConnectionId;
+            Code = connection.Code;
+            ClientAddress = connection.ClientAddress;
+            ClientHostname = connection.ClientHostname;
+            ClientAgent = connection.ClientAgent;
+            Name = connection.Name;
+            RequestedPath = connection.RequestedPath;
+            AppId = connection.AppId;
+            PackageVersion = connection.PackageVersion;
+            PackageHash = connection.PackageHash;
+            Created = connection.Created;
+            LastUpdated = connection.LastUpdated;
+            LastActivity = connection.LastActivity;
+            IsEditing = connection.IsEditing;
+            HasInput = connection.HasInput;
+            HasUnsavedChanges = connection.HasUnsavedChanges;
+            IsHidden = connection.IsHidden;
+        }
+    }
+
+    class RetiredVersion
+    {
+        public string ConfigurationId { get; set; }
+        public string Name { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public string CurrentVersion { get; set; }
+        public int SessionCount { get; set; }
+        public List<string> ConnectionIds { get; set; } = new List<string>();
+        public List<TableItem> Connections { get; set; } = new List<TableItem>();
+
+        public List<TableItem> GetSafeConnections(DateTime now) => Connections.Where(o => TrakHoundAppConnectionActivity.IsSafeToReload(o, now)).ToList();
+
+        public string GetActivitySummary(DateTime now) => TrakHoundAppConnectionActivity.Summarize(Connections, now);
+    }
+
+
+    protected override void OnInitialized()
+    {
+        connectionManager.Changed += ConnectionsChanged;
+
+        _appProvider = instance.AppProvider as TrakHoundAppProvider;
+        if (_appProvider != null) _appProvider.AppAdded += AppAdded;
+
+        // Updates when the Connections change, and re-renders every 5 seconds for the Durations
+        _updateTimer = new System.Timers.Timer();
+        _updateTimer.Interval = 1000;
+        _updateTimer.Elapsed += UpdateTimerElapsed;
+        _updateTimer.Start();
+    }
+
+    void IDisposable.Dispose()
+    {
+        _disposed = true;
+
+        connectionManager.Changed -= ConnectionsChanged;
+        if (_appProvider != null) _appProvider.AppAdded -= AppAdded;
+
+        if (_updateTimer != null)
+        {
+            _updateTimer.Elapsed -= UpdateTimerElapsed;
+            _updateTimer.Dispose();
+        }
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(AppFilter)) AppFilter = null;
+
+        // Navigating between the filtered and unfiltered links reuses the page (already Loaded)
+        if (AppFilter != previousAppFilter)
+        {
+            previousAppFilter = AppFilter;
+            if (previousInstanceId != null) UpdateConnections();
+        }
+
+        await Load();
+    }
+
+    private string GetAppFilterName()
+    {
+        var appInformation = instance.AppProvider?.GetInformation(AppFilter);
+        if (!string.IsNullOrEmpty(appInformation?.Name)) return appInformation.Name;
+        if (!string.IsNullOrEmpty(appInformation?.PackageId)) return appInformation.PackageId;
+        return AppFilter;
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading App Connections..";
+            await InvokeAsync(StateHasChanged);
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Connections", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Apps", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            UpdateConnections();
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ConnectionsChanged() => _changed = true;
+
+    private void AppAdded(object sender, TrakHoundAppInformation appInformation) => _changed = true;
+
+    private async void UpdateTimerElapsed(object sender, System.Timers.ElapsedEventArgs args)
+    {
+        if (_disposed) return;
+
+        try
+        {
+            _tick++;
+            var changed = _changed;
+            var now = DateTime.UtcNow;
+            var expiring = (actionMessage != null && now > actionMessageExpires) || (confirmKey != null && now > confirmExpires);
+
+            if (changed || expiring || _tick % 5 == 0)
+            {
+                _changed = false;
+
+                await InvokeAsync(() =>
+                {
+                    if (_disposed) return;
+                    ExpireMessages();
+                    if (changed) UpdateConnections();
+                    else if (statusFilter == SafeFilter) UpdateDisplayItems(); // Connections become Safe to Reload as they go idle
+                    StateHasChanged();
+                });
+            }
+        }
+        catch
+        {
+            // The page may have been Disposed while updating
+        }
+    }
+
+    private void UpdateConnections()
+    {
+        // The Connections are for this Instance (the App Provider is this Instance's)
+        var appProvider = instance.AppProvider;
+
+        var tableItems = new List<TableItem>();
+        var connections = connectionManager.GetConnections();
+        if (!connections.IsNullOrEmpty())
+        {
+            foreach (var connection in connections)
+            {
+                var tableItem = new TableItem(connection);
+                tableItem.AppName = connection.Name;
+
+                if (!string.IsNullOrEmpty(connection.AppId) && connection.PackageVersion != null)
+                {
+                    var appInformation = appProvider?.GetInformation(connection.AppId);
+                    if (!string.IsNullOrEmpty(appInformation?.Name)) tableItem.AppName = appInformation.Name;
+
+                    if (appInformation != null && appInformation.PackageVersion == connection.PackageVersion && appInformation.PackageHash == connection.PackageHash)
+                    {
+                        tableItem.Status = CurrentStatus;
+                        tableItem.StatusDescription = "Running the App's current Version";
+                    }
+                    else
+                    {
+                        tableItem.Status = RetiredStatus;
+                        tableItem.CurrentVersion = appInformation?.PackageVersion;
+                        tableItem.StatusDescription = appInformation != null
+                            ? $"A newer Version (v{appInformation.PackageVersion}) has been loaded. It is applied on the connection's next page change, after a few minutes of inactivity, or with Notify / Reload"
+                            : "The App has been removed";
+                    }
+                }
+
+                tableItems.Add(tableItem);
+            }
+        }
+
+        if (AppFilter != null) tableItems = tableItems.Where(o => o.AppId == AppFilter).ToList();
+
+        _allItems = tableItems;
+        _appItems = tableItems.Where(o => o.AppId != null).ToList();
+
+        // Retired Versions still in use (kept loaded, along with their Injection Services, until the connections using them reload)
+        var retiredVersions = new List<RetiredVersion>();
+        var versionSessions = (appProvider?.InjectionServiceManager as TrakHoundAppInjectionServiceManager)?.GetVersionSessions();
+        if (!versionSessions.IsNullOrEmpty())
+        {
+            foreach (var versionSession in versionSessions)
+            {
+                if (AppFilter != null && versionSession.ConfigurationId != AppFilter) continue;
+
+                var appInformation = appProvider?.GetInformation(versionSession.ConfigurationId);
+                if (appInformation == null || appInformation.PackageVersion != versionSession.PackageVersion)
+                {
+                    retiredVersions.Add(new RetiredVersion
+                    {
+                        ConfigurationId = versionSession.ConfigurationId,
+                        Name = !string.IsNullOrEmpty(appInformation?.Name) ? appInformation.Name : versionSession.PackageId,
+                        PackageId = versionSession.PackageId,
+                        PackageVersion = versionSession.PackageVersion,
+                        CurrentVersion = appInformation?.PackageVersion,
+                        SessionCount = versionSession.SessionCount,
+                        Connections = tableItems
+                            .Where(o => o.AppId == versionSession.ConfigurationId && o.PackageVersion == versionSession.PackageVersion)
+                            .ToList(),
+                        ConnectionIds = tableItems
+                            .Where(o => o.AppId == versionSession.ConfigurationId && o.PackageVersion == versionSession.PackageVersion)
+                            .Select(o => o.ConnectionId)
+                            .ToList()
+                    });
+                }
+            }
+        }
+        _retiredVersions = retiredVersions.OrderBy(o => o.Name).ThenBy(o => o.PackageVersion?.ToVersion()).ToList();
+
+        UpdateDisplayItems();
+    }
+
+    private void UpdateDisplayItems()
+    {
+        IEnumerable<TableItem> items = showAdmin ? _allItems : _allItems.Where(o => o.Name != AdminName);
+        if (statusFilter == SafeFilter) items = items.Where(o => o.AppId != null && o.IsSafeToReload);
+        else if (statusFilter != null) items = items.Where(o => o.Status == statusFilter);
+
+        _displayItems = items.ToList();
+    }
+
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private void ShowAdminChanged(ChangeEventArgs args)
+    {
+        showAdmin = args.Value is bool value && value;
+        UpdateDisplayItems();
+    }
+
+    private void SetStatusFilter(string status)
+    {
+        // Clicking the selected Tile again clears the Filter
+        statusFilter = statusFilter == status ? null : status;
+        UpdateDisplayItems();
+    }
+
+
+    private void IdentifyConnectionClicked(TableItem item)
+    {
+        if (_appProvider != null && _appProvider.IdentifyConnection(item.ConnectionId))
+        {
+            ShowMessage($"Showing {item.Code} on {item.ClientDisplay} ({item.AppName}) for {TrakHoundAppIdentifyRequest.DefaultSeconds} seconds");
+        }
+    }
+
+    private void NotifyConnectionClicked(TableItem item)
+    {
+        if (_appProvider != null && _appProvider.NotifyConnectionReload(item.ConnectionId))
+        {
+            ShowMessage($"Reload requested for {item.ClientDisplay} ({item.AppName}). The page reloads on its next page change or when idle");
+        }
+    }
+
+    private string GetMessageDescription() => messageItem != null ? $"Show a Message on the page of {messageItem.ClientDisplay} ({messageItem.Code}) in {messageItem.AppName}." : null;
+
+    private void SendMessage(TrakHoundAppMessageRequest request)
+    {
+        var item = messageItem;
+        messageItem = null;
+        if (item == null || request == null) return;
+
+        if (_appProvider != null && _appProvider.SendConnectionMessage(item.ConnectionId, request.Message, request.Severity, request.From, request.Seconds))
+        {
+            ShowMessage($"Message sent to {item.ClientDisplay} ({item.AppName})");
+        }
+    }
+
+    private void ReloadConnectionClicked(TableItem item, string reloadKey)
+    {
+        // Reloading loses any unsaved changes on the page, so it takes a second click to confirm
+        if (!Confirm(reloadKey))
+        {
+            ShowPrompt($"Click the check mark again to reload {item.ClientDisplay} ({item.AppName}) now{GetReloadWarning(item)}");
+            return;
+        }
+
+        if (instance.AppProvider != null && instance.AppProvider.RefreshConnection(item.ConnectionId, 0))
+        {
+            ShowMessage($"Reloaded {item.ClientDisplay} ({item.AppName})");
+        }
+    }
+
+    private void NotifyVersionClicked(RetiredVersion retiredVersion)
+    {
+        if (_appProvider == null) return;
+
+        foreach (var connectionId in retiredVersion.ConnectionIds)
+        {
+            _appProvider.NotifyConnectionReload(connectionId);
+        }
+
+        ShowMessage($"Reload requested for {Plural(retiredVersion.ConnectionIds.Count, "connection")} running {retiredVersion.Name} v{retiredVersion.PackageVersion}");
+    }
+
+    private void ReloadVersionClicked(RetiredVersion retiredVersion, string reloadKey)
+    {
+        if (!Confirm(reloadKey))
+        {
+            ShowPrompt($"Click again to reload the {Plural(retiredVersion.ConnectionIds.Count, "connection")} running {retiredVersion.Name} v{retiredVersion.PackageVersion} now ({retiredVersion.GetActivitySummary(DateTime.UtcNow)}). Unsaved changes on those pages are lost");
+            return;
+        }
+
+        if (instance.AppProvider == null) return;
+
+        foreach (var connectionId in retiredVersion.ConnectionIds)
+        {
+            instance.AppProvider.RefreshConnection(connectionId, 0);
+        }
+
+        ShowMessage($"Reloaded {Plural(retiredVersion.ConnectionIds.Count, "connection")} running {retiredVersion.Name} v{retiredVersion.PackageVersion}");
+    }
+
+    private void ReloadIdleVersionClicked(RetiredVersion retiredVersion, string reloadKey)
+    {
+        var connections = retiredVersion.GetSafeConnections(DateTime.UtcNow);
+
+        if (!Confirm(reloadKey))
+        {
+            ShowPrompt($"Click again to reload the {Plural(connections.Count, "idle connection")} running {retiredVersion.Name} v{retiredVersion.PackageVersion} (connections in use are left until they are idle or change pages)");
+            return;
+        }
+
+        if (instance.AppProvider == null) return;
+
+        // Checked again when confirmed (a connection may have been used since)
+        connections = retiredVersion.GetSafeConnections(DateTime.UtcNow);
+        foreach (var connection in connections)
+        {
+            instance.AppProvider.RefreshConnection(connection.ConnectionId, 0);
+        }
+
+        ShowMessage($"Reloaded {Plural(connections.Count, "idle connection")} running {retiredVersion.Name} v{retiredVersion.PackageVersion}");
+    }
+
+    /// <summary>
+    /// How the page is being used, for the Reload confirmation
+    /// </summary>
+    private static string GetReloadWarning(TableItem item)
+    {
+        switch (item.ActivityStatus)
+        {
+            case TrakHoundAppActivityStatus.Idle:
+            case TrakHoundAppActivityStatus.Background:
+                return $". It is {item.ActivityDescription.ToLower()}, so it is safe to reload";
+
+            case TrakHoundAppActivityStatus.Editing:
+            case TrakHoundAppActivityStatus.Unsaved:
+                return $". It may have unsaved changes ({item.ActivityDescription}), which are lost";
+
+            case TrakHoundAppActivityStatus.Active:
+                return $". It is in use ({item.ActivityDescription}). Unsaved changes on the page are lost";
+
+            default:
+                return " (its activity is unknown). Unsaved changes on the page are lost";
+        }
+    }
+
+    /// <summary>
+    /// Returns true on the second click (within 5 seconds) of the same action
+    /// </summary>
+    private bool Confirm(string key)
+    {
+        if (confirmKey == key && DateTime.UtcNow < confirmExpires)
+        {
+            confirmKey = null;
+            return true;
+        }
+
+        confirmKey = key;
+        confirmExpires = DateTime.UtcNow.AddSeconds(5);
+        return false;
+    }
+
+    private void ShowMessage(string message)
+    {
+        actionMessage = message;
+        actionPrompt = false;
+        actionMessageExpires = DateTime.UtcNow.AddSeconds(6);
+    }
+
+    /// <summary>
+    /// Ask for the confirming click (shown for as long as the confirmation is waiting)
+    /// </summary>
+    private void ShowPrompt(string message)
+    {
+        actionMessage = message;
+        actionPrompt = true;
+        actionMessageExpires = confirmExpires;
+    }
+
+    /// <summary>
+    /// Clear the Action Message and Confirmation once they expire
+    /// </summary>
+    private void ExpireMessages()
+    {
+        var now = DateTime.UtcNow;
+        if (actionMessage != null && now > actionMessageExpires) actionMessage = null;
+        if (confirmKey != null && now > confirmExpires) confirmKey = null;
+    }
+
+    /// <summary>
+    /// The Access Log of every App searched for the Connection's Code (a Connection can view more than one App)
+    /// </summary>
+    private string GetAccessLogLink(TableItem item) => TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId, null, $"Code = {item.Code}");
+
+    private static string Plural(int count, string label) => $"{count:N0} {label}{(count == 1 ? "" : "s")}";
+}

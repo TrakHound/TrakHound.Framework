@@ -1,0 +1,131 @@
+﻿@page "/_admin/explorer/{instanceId}/services/messages/{configurationId}"
+@implements IDisposable
+@inject ExplorerService _explorerService
+@inject ClientService _clientService
+
+<TrakHoundPageTitle Text="@($"{_serviceName ?? ConfigurationId} - Messages")" />
+
+<div class="client-page">
+    <div class="client-toolbar">
+        <Header />
+    </div>
+    <div class="client-content">
+        <RadzenSplitter Orientation="Orientation.Horizontal">
+            <RadzenSplitterPane Size="70%">
+                <div class="client-tree">
+                    @if (_clientService.IsSubscribing)
+                    {
+                        <div class="client-status">
+                            <span class="icon fa-sharp fa-solid fa-loader spin"></span>
+                            <span>Subscribing to "@_clientService.SubscribePath"..</span>
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(_loadError ?? _clientService.SubscribeError))
+                    {
+                        <div class="client-status error">
+                            <span class="icon fa-sharp fa-solid fa-triangle-exclamation"></span>
+                            <span>@(_loadError ?? _clientService.SubscribeError)</span>
+                        </div>
+                    }
+                    else if (_clientService.TopicLimitReached)
+                    {
+                        <div class="client-status warning">
+                            <span class="icon fa-sharp fa-solid fa-circle-info"></span>
+                            <span>Showing the first @ClientService.MaxTopics.ToString("N0") Topics. Subscribe to a narrower Topic to see others.</span>
+                        </div>
+                    }
+                    <div class="client-tree-content">
+                        <MessagesTreeView />
+                    </div>
+                </div>
+            </RadzenSplitterPane>
+            <RadzenSplitterPane Size="30%">
+                <div class="client-sidebar">
+                    <Information />
+                    <Value />
+                    <Publish />
+                </div>
+            </RadzenSplitterPane>
+        </RadzenSplitter>
+    </div>
+    <div class="client-footer">
+        <Footer />
+    </div>
+</div>
+
+@code {
+
+    private string _loadedInstanceId;
+    private string _loadedConfigurationId;
+    private string _loadError;
+    private string _serviceName;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        _clientService.Updated += ClientUpdated;
+    }
+
+    public void Dispose()
+    {
+        _clientService.Updated -= ClientUpdated;
+
+        // ClientService lives for the whole circuit, so stop the Subscription when leaving the page
+        _clientService.Stop();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        SetBreadcrumbs();
+
+        // Reload when either the Instance or the Message Service changes
+        if (ConfigurationId != null && (InstanceId != _loadedInstanceId || ConfigurationId != _loadedConfigurationId))
+        {
+            _loadedInstanceId = InstanceId;
+            _loadedConfigurationId = ConfigurationId;
+            _loadError = null;
+
+            try
+            {
+                await _clientService.Load(InstanceId, ConfigurationId);
+            }
+            catch (Exception ex)
+            {
+                // Never let a failure escape (it would disconnect the whole Explorer circuit)
+                _loadError = $"Error Loading Messages : {ex.Message}";
+            }
+        }
+    }
+
+    private void SetBreadcrumbs()
+    {
+        var servicesLink = Url.Combine("_admin/explorer", InstanceId, "services");
+        var service = _explorerService.GetServices(InstanceId, ConfigurationId);
+        var serviceName = !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+        _serviceName = serviceName;
+
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+        breadcrumbItems.Add(new BreadcrumbItem("Messages", Url.Combine(servicesLink, "messages")));
+        breadcrumbItems.Add(new BreadcrumbItem(serviceName, null));
+        _explorerService.BreadcrumbItems = breadcrumbItems;
+    }
+
+    private async void ClientUpdated(object sender, EventArgs args)
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+}

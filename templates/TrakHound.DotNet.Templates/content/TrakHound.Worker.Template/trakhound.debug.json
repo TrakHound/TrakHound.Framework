@@ -1,0 +1,10 @@
+{
+  // Settings for the local debug host (Program.cs). Left out of the package
+  "instanceUrl": "{instanceUrl}",
+  "apiKey": "",
+
+  // Configuration Parameters (as set in the Worker's Configuration on an Instance)
+  "parameters": {
+    "interval": 5000
+  }
+}

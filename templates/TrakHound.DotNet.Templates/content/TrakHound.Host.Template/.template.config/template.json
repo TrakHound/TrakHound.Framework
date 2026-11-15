@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "TrakHound Inc.",
+  "classifications": [
+    "Common",
+    "Host"
+  ],
+  "identity": "TrakHound.Host.Template",
+  "name": "TrakHound Standalone Host",
+  "description": "Template to create a host that runs a TrakHound Api, Worker or Function without an Instance (as a console app, Windows Service, systemd service, IIS application, container or cloud app)",
+  "shortName": "trakhound.host",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "UserHostId",
+  "preferNameDirectory": true,
+  "symbols": {
+    "HostIdentifier": {
+      "type": "bind",
+      "binding": "host:HostIdentifier"
+    },
+    "skipRestore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "description": "Skips restoring the project's NuGet packages after it is created",
+      "defaultValue": "false"
+    },
+    "kind": {
+      "type": "parameter",
+      "datatype": "choice",
+      "description": "The type of the package the host runs",
+      "defaultValue": "api",
+      "choices": [
+        { "choice": "api", "description": "An Api (a web app)" },
+        { "choice": "worker", "description": "A Worker (runs until the host stops)" },
+        { "choice": "function", "description": "A Function (runs once, ex. a scheduled job)" }
+      ]
+    },
+    "isApi": {
+      "type": "computed",
+      "value": "(kind == \"api\")"
+    },
+    "isWorker": {
+      "type": "computed",
+      "value": "(kind == \"worker\")"
+    },
+    "isFunction": {
+      "type": "computed",
+      "value": "(kind == \"function\")"
+    },
+    "module": {
+      "type": "parameter",
+      "description": "The name of the package project the host runs (a folder next to the host's folder, ex. MyCompany.MyApi)",
+      "replaces": "UserModuleId",
+      "defaultValue": "UserModuleId"
+    },
+    "trakhoundVersion": {
+      "type": "parameter",
+      "description": "Version of the TrakHound NuGet packages to reference. Use the same version as the package project",
+      "replaces": "{trakhoundVersion}",
+      "defaultValue": "*-*"
+    },
+    "instanceUrl": {
+      "type": "parameter",
+      "description": "The URL of the Instance the host connects to when run in the Development environment",
+      "replaces": "{instanceUrl}",
+      "defaultValue": "http://localhost:8472"
+    }
+  },
+  "SpecialCustomOperations": {
+    "Dockerfile": {
+      "operations": [
+        {
+          "type": "conditional",
+          "configuration": {
+            "if": [ "#if" ],
+            "else": [ "#else" ],
+            "elseif": [ "#elseif" ],
+            "endif": [ "#endif" ],
+            "trim": true,
+            "wholeLine": true
+          }
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!isApi)",
+          "exclude": [ "Properties/**" ]
+        }
+      ]
+    }
+  ],
+  "primaryOutputs": [
+    {
+      "path": "UserHostId.csproj"
+    },
+    {
+      "path": "Program.cs"
+    }
+  ],
+  "defaultName": "TrakHoundHost1",
+  "postActions": [
+    {
+      "id": "restore",
+      "condition": "(!skipRestore)",
+      "description": "Restore NuGet packages required by this project.",
+      "manualInstructions": [
+        {
+          "text": "Run 'dotnet restore'"
+        }
+      ],
+      "actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+      "continueOnError": true
+    },
+    {
+      "id": "open-file",
+      "condition": "(HostIdentifier != \"dotnetcli\" && HostIdentifier != \"dotnetcli-preview\")",
+      "description": "Opens Program.cs in the editor",
+      "manualInstructions": [],
+      "actionId": "84C0DA21-51C8-4541-9940-6CA19AF04EE6",
+      "args": {
+        "files": "1"
+      },
+      "continueOnError": true
+    }
+  ]
+}

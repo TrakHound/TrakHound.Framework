@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a new feature or a change to an existing one
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The problem or use case, not just the feature. What's hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How you'd like it to work (ex. a setting, an endpoint, a page in the Admin interface, a CLI command).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you've considered or are using now.

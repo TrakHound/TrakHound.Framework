@@ -1,0 +1,234 @@
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject NavigationManager navigationManager
+@inject IJSRuntime jsRuntime
+@using TrakHound.Apps
+@using TrakHound.Instances
+@using TrakHound.Packages
+
+@if (ReloadPending && !dismissed)
+{
+    <div class="app-update-banner" role="status">
+        <span class="app-update-icon fa-solid fa-sharp @(updateVersion != null ? "fa-circle-arrow-up" : "fa-rotate")"></span>
+        <span class="app-update-text">
+            @if (updateVersion != null)
+            {
+                <text>An updated version of <span class="app-update-name">@(!string.IsNullOrEmpty(AppName) ? AppName : Package?.Id ?? "this App")</span> is available (v@(updateVersion)).</text>
+            }
+            else
+            {
+                <text>This page needs to be reloaded.</text>
+            }
+            It will reload the next time you change pages, or after a few minutes of inactivity.
+        </span>
+        <span class="app-update-buttons">
+            <button class="app-update-button app-update-button-primary" @onclick="ReloadNow">Reload Now</button>
+            <button class="app-update-button" @onclick="Dismiss">Later</button>
+        </span>
+    </div>
+}
+
+@code {
+
+    // Reload once the user has been inactive for this long (plus a random delay so every open page doesn't reload at the same time)
+    private const int _idleReloadSeconds = 120;
+    private const int _idleReloadJitterSeconds = 60;
+
+    private TrakHoundAppProvider appProvider;
+    private IDisposable locationChangingRegistration;
+    private string trackedKey;
+    private string updateVersion;
+    private bool reloadRequested;
+    private bool dismissed;
+    private bool reloading;
+    private bool rendered;
+    private bool idleReloadScheduled;
+
+
+    [Parameter]
+    public string AppId { get; set; }
+
+    [Parameter]
+    public string AppName { get; set; }
+
+    /// <summary>
+    /// The Package Version this page is running
+    /// </summary>
+    [Parameter]
+    public TrakHoundPackage Package { get; set; }
+
+    /// <summary>
+    /// The page's Connection (used to receive reload requests from the App Connections diagnostics page)
+    /// </summary>
+    [Parameter]
+    public TrakHoundAppConnection Connection { get; set; }
+
+
+    /// <summary>
+    /// A newer Version was loaded, or a reload was requested for this Connection
+    /// </summary>
+    private bool ReloadPending => updateVersion != null || reloadRequested;
+
+
+    protected override void OnInitialized()
+    {
+        appProvider = instance.AppProvider as TrakHoundAppProvider;
+        if (appProvider != null)
+        {
+            appProvider.AppAdded += AppAdded;
+            appProvider.ConnectionReloadNotifyRequested += ConnectionReloadNotifyRequested;
+            appProvider.AppReloadNotifyRequested += AppReloadNotifyRequested;
+        }
+
+        locationChangingRegistration = navigationManager.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    public void Dispose()
+    {
+        if (appProvider != null)
+        {
+            appProvider.AppAdded -= AppAdded;
+            appProvider.ConnectionReloadNotifyRequested -= ConnectionReloadNotifyRequested;
+            appProvider.AppReloadNotifyRequested -= AppReloadNotifyRequested;
+        }
+
+        locationChangingRegistration?.Dispose();
+
+        if (idleReloadScheduled)
+        {
+            _ = CancelIdleReloadOnDispose();
+        }
+    }
+
+    private async Task CancelIdleReloadOnDispose()
+    {
+        try { await jsRuntime.InvokeVoidAsync("JsFunctions.cancelIdleReload"); } catch { }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{AppId}:{Package?.Id}:{Package?.Version}";
+        if (key != trackedKey)
+        {
+            trackedKey = key;
+            updateVersion = null;
+            dismissed = false;
+
+            // The App may have been updated before this page subscribed
+            CheckForUpdate(appProvider?.GetInformation(AppId));
+            if (rendered) await UpdateIdleReload();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            rendered = true;
+            await UpdateIdleReload();
+        }
+    }
+
+
+    private void CheckForUpdate(TrakHoundAppInformation appInformation)
+    {
+        if (appInformation != null && Package != null && appInformation.Id == AppId && appInformation.PackageId == Package.Id)
+        {
+            if (appInformation.PackageVersion != Package.Version || appInformation.PackageHash != Package.Hash)
+            {
+                updateVersion = appInformation.PackageVersion;
+            }
+        }
+    }
+
+    private async void AppAdded(object sender, TrakHoundAppInformation appInformation)
+    {
+        if (appInformation == null || appInformation.Id != AppId) return;
+
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                CheckForUpdate(appInformation);
+                if (updateVersion != null)
+                {
+                    StateHasChanged();
+                    if (rendered) await UpdateIdleReload();
+                }
+            });
+        }
+        catch { }
+    }
+
+    private void AppReloadNotifyRequested(object sender, string appId)
+    {
+        if (!string.IsNullOrEmpty(AppId) && appId == AppId) RequestReload();
+    }
+
+    private void ConnectionReloadNotifyRequested(object sender, string connectionId)
+    {
+        if (Connection != null && connectionId == Connection.ConnectionId) RequestReload();
+    }
+
+    private async void RequestReload()
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                reloadRequested = true;
+                dismissed = false;
+                StateHasChanged();
+                if (rendered) await UpdateIdleReload();
+            });
+        }
+        catch { }
+    }
+
+    private async Task UpdateIdleReload()
+    {
+        try
+        {
+            if (ReloadPending && !idleReloadScheduled)
+            {
+                await jsRuntime.InvokeVoidAsync("JsFunctions.scheduleIdleReload", _idleReloadSeconds, _idleReloadJitterSeconds);
+                idleReloadScheduled = true;
+            }
+            else if (!ReloadPending && idleReloadScheduled)
+            {
+                await jsRuntime.InvokeVoidAsync("JsFunctions.cancelIdleReload");
+                idleReloadScheduled = false;
+            }
+        }
+        catch { } // Disconnected, or an older cached script without the Idle Reload functions (the banner and next navigation still apply the reload)
+    }
+
+    /// <summary>
+    /// Reload on the next navigation (a full page load instead of navigating within the current page)
+    /// </summary>
+    private ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (ReloadPending && !reloading)
+        {
+            reloading = true;
+            context.PreventNavigation();
+
+            var targetLocation = context.TargetLocation;
+            _ = InvokeAsync(() => navigationManager.NavigateTo(targetLocation, forceLoad: true));
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    private void ReloadNow()
+    {
+        reloading = true;
+        navigationManager.NavigateTo(navigationManager.Uri, forceLoad: true);
+    }
+
+    private void Dismiss()
+    {
+        // Hide the banner (the page still reloads on the next navigation or when idle)
+        dismissed = true;
+    }
+}

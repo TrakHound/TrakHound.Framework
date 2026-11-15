@@ -1,0 +1,104 @@
+@* Edits a list of values (ex. a Route's Patterns) in place *@
+
+<div class="list-editor">
+    @for (var i = 0; i < Items.Count; i++)
+    {
+        var index = i;
+        var warning = Validate?.Invoke(Items[index]);
+        <div class="list-row">
+            <input class="rz-textbox @(warning != null ? "warning" : "")" spellcheck="false" value="@Items[index]" list="@(Suggestions != null ? listId : null)" @onchange="args => Update(index, args.Value?.ToString())" />
+            @if (warning != null)
+            {
+                <span class="list-warning fa-solid fa-sharp fa-triangle-exclamation" title="@warning"></span>
+            }
+            <button class="list-remove" title="Remove" @onclick="() => Remove(index)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+        </div>
+    }
+    <div class="list-row">
+        <input class="rz-textbox" spellcheck="false" placeholder="@Placeholder" list="@(Suggestions != null ? listId : null)" @bind="newValue" @bind:event="oninput" @onkeydown="KeyDown" />
+        <button class="list-add" title="Add" disabled="@string.IsNullOrWhiteSpace(newValue)" @onclick="AddNew"><span class="fa-solid fa-sharp fa-plus"></span></button>
+    </div>
+    @if (Suggestions != null)
+    {
+        @* Values already in the list aren't suggested again *@
+        <datalist id="@listId">
+            @foreach (var suggestion in Suggestions.Where(o => !Items.Contains(o.Value)))
+            {
+                @if (suggestion.Text != null)
+                {
+                    <option value="@suggestion.Value">@suggestion.Text</option>
+                }
+                else
+                {
+                    <option value="@suggestion.Value"></option>
+                }
+            }
+        </datalist>
+    }
+</div>
+
+@code {
+
+    // Text is shown next to the Value (null shows only the Value)
+    public record Suggestion(string Value, string Text);
+
+    private readonly string listId = $"list-editor-{Guid.NewGuid():N}";
+
+
+    [Parameter]
+    public List<string> Items { get; set; } = new List<string>();
+
+    [Parameter]
+    public string Placeholder { get; set; }
+
+    /// <summary>
+    /// Values offered in a drop down (any other value can still be typed)
+    /// </summary>
+    [Parameter]
+    public IEnumerable<Suggestion> Suggestions { get; set; }
+
+    /// <summary>
+    /// Returns a warning to show next to a value (null if there's nothing wrong with it)
+    /// </summary>
+    [Parameter]
+    public Func<string, string> Validate { get; set; }
+
+    [Parameter]
+    public EventCallback Changed { get; set; }
+
+    private string newValue;
+
+
+    private async Task Update(int index, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            await Remove(index);
+            return;
+        }
+
+        Items[index] = value.Trim();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task Remove(int index)
+    {
+        Items.RemoveAt(index);
+        await Changed.InvokeAsync();
+    }
+
+    private async Task AddNew()
+    {
+        if (string.IsNullOrWhiteSpace(newValue)) return;
+
+        Items.Add(newValue.Trim());
+        newValue = null;
+        await Changed.InvokeAsync();
+    }
+
+    private async Task KeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await AddNew();
+    }
+
+}

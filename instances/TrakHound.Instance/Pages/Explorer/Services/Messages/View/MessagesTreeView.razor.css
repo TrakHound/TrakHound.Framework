@@ -1,0 +1,183 @@
+﻿.uns-tree-view {
+    height: 100%;
+    overflow: auto;
+    padding: 10px;
+    border-right: 1px solid var(--borderColor);
+}
+
+    .uns-tree-view ::deep .rz-tree {
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .uns-tree-view ::deep .rz-treenode {
+        padding-left: 20px;
+        background: none;
+    }
+
+    .uns-tree-view ::deep .rz-tree > .rz-tree-container > .rz-treenode {
+        padding: 0;
+        margin: 0;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content {
+        padding: 0;
+        margin: 0;
+        background: none;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content-selected {
+        background: none;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .rz-tree-toggler {
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: var(--fontSizeLg);
+        line-height: 18px;
+        padding-left: 2px !important;
+/*        padding-right: 5px !important;*/
+        height: auto;
+        width: auto;
+        border-radius: 4px 0 0 4px;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content:hover .rz-tree-toggler {
+        background: var(--accentLight);
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content-selected .rz-tree-toggler {
+        background: var(--accent) !important;
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode.no-children .rz-tree-toggler {
+        display: none;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .rz-treenode-label {
+        padding: 0;
+        margin: 0;
+        background: none;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .uns-tree-item-content {
+        line-height: 18px;
+        padding-right: 2px;
+        border-radius: 0 4px 4px 0;
+    }
+
+    .uns-tree-view ::deep .rz-treenode.no-children .uns-tree-item-content {
+        margin-left: 20px;
+        padding-left: 5px;
+        border-radius: 2px;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content:hover .uns-tree-item-content {
+        background: var(--accentLight);
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode.recent > .rz-treenode-content > .rz-treenode-label .uns-tree-item-content {
+        background: var(--accentLight);
+        color: #fff;
+        animation-name: example;
+        animation-delay: 0.25s;
+        animation-duration: 1.25s;
+        animation-direction: normal;
+        animation-fill-mode: forwards;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .uns-tree-item-content .path {
+        font-weight: 500;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        padding-left: 5px;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .uns-tree-item-content .count {
+        font-size: var(--fontSizeSm);
+        padding-left: 5px;
+        color: var(--textLight);
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .uns-tree-item-content .symbol {
+        font-size: var(--fontSizeSm);
+        padding-left: 5px;
+        color: var(--textDark);
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content .uns-tree-item-content .value {
+        font-size: var(--fontSizeSm);
+        padding-left: 5px;
+        color: var(--textDark);
+    }
+
+
+    .uns-tree-view ::deep .rz-treenode.recent > .rz-treenode-content > .rz-treenode-label .uns-tree-item-content .path {
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode.recent > .rz-treenode-content > .rz-treenode-label .uns-tree-item-content .count {
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode.recent > .rz-treenode-content > .rz-treenode-label .uns-tree-item-content .symbol {
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode.recent > .rz-treenode-content > .rz-treenode-label .uns-tree-item-content .value {
+        color: #fff;
+    }
+
+
+    .uns-tree-view ::deep .rz-treenode-content:hover .uns-tree-item-content .path {
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content:hover .uns-tree-item-content .count {
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content:hover .uns-tree-item-content .symbol {
+        color: #fff;
+    }
+
+    .uns-tree-view ::deep .rz-treenode-content:hover .uns-tree-item-content .value {
+        color: #fff;
+    }
+
+
+    .uns-tree-view ::deep .rz-treenode-content-selected .uns-tree-item-content {
+        background: var(--accent) !important;
+        color: #fff;
+    }
+
+        .uns-tree-view ::deep .rz-treenode-content-selected .uns-tree-item-content .path {
+            color: #fff;
+        }
+
+        .uns-tree-view ::deep .rz-treenode-content-selected .uns-tree-item-content .count {
+            color: #fff;
+        }
+
+        .uns-tree-view ::deep .rz-treenode-content-selected .uns-tree-item-content .symbol {
+            color: #fff;
+        }
+
+        .uns-tree-view ::deep .rz-treenode-content-selected .uns-tree-item-content .value {
+            color: #fff;
+        }
+
+
+@keyframes example {
+    0% {
+        background-color: var(--accentLight);
+        color: #fff;
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}

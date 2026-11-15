@@ -1,0 +1,425 @@
+@page "/_admin/explorer/{instanceId}/functions"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+@using TrakHound.Functions
+
+<TrakHoundPageTitle Text="Functions" />
+
+<div class="functions-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-code"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Functions</span>
+                <span class="header-description">Short lived processes@(GetCountText())</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <span class="toolbar-note">Runs, Errors, and Avg Time are for the last 24 hours</span>
+
+        <div class="filter">
+            <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" placeholder="Filter by function, name, or package" aria-label="Filter Functions" value="@filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+            @if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            }
+        </div>
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="status-panel">
+
+            @if (functions.Count > 0)
+            {
+                <RadzenTabs RenderMode="TabRenderMode.Client">
+                    <Tabs>
+                        <RadzenTabsItem Text="Functions">
+
+                            @{
+                                var items = GetItems();
+
+                                // Only show the Name column when a Function has a Name
+                                var showNameColumn = functions.Any(o => !string.IsNullOrEmpty(o.Name));
+
+                                if (!items.IsNullOrEmpty())
+                                {
+                                    <div class="table-panel">
+                                        <RadzenDataGrid Data="@items" TItem="FunctionItem" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true">
+                                            <Columns>
+                                                <RadzenDataGridColumn TItem="FunctionItem" CssClass="buttons view-cell" Width="75px" Sortable="false">
+                                                    <Template Context="item">
+                                                        <a href="@item.Link" class="btn btn-sm btn-link"><span class="icon fa-regular fa-sharp fa-circle-info"></span>View</a>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="FunctionId" Title="Function" MinWidth="180px">
+                                                    <Template Context="item">
+                                                        <a href="@item.Link" class="function-link">@item.FunctionId</a>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                @if (showNameColumn)
+                                                {
+                                                    <RadzenDataGridColumn TItem="FunctionItem" Property="Name" Title="Name" MinWidth="100px" />
+                                                }
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="Description" Title="Description" MinWidth="120px" />
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="PackageVersion" Title="Version" Width="85px">
+                                                    <Template Context="item">
+                                                        <span title="@GetPackageTitle(item)">@item.PackageVersion</span>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="RunCount" Title="Runs" Width="85px" TextAlign="TextAlign.Right">
+                                                    <Template Context="item">
+                                                        <span class="number">@item.RunCount.ToString("N0")</span>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="ErrorCount" Title="Errors" Width="85px" TextAlign="TextAlign.Right">
+                                                    <Template Context="item">
+                                                        <span class="number">@item.ErrorCount.ToString("N0")</span>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                                    <Template Context="item">
+                                                        <span class="number">@(item.RunCount > 0 ? FormatDuration(item.AverageDuration) : "-")</span>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="FunctionItem" Property="LastRun" Title="Last Run" Width="190px">
+                                                    <Template Context="item">
+                                                        @if (item.LastRun != null)
+                                                        {
+                                                            <span class="last-run @item.LastStatus?.ToLower()" title="@item.LastStatus">
+                                                                <span class="icon @GetStatusIcon(item.LastStatus)"></span>
+                                                                <span class="number">@FormatTimestamp(item.LastRun.Value)</span>
+                                                                <span class="last-status">@item.LastStatus</span>
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="no-runs">No runs</span>
+                                                        }
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="FunctionItem" CssClass="buttons run-cell" Width="70px" Sortable="false">
+                                                    <Template Context="item">
+                                                        <a href="@item.RunLink" class="admin-write btn btn-sm btn-link" title="Run @item.FunctionId"><span class="icon fa-regular fa-sharp fa-circle-play"></span>Run</a>
+                                                    </Template>
+                                                </RadzenDataGridColumn>
+                                            </Columns>
+                                        </RadzenDataGrid>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="empty-panel">
+                                        <span class="empty-title">No matching Functions</span>
+                                        <span class="empty-description">No Functions match "@filter?.Trim()"</span>
+                                    </div>
+                                }
+                            }
+
+                        </RadzenTabsItem>
+                        <RadzenTabsItem Text="History">
+                            <TrakHound.Instance.Pages.Explorer.Functions.Function.History ServerId="@explorerService.SelectedInstanceId" ShowFunctionId="true" />
+                        </RadzenTabsItem>
+                    </Tabs>
+                </RadzenTabs>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-code"></span>
+                    <span class="empty-title">No Functions</span>
+                    <span class="empty-description">No Functions are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Functions.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private static readonly TimeSpan _runsWindow = TimeSpan.FromHours(24);
+    private static readonly TimeSpan _runsInterval = TimeSpan.FromSeconds(15);
+
+    private List<TrakHoundFunctionInformation> functions = new List<TrakHoundFunctionInformation>();
+    private Dictionary<string, RunStats> runStats = new Dictionary<string, RunStats>();
+    private System.Threading.Timer runsTimer;
+    private int updatingRuns;
+    private string previousInstanceId;
+    private string filter;
+    private bool loading = true;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    public class FunctionItem
+    {
+        public string FunctionId { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public DateTime? PackageBuildDate { get; set; }
+        public string Link { get; set; }
+        public string RunLink { get; set; }
+
+        // Runs in the last 24 hours
+        public int RunCount { get; set; }
+        public int ErrorCount { get; set; }
+        public TimeSpan AverageDuration { get; set; }
+        public DateTime? LastRun { get; set; }
+        public string LastStatus { get; set; }
+    }
+
+    class RunStats
+    {
+        public int RunCount;
+        public int ErrorCount;
+        public TimeSpan AverageDuration;
+        public DateTime? LastRun;
+        public string LastStatus;
+    }
+
+
+    void IDisposable.Dispose()
+    {
+        runsTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            await InvokeAsync(StateHasChanged);
+
+            runsTimer?.Dispose();
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Functions", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                // Replace the full list (so Functions that were removed don't remain)
+                var informations = await client.Functions.GetInformation();
+                functions = informations?.Where(o => !string.IsNullOrEmpty(o?.FunctionId)).ToList() ?? new List<TrakHoundFunctionInformation>();
+
+                await UpdateRunStats(client);
+
+                // Refresh the Run statistics periodically
+                runsTimer = new System.Threading.Timer(RunsTimerElapsed, client, _runsInterval, _runsInterval);
+            }
+            else
+            {
+                functions = new List<TrakHoundFunctionInformation>();
+            }
+
+            loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateRunStats(ITrakHoundClient client)
+    {
+        try
+        {
+            // The summary is aggregated in SQL (one row per Function) rather than reading every Run in the window
+            var now = DateTime.UtcNow;
+            var parameters = new Dictionary<string, string>
+            {
+                { "start", now.Subtract(_runsWindow).ToUnixTime().ToString() },
+                { "stop", now.ToUnixTime().ToString() },
+                { "bucketCount", "1" }
+            };
+
+            var summaries = await client.Api.GetJson<IEnumerable<FunctionSummary>>("functions/summary", queryParameters: parameters);
+
+            var stats = new Dictionary<string, RunStats>(StringComparer.OrdinalIgnoreCase);
+            foreach (var summary in summaries ?? Enumerable.Empty<FunctionSummary>())
+            {
+                if (string.IsNullOrEmpty(summary?.FunctionId) || summary.RunCount < 1) continue;
+
+                stats[summary.FunctionId] = new RunStats
+                {
+                    RunCount = summary.RunCount,
+                    ErrorCount = summary.ErrorCount,
+                    AverageDuration = TimeSpan.FromMilliseconds(summary.AverageDuration),
+                    LastRun = summary.LastRun,
+                    LastStatus = summary.LastStatus
+                };
+            }
+            runStats = stats;
+        }
+        catch
+        {
+            // Run statistics are optional (ex. the Functions Api is not installed)
+        }
+    }
+
+    private async void RunsTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updatingRuns, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateRunStats(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updatingRuns, 0);
+        }
+    }
+
+    private IEnumerable<FunctionItem> GetItems()
+    {
+        var items = new List<FunctionItem>();
+        var stats = runStats;
+
+        foreach (var function in functions.OrderBy(o => o.FunctionId))
+        {
+            if (!MatchesFilter(function)) continue;
+
+            var link = Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions", function.FunctionId);
+            var item = new FunctionItem
+            {
+                FunctionId = function.FunctionId,
+                Name = function.Name,
+                Description = function.Description,
+                PackageId = function.PackageId,
+                PackageVersion = function.PackageVersion,
+                PackageBuildDate = function.PackageBuildDate,
+                Link = link,
+                RunLink = Url.Combine(link, "run")
+            };
+
+            if (stats.TryGetValue(function.FunctionId, out var functionStats))
+            {
+                item.RunCount = functionStats.RunCount;
+                item.ErrorCount = functionStats.ErrorCount;
+                item.AverageDuration = functionStats.AverageDuration;
+                item.LastRun = functionStats.LastRun;
+                item.LastStatus = functionStats.LastStatus;
+            }
+
+            items.Add(item);
+        }
+
+        return items;
+    }
+
+    private bool MatchesFilter(TrakHoundFunctionInformation function)
+    {
+        if (string.IsNullOrWhiteSpace(filter)) return true;
+
+        var value = filter.Trim();
+        return (function.FunctionId?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (function.Name?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (function.Description?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (function.PackageId?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        filter = null;
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private string GetCountText()
+    {
+        if (loading || functions.Count < 1) return null;
+        return functions.Count == 1 ? " · 1 Function" : $" · {functions.Count:N0} Functions";
+    }
+
+    private static string GetPackageTitle(FunctionItem item)
+    {
+        var title = item.PackageId;
+        if (item.PackageBuildDate > DateTime.MinValue) title += $" · Built {item.PackageBuildDate.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+        return title;
+    }
+
+    private static string GetStatusIcon(string status)
+    {
+        switch (status.ConvertEnum<TrakHoundFunctionStatusType>())
+        {
+            case TrakHoundFunctionStatusType.Completed: return "fa-solid fa-sharp fa-check";
+            case TrakHoundFunctionStatusType.Error: return "fa-solid fa-sharp fa-triangle-exclamation";
+            case TrakHoundFunctionStatusType.Stopped: return "fa-solid fa-sharp fa-stop";
+            case TrakHoundFunctionStatusType.Wait: return "fa-solid fa-sharp fa-timer";
+            default: return "fa-solid fa-sharp fa-play";
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes >= 1) return $"{duration.TotalMinutes:0.#} min";
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.##} s";
+        return $"{duration.TotalMilliseconds:0} ms";
+    }
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        var local = timestamp.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm");
+    }
+
+}

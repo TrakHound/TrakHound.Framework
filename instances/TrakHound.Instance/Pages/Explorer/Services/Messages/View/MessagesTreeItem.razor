@@ -1,0 +1,145 @@
+﻿@implements IDisposable
+@rendermode InteractiveServer
+@inject ClientService _clientService
+
+@{
+    var childPaths = _clientService.GetChildPaths(Path);
+
+    var text = ParentPath != null ? TrakHoundPath.GetRelativeTo(ParentPath, Path) : Path;
+
+    var childCount = 1;
+    var hasChildren = false;
+
+    if (childPaths != null) 
+    {
+        var childPathCount = childPaths.Count();
+        hasChildren = childPathCount > 0;
+        childCount += childPathCount;
+    }
+
+    string childCountText;
+    if (childCount > 1) childCountText = $"{childCount} topics";
+    else childCountText = $"{childCount} topic";
+
+    string messageCountText;
+    if (_messageCount > 1) messageCountText = $"{_messageCount} messages";
+    else messageCountText = $"{_messageCount} message";
+
+    var messageCount = $"({childCountText}, {messageCountText})";
+
+    var expandedClass = _expanded ? "expanded" : "collapsed";
+    var hasChildrenClass = hasChildren ? "has-children" : "no-children";
+    var recentClass = _recent ? "recent" : "";
+
+    var treeNodeClass = hasChildren ? $"rz-treenode has-children {recentClass}" : $"rz-treenode no-children {recentClass}";
+}
+
+<RadzenTreeItem Text="@Path" HasChildren="@hasChildren" class="@treeNodeClass">
+    <Template>
+        <div class="uns-tree-item-content @expandedClass">
+            <span class="path">@text</span>
+
+            @if (hasChildren && !_expanded)
+            {
+                <span class="count">@messageCount</span>
+            }
+
+            @if (_value != null)
+            {
+                <span class="symbol">=</span>
+                <span class="value">@_value</span>
+            }
+
+        </div>
+    </Template>
+    <ChildContent>
+
+        @if (hasChildren)
+        {
+            foreach (var childPath in childPaths)
+            {
+                <MessagesTreeItem ParentPath="@Path" Path="@childPath" />
+            }
+        }
+
+    </ChildContent>
+</RadzenTreeItem>
+
+@code {
+
+    private ThrottleEvent _recentDelay = new ThrottleEvent(1000);
+    private string _value;
+    private long _messageCount;
+    private bool _expanded;
+    private bool _recent;
+
+
+    [Parameter]
+    public string ParentPath { get; set; }
+
+    [Parameter]
+    public string Path { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        _recentDelay.Elapsed += RecentDelayElapsed;
+
+        _value = _clientService.GetValue(Path);
+        _messageCount = _clientService.GetMessageCount(Path);
+        _expanded = _clientService.GetExpanded(Path);
+
+        _clientService.ValueUpdated += ClientValueUpdated;
+        _clientService.MessageCountUpdated += ClientMessageCountUpdated;
+        _clientService.ExpandedChanged += ClientExpandedChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        _clientService.ValueUpdated -= ClientValueUpdated;
+        _clientService.MessageCountUpdated -= ClientMessageCountUpdated;
+        _clientService.ExpandedChanged -= ClientExpandedChanged;
+    }
+
+    private async void ClientValueUpdated(string path, string value)
+    {
+        if (path == Path)
+        {
+            _value = value;
+            _recent = true;
+            _recentDelay.Set();
+            await InvokeAsync(StateHasChanged);
+        }
+        else if (TrakHoundPath.IsChildOf(Path, path))
+        {
+            _recent = true;
+            _recentDelay.Set();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void ClientMessageCountUpdated(string path, long count)
+    {
+        if (path == Path)
+        {
+            _messageCount++;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void ClientExpandedChanged(string path, bool expanded)
+    {
+        if (path == Path)
+        {
+            _expanded = expanded;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void RecentDelayElapsed(object sender, EventArgs args)
+    {
+        _recent = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

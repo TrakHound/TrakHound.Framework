@@ -1,0 +1,537 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/streams"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Http
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="Stream Metrics - Diagnostics" />
+
+<div class="websocket-metrics-page" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-plug-circle-bolt"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Stream Metrics</span>
+                <span class="header-description">Open connections, messages, data and errors for the HTTP WebSocket and Server-Sent Events streams (API, Workers, Functions, Logs and Messages) · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <a class="btn btn-light" href="@($"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/connections/api/streams")" title="Every open API Stream, including those opened inside the Instance (by Apps, Workers, Functions and other APIs), with the recently closed ones"><span class="icon fa-sharp fa-solid fa-signal-stream"></span>API Streams</a>
+
+        <MetricsDisabledNotice Area="Streams" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (metrics != null)
+            {
+                var samples = GetSamples();
+
+                @* Current values (also the text equivalent of each chart Series) *@
+                <div class="stat-tiles">
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-1"></span>Open Connections</span>
+                        <span class="stat-value">@metrics.OpenConnectionCount.ToString("N0")</span>
+                        <span class="stat-detail">peak @metrics.PeakConnectionCount.ToString("N0") · @metrics.TotalConnectionCount.ToString("N0") total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-2"></span>Messages Sent</span>
+                        <span class="stat-value">@FormatRate(metrics.MessageSentRate)<span class="stat-unit">msg/s</span></span>
+                        <span class="stat-detail">@metrics.TotalMessagesSent.ToString("N0") total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-3"></span>Messages Received</span>
+                        <span class="stat-value">@FormatRate(metrics.MessageReceivedRate)<span class="stat-unit">msg/s</span></span>
+                        <span class="stat-detail">@metrics.TotalMessagesReceived.ToString("N0") total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-4"></span>Data Sent</span>
+                        <span class="stat-value">@FormatBytes(metrics.ByteSentRate)<span class="stat-unit">/s</span></span>
+                        <span class="stat-detail">@FormatBytes(metrics.TotalBytesSent) total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-5"></span>Data Received</span>
+                        <span class="stat-value">@FormatBytes(metrics.ByteReceivedRate)<span class="stat-unit">/s</span></span>
+                        <span class="stat-detail">@FormatBytes(metrics.TotalBytesReceived) total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-6"></span>Errors</span>
+                        <span class="stat-value">@FormatRate(metrics.ErrorRate)<span class="stat-unit">err/s</span></span>
+                        <span class="stat-detail">@metrics.TotalErrorCount.ToString("N0") total · send and read failures</span>
+                    </div>
+                </div>
+
+                <div class="chart-grid">
+                    <MetricsChart TItem="StreamSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Open Connections"
+                                  Subtitle="@($"last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@connectionSeries"
+                                  Area="true"
+                                  ValueFormatter="@FormatCount" />
+
+                    <MetricsChart TItem="StreamSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Messages"
+                                  Subtitle="@($"per second · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@messageSeries"
+                                  ValueFormatter="@FormatRate" />
+
+                    <MetricsChart TItem="StreamSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Data"
+                                  Subtitle="@($"bytes/s · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@dataSeries"
+                                  ValueFormatter="@FormatByteRate" />
+                </div>
+
+                <div class="section-title">Open Connections <span class="section-subtitle">@metrics.OpenConnectionCount.ToString("N0") open</span></div>
+                @if (!metrics.Connections.IsNullOrEmpty())
+                {
+                    <div class="table-panel connections-panel">
+                        <RadzenDataGrid Data="@metrics.Connections"
+                                        TItem="TrakHoundStreamConnectionMetrics"
+                                        Density="Density.Compact"
+                                        AllowSorting="true"
+                                        AllowColumnResize="true">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="Type" Title="Type" Width="130px">
+                                    <Template Context="connection">
+                                        <span class="stream-type"><span class="icon @GetTypeIcon(connection.Type)"></span>@GetTypeName(connection.Type)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="Transport" Title="Transport" Width="100px">
+                                    <Template Context="connection">
+                                        <span title="@GetTransportDescription(connection.Transport)">@GetTransportName(connection.Transport)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="Path" Title="Path" MinWidth="220px">
+                                    <Template Context="connection">
+                                        <span class="path" title="@connection.Route">@connection.Path</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="RemoteAddress" Title="Client" Width="140px" />
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="Connected" Title="Duration" Width="110px">
+                                    <Template Context="connection">
+                                        <span class="number" title="Connected @connection.Connected.ToLocalTime()">@((DateTime.UtcNow - connection.Connected).ToFormattedString())</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="MessagesSent" Title="Sent" Width="95px" TextAlign="TextAlign.Right">
+                                    <Template Context="connection">
+                                        <span class="number">@connection.MessagesSent.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="MessagesReceived" Title="Received" Width="95px" TextAlign="TextAlign.Right">
+                                    <Template Context="connection">
+                                        <span class="number">@connection.MessagesReceived.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="BytesSent" Title="Data Sent" Width="100px" TextAlign="TextAlign.Right">
+                                    <Template Context="connection">
+                                        <span class="number">@FormatBytes(connection.BytesSent)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="BytesReceived" Title="Data Received" Width="115px" TextAlign="TextAlign.Right">
+                                    <Template Context="connection">
+                                        <span class="number">@FormatBytes(connection.BytesReceived)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="ErrorCount" Title="Errors" Width="80px" TextAlign="TextAlign.Right">
+                                    <Template Context="connection">
+                                        <span class="number @(connection.ErrorCount > 0 ? "has-errors" : null)">@connection.ErrorCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamConnectionMetrics" Property="LastActivity" Title="Last Activity" Width="120px">
+                                    <Template Context="connection">
+                                        <span class="number">@FormatTime(connection.LastActivity)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+                }
+                else
+                {
+                    <div class="section-empty">No Stream connections are open</div>
+                }
+
+                <div class="section-title">Endpoints <span class="section-subtitle">since the Instance started</span></div>
+                @if (!metrics.Endpoints.IsNullOrEmpty())
+                {
+                    <div class="table-panel endpoints-panel">
+                        <RadzenDataGrid Data="@metrics.Endpoints"
+                                        TItem="TrakHoundStreamEndpointMetrics"
+                                        Density="Density.Compact"
+                                        AllowSorting="true"
+                                        AllowColumnResize="true">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="Type" Title="Type" Width="130px">
+                                    <Template Context="endpoint">
+                                        <span class="stream-type"><span class="icon @GetTypeIcon(endpoint.Type)"></span>@GetTypeName(endpoint.Type)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="Transport" Title="Transport" Width="100px">
+                                    <Template Context="endpoint">
+                                        <span title="@GetTransportDescription(endpoint.Transport)">@GetTransportName(endpoint.Transport)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="Route" Title="Route" MinWidth="220px" />
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="OpenConnectionCount" Title="Open" Width="75px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number">@endpoint.OpenConnectionCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="TotalConnectionCount" Title="Connections" Width="105px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number">@endpoint.TotalConnectionCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="TotalMessagesSent" Title="Sent" Width="95px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number">@endpoint.TotalMessagesSent.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="TotalMessagesReceived" Title="Received" Width="95px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number">@endpoint.TotalMessagesReceived.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="TotalBytesSent" Title="Data Sent" Width="100px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number">@FormatBytes(endpoint.TotalBytesSent)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="TotalBytesReceived" Title="Data Received" Width="115px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number">@FormatBytes(endpoint.TotalBytesReceived)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="TotalErrorCount" Title="Errors" Width="80px" TextAlign="TextAlign.Right">
+                                    <Template Context="endpoint">
+                                        <span class="number @(endpoint.TotalErrorCount > 0 ? "has-errors" : null)">@endpoint.TotalErrorCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundStreamEndpointMetrics" Property="LastConnected" Title="Last Connected" Width="130px">
+                                    <Template Context="endpoint">
+                                        <span class="number">@FormatTime(endpoint.LastConnected)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+                }
+                else
+                {
+                    <div class="section-empty">No Stream connections since the Instance started</div>
+                }
+
+                <div class="section-title">Closed Connections</div>
+                <div class="closed-panel">
+                    <div class="closed-stat">
+                        <span class="closed-label">Average Duration</span>
+                        <span class="closed-value">@(HasClosedConnections ? FormatDuration(metrics.AverageDuration) : "-")</span>
+                    </div>
+                    <div class="closed-stat">
+                        <span class="closed-label">Longest</span>
+                        <span class="closed-value">@(HasClosedConnections ? FormatDuration(metrics.MaxDuration) : "-")</span>
+                    </div>
+                    <div class="closed-stat">
+                        <span class="closed-label" title="WebSocket and Event Stream requests that were not accepted (ex. the Stream was not found)">Rejected</span>
+                        <span class="closed-value">@metrics.TotalRejectedCount.ToString("N0")</span>
+                    </div>
+                    @if (!metrics.CloseReasons.IsNullOrEmpty())
+                    {
+                        <div class="close-reasons">
+                            @foreach (var closeReason in metrics.CloseReasons)
+                            {
+                                <span class="close-reason" title="@GetCloseReasonDescription(closeReason.Reason)">@closeReason.Reason<span class="close-reason-count">@closeReason.Count.ToString("N0")</span></span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-plug-circle-bolt"></span>
+                    <span class="empty-title">No Stream Metrics</span>
+                    <span class="empty-description">Stream Metrics are not available for this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+
+    private readonly Queue<StreamSample> _history = new Queue<StreamSample>();
+    private readonly object _lock = new object();
+
+    private TrakHoundStreamMetrics metrics;
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private volatile bool disposed;
+
+    // Each Series has its own color slot across all charts on the page
+    private MetricsChartSeries[] connectionSeries;
+    private MetricsChartSeries[] messageSeries;
+    private MetricsChartSeries[] dataSeries;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    private bool HasClosedConnections => metrics != null && metrics.TotalConnectionCount > metrics.OpenConnectionCount;
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Stream Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            lock (_lock) _history.Clear();
+            metrics = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Streams", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var updatedMetrics = await client.Streams.GetMetrics();
+        var now = DateTime.UtcNow;
+
+        lock (_lock)
+        {
+            _history.Enqueue(StreamSample.Create(updatedMetrics, now));
+            while (_history.Count > 0 && now - _history.Peek().Timestamp > _window) _history.Dequeue();
+        }
+
+        metrics = updatedMetrics;
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (disposed || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                if (!disposed) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private IEnumerable<StreamSample> GetSamples()
+    {
+        lock (_lock) return _history.ToArray();
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        connectionSeries = new[]
+        {
+            new MetricsChartSeries("Open", nameof(StreamSample.OpenConnections), colors[0])
+        };
+        messageSeries = new[]
+        {
+            new MetricsChartSeries("Sent", nameof(StreamSample.MessageSentRate), colors[1]),
+            new MetricsChartSeries("Received", nameof(StreamSample.MessageReceivedRate), colors[2]),
+            new MetricsChartSeries("Errors", nameof(StreamSample.ErrorRate), colors[5])
+        };
+        dataSeries = new[]
+        {
+            new MetricsChartSeries("Sent", nameof(StreamSample.ByteSentRate), colors[3]),
+            new MetricsChartSeries("Received", nameof(StreamSample.ByteReceivedRate), colors[4])
+        };
+    }
+
+    private static double GetSampleValue(StreamSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(StreamSample sample) => sample.Timestamp;
+
+
+    private static string GetTransportName(string transport) => !string.IsNullOrEmpty(transport) ? transport : TrakHoundStreamMetricsCollector.WebSocketTransport;
+
+    private static string GetTransportDescription(string transport)
+    {
+        if (transport == TrakHoundStreamMetricsCollector.EventStreamTransport) return "Server-Sent Events (text/event-stream)";
+        return "WebSocket";
+    }
+
+    private static string GetTypeName(string type)
+    {
+        switch (type)
+        {
+            case "Api": return "API";
+            case "MessageQueues": return "Message Queues";
+            default: return type;
+        }
+    }
+
+    private static string GetTypeIcon(string type)
+    {
+        switch (type)
+        {
+            case "Api": return "fa-solid fa-sharp fa-circle-location-arrow";
+            case "Workers": return "fa-solid fa-sharp fa-gears";
+            case "Functions": return "fa-solid fa-sharp fa-code";
+            case "Logs": return "fa-solid fa-sharp fa-list";
+            case "Messages": return "fa-solid fa-sharp fa-message";
+            case "MessageQueues": return "fa-solid fa-sharp fa-inbox";
+            default: return "fa-solid fa-sharp fa-plug";
+        }
+    }
+
+    private static string GetCloseReasonDescription(string reason)
+    {
+        switch (reason)
+        {
+            case TrakHoundStreamMetricsCollector.ClientClosedReason: return "The client closed the WebSocket";
+            case TrakHoundStreamMetricsCollector.DisconnectedReason: return "The client went away without closing the WebSocket, or ended the Event Stream (ex. a closed browser tab or a dropped network)";
+            case TrakHoundStreamMetricsCollector.ErrorReason: return "The connection ended because of an error";
+            case TrakHoundStreamMetricsCollector.MessageTooBigReason: return "The client sent a message larger than the 16 MB limit";
+            case TrakHoundStreamMetricsCollector.ShutdownReason: return "Closed while the Instance was shutting down";
+            default: return reason;
+        }
+    }
+
+
+    // The axis can step in halves for small counts (so whole numbers alone would repeat labels)
+    private static string FormatCount(double value) => value.ToString("0.#");
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatDuration(double milliseconds) => TimeSpan.FromMilliseconds(milliseconds).ToFormattedString();
+
+    private static string FormatBytes(double value)
+    {
+        if (value >= 1024 * 1024 * 1024) return $"{value / (1024 * 1024 * 1024):0.#} GB";
+        if (value >= 1024 * 1024) return $"{value / (1024 * 1024):0.#} MB";
+        if (value >= 1024) return $"{value / 1024:0.#} KB";
+        return value >= 10 ? $"{value:0} B" : $"{value:0.#} B";
+    }
+
+    private static string FormatByteRate(double value) => $"{FormatBytes(value)}/s";
+
+    private static string FormatTime(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

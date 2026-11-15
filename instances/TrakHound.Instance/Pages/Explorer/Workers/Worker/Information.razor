@@ -1,0 +1,167 @@
+﻿@using TrakHound.Workers
+
+@if (WorkerInformation != null)
+{
+    <div class="information-panel">
+
+        <div class="properties-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Worker ID</td>
+                        <td class="value">@WorkerInformation.Id</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Worker Name</td>
+                        <td class="value">@WorkerInformation.Name</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Worker Description</td>
+                        <td class="value">@WorkerInformation.Description</td>
+                    </tr>
+                    <tr>
+                        <td class="label">TrakHound Version</td>
+                        <td class="value">@WorkerInformation.TrakHoundVersion</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="performance-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">CPU Usage</td>
+                        <td class="value"><TrakHound.Instance.Pages.Explorer.Workers.CpuUsageBar Value="@WorkerInformation.CpuUsage" /></td>
+                    </tr>
+                    <tr>
+                        <td class="label">CPU Time</td>
+                        <td class="value">@FormatCpuTime(WorkerInformation.CpuTime)</td>
+                    </tr>
+                    <tr>
+                        <td class="chart" colspan="2">
+                            <TrakHound.Instance.Pages.Explorer.Workers.CpuUsageChart Samples="@CpuSamples" Window="@CpuWindow" />
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="configuration-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Configuration ID</td>
+                        <td class="value">@WorkerInformation.ConfigurationId</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="package-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Package ID</td>
+                        <td class="value">@WorkerInformation.PackageId</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package Version</td>
+                        <td class="value">@WorkerInformation.PackageVersion</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package UUID</td>
+                        <td class="value">@WorkerInformation.PackageUuid</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package Hash</td>
+                        <td class="value">@WorkerInformation.PackageHash</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package Build Date</td>
+                        <td class="value">@(WorkerInformation.PackageBuildDate > DateTime.MinValue ? WorkerInformation.PackageBuildDate.ToLocalTime().ToString() : "-")</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        @if (WorkerInformation.Repository != null)
+        {
+            <div class="repository-panel">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td class="label">Repository</td>
+                            <td class="value"><a href="@WorkerInformation.Repository" target="_blank">@WorkerInformation.Repository</a></td>
+                        </tr>
+                        <tr>
+                            <td class="label">Repository Branch</td>
+                            <td class="value"><a href="@GetRepositoryBranchLink(WorkerInformation)" target="_blank">@WorkerInformation.RepositoryBranch</a></td>
+                        </tr>
+                        <tr>
+                            <td class="label">Repository Directory</td>
+                            <td class="value"><a href="@GetRepositoryDirectoryLink(WorkerInformation)" target="_blank">@WorkerInformation.RepositoryDirectory</a></td>
+                        </tr>
+                        <tr>
+                            <td class="label">Repository Commit</td>
+                            <td class="value"><a href="@GetRepositoryCommitLink(WorkerInformation)" target="_blank">@WorkerInformation.RepositoryCommit</a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (WorkerInformation.PackageReadMe != null)
+        {
+            <div class="readme-panel">
+                <MarkdownContent Markdown="@WorkerInformation.PackageReadMe" />
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundWorkerInformation WorkerInformation { get; set; }
+
+    [Parameter]
+    public IEnumerable<TrakHoundWorkerCpuSample> CpuSamples { get; set; }
+
+    [Parameter]
+    public TimeSpan CpuWindow { get; set; } = TimeSpan.FromMinutes(10);
+
+
+    private static string FormatCpuTime(double milliseconds)
+    {
+        var time = TimeSpan.FromMilliseconds(milliseconds);
+        return $"{(int)time.TotalHours}:{time.Minutes:00}:{time.Seconds:00}.{time.Milliseconds:000}";
+    }
+
+    private static string GetRepositoryBranchLink(TrakHoundWorkerInformation information)
+    {
+        var baseUrl = information.Repository;
+        var branch = information.RepositoryBranch;
+
+        return Url.Combine(baseUrl, "tree", branch); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryDirectoryLink(TrakHoundWorkerInformation information)
+    {
+        var baseUrl = information.Repository;
+        var branch = information.RepositoryBranch;
+        var directory = information.RepositoryDirectory;
+
+        return Url.Combine(baseUrl, "tree", branch, directory); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryCommitLink(TrakHoundWorkerInformation information)
+    {
+        var baseUrl = information.Repository;
+        var commit = information.RepositoryCommit;
+
+        return Url.Combine(baseUrl, "commit", commit); // May need to revise this as this might only be valid for GitHub
+    }
+
+}

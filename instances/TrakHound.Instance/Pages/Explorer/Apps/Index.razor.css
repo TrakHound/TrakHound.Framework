@@ -1,0 +1,415 @@
+.apps-page {
+    --status-loaded: var(--colorGreen, #19b419);
+    --status-retired: var(--colorOrange, #ff8b00);
+    --status-failed: var(--colorRed, #d92b2b);
+    display: grid;
+    grid-template-rows: max-content max-content max-content 1fr;
+    /* minmax(0, 1fr) so a wide table scrolls inside its panel instead of widening the page past the window */
+    grid-template-columns: minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-panel .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+.header-panel .header-text {
+    grid-column: 2;
+}
+
+    .header-panel .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+/* Toolbar */
+.toolbar-panel {
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+}
+
+.search-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: 280px;
+    max-width: 100%;
+    padding: 4px 10px;
+    border: 1px solid var(--borderColorLight);
+    border-radius: 2px;
+    background: var(--panelBackgroundMedium);
+}
+
+    .search-box .icon {
+        font-size: var(--fontSizeSm);
+        color: var(--textLight);
+    }
+
+    .search-box input {
+        flex: 1;
+        min-width: 0;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+    }
+
+.action-message {
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .action-message .icon {
+        margin-right: 6px;
+        color: var(--status-loaded);
+    }
+
+    .action-message.failed .icon {
+        color: var(--status-failed);
+    }
+
+    .action-message.prompt {
+        font-weight: bold;
+    }
+
+        .action-message.prompt .icon {
+            color: var(--status-retired);
+        }
+
+/* Summary Tiles (Apps, Retired and Not Loaded filter the table) */
+.summary-panel {
+    grid-row: 3;
+    padding: 0 10px;
+}
+
+.summary-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    max-width: 900px;
+    margin: 0 0 10px;
+}
+
+.summary-tile {
+    --statusColor: var(--borderColorLight);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 14px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 4px solid var(--statusColor);
+    border-radius: 3px;
+    color: var(--textDark);
+    text-align: left;
+}
+
+button.summary-tile {
+    cursor: pointer;
+}
+
+    button.summary-tile:hover,
+    .summary-tile.selected {
+        border-color: var(--accent);
+        border-left-color: var(--statusColor);
+    }
+
+    .summary-tile.selected {
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .summary-tile.apps { --statusColor: var(--accent); }
+    .summary-tile.retired { --statusColor: var(--status-retired); }
+    .summary-tile.not-loaded { --statusColor: var(--status-failed); }
+    .summary-tile.zero { --statusColor: var(--borderColorLight); }
+
+    .summary-tile .tile-label {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+        .summary-tile .tile-label .icon {
+            margin-right: 7px;
+            color: var(--statusColor);
+        }
+
+    .summary-tile.static .tile-label .icon,
+    .summary-tile.zero .tile-label .icon {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-value {
+        font-size: var(--fontSize2xl);
+        font-weight: bold;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .summary-tile.zero .tile-value {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-detail {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+/* Table */
+.status-panel {
+    grid-row: 4;
+    min-width: 0;
+    padding: 0 10px 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .status-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: auto;
+    }
+
+        .status-panel ::deep .rz-data-grid td {
+            border-right: 1px solid var(--tableBorderColor);
+            padding: 3px 10px;
+        }
+
+            .status-panel ::deep .rz-data-grid td:last-child {
+                border-right: none;
+            }
+
+    .status-panel ::deep .rz-cell-data {
+        font-size: var(--fontSizeSm);
+    }
+
+.number {
+    font-variant-numeric: tabular-nums;
+}
+
+/* App (icon, name, package) */
+.app-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.app-cell ::deep .app-icon,
+.app-cell ::deep .app-icon-placeholder {
+    flex: none;
+    width: 24px;
+    height: 24px;
+}
+
+.app-cell ::deep .app-icon {
+    object-fit: contain;
+}
+
+.app-cell ::deep .app-icon-placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--textLight);
+}
+
+.app-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.app-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-package {
+    font-size: var(--fontSizeXs);
+    color: var(--textMild);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Route */
+.route-link .icon {
+    margin-left: 6px;
+    font-size: 10px;
+}
+
+.route-text {
+    color: var(--textMild);
+}
+
+/* Version */
+.version-tag {
+    margin-left: 6px;
+    padding: 0 5px;
+    font-size: var(--fontSizeXs);
+    color: var(--textMild);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+}
+
+/* Status (dot + text) */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--textDark);
+}
+
+.status-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--textLight);
+}
+
+.status-badge.loaded .status-dot { background: var(--status-loaded); }
+.status-badge.retired .status-dot { background: var(--status-retired); }
+.status-badge.not-loaded .status-dot { background: var(--status-failed); }
+
+.status-badge.retired,
+.status-badge.not-loaded {
+    font-weight: bold;
+}
+
+a.status-badge:hover {
+    text-decoration: underline;
+}
+
+/* Actions (icon buttons) */
+.actions {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--accent);
+    font-size: var(--fontSizeSm);
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+    .btn-action:hover {
+        border-color: var(--borderColorLight);
+        background: var(--panelBackgroundMedium);
+    }
+
+/* Second click confirms a Reload (same size, so nothing shifts) */
+.btn-action.btn-confirm {
+    color: #fff;
+    background: var(--status-retired);
+    border-color: var(--status-retired);
+}
+
+/* Frozen Actions column : Radzen gives frozen cells their own (light) stripe colors, so match them to the theme's table rows
+   (frozen cells need an opaque background so the columns scrolled beneath them don't show through) */
+.status-panel ::deep .rz-data-grid {
+    --rz-grid-frozen-cell-background-color: var(--tableBackground, var(--panelBackground));
+    --rz-grid-frozen-stripe-background-color: var(--tableRowAltBackground, var(--panelBackground));
+    --rz-grid-frozen-stripe-odd-background-color: var(--tableBackground, var(--panelBackground));
+    /* The frozen column's edge (Radzen's default is a light gray, unlike the other cell borders) */
+    --rz-grid-frozen-cell-border: 1px solid var(--tableBorderColor, var(--borderColorLight));
+}
+
+    /* Header cells use the header border color (like the other header cells) */
+    .status-panel ::deep .rz-data-grid thead th {
+        --rz-grid-frozen-cell-border: 1px solid var(--tableHeaderBorderColor, var(--tableBorderColor, var(--borderColorLight)));
+    }
+
+/* Empty States */
+.empty-message {
+    padding: 20px 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.empty-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+    .empty-panel .icon {
+        font-size: var(--fontSize3xl);
+        color: var(--textVeryLight);
+        margin-bottom: 6px;
+    }
+
+    .empty-panel .empty-title {
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .empty-panel .empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+    .empty-panel .btn {
+        margin-top: 10px;
+    }
+
+        .empty-panel .btn .icon {
+            color: inherit;
+        }
+
+.loading-panel {
+    grid-row: 4;
+}

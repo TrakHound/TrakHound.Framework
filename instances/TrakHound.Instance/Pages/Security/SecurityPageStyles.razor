@@ -1,0 +1,12 @@
+@* The styles of the Security pages (tables, sections, chips, forms and modals), shared with the Access pages in Configuration (Security Profiles, Zones, Zone Map) *@
+
+<div class="security-page-styles">
+    @ChildContent
+</div>
+
+@code {
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+}

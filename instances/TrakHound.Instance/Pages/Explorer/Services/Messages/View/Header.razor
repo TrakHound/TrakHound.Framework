@@ -1,0 +1,64 @@
+﻿@implements IDisposable
+@rendermode InteractiveServer
+@inject ClientService _clientService
+
+<div class="toolbar">
+    <div class="toolbar-buttons">
+        @if (!_clientService.IsSubscribing)
+        {
+            <button class="btn btn-primary btn-subscribe" @onclick="Subscribe"><span class="icon fa-solid fa-sharp fa-play"></span>Subscribe</button>
+        }
+        else
+        {
+            <button class="btn btn-primary btn-subscribe disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Subscribe</button>
+        }
+    </div>
+    <div class="toolbar-filter">
+        <TextBox Value="@_topic" ValueChanged="TopicChanged" Submitted="TopicSubmitted" PlaceHolder="@($"Topic (ex. plant/+/temperature or {ClientService.DefaultTopic} for all) - press Enter to Subscribe")" />
+    </div>
+</div>
+
+@code {
+
+    private string _topic;
+
+
+    protected override void OnInitialized()
+    {
+        _topic = _clientService.SubscribePath != ClientService.DefaultTopic ? _clientService.SubscribePath : null;
+        _clientService.Updated += ClientUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        _clientService.Updated -= ClientUpdated;
+    }
+
+    private void TopicChanged(string topic)
+    {
+        // Only store the value: subscribing on every keystroke would reconnect to the Broker repeatedly
+        _topic = topic;
+    }
+
+    private async Task TopicSubmitted(string topic)
+    {
+        _topic = topic;
+        await Subscribe();
+    }
+
+    private async Task Subscribe()
+    {
+        // Errors are reported through ClientService.SubscribeError (shown by the page)
+        await _clientService.Subscribe(_topic?.Trim());
+    }
+
+    private async void ClientUpdated(object sender, EventArgs args)
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+}

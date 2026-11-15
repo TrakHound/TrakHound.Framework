@@ -1,0 +1,13 @@
+{
+  // Settings for the local debug host (Program.cs, Debug.razor and DebugRoutes.razor). Left out of the package
+  "instanceUrl": "http://localhost:8472",
+  "apiKey": "",
+
+  // Configuration Parameters (as set in the App's Configuration on an Instance)
+  "parameters": {
+    "apiRoute": "example/api"
+  },
+
+  // The Theme shown until one is picked: "light" or "dark"
+  "theme": "light"
+}

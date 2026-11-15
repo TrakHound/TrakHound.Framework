@@ -1,0 +1,200 @@
+.information-panel {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    padding-top: 15px;
+}
+
+.header-panel {
+    grid-row: 1;
+    padding: 0px 10px 15px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .header-panel .icon {
+        font-size: var(--fontSizeLg);
+        color: var(--textMild);
+        margin-right: 5px;
+    }
+
+    .header-panel .title {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        margin-right: 10px;
+    }
+
+    .header-panel .subtitle {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    grid-row: 2;
+    padding: 10px 0px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+/* The Query button and the From and To dates wrap on narrow pages */
+.toolbar-panel-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 20px;
+}
+
+.toolbar-panel .btn {
+    width: 130px;
+}
+
+.toolbar-panel ::deep .rz-calendar input {
+    font-size: var(--fontSizeBase);
+}
+
+.toolbar-panel label {
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+    line-height: 40px;
+    margin-right: 10px;
+}
+
+.table-panel {
+    grid-row: 3;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .table-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .table-panel ::deep td {
+        padding: 0;
+    }
+
+/*    .table-panel ::deep tr:last-child td {
+        border-bottom: 1px solid var(--borderColorMild);
+    }*/
+
+        .table-panel ::deep td .rz-cell-data {
+            padding: 3px 10px;
+            font-size: var(--fontSizeSm);
+        }
+
+        .table-panel ::deep td.id .rz-cell-data {
+            font-size: var(--fontSizeXs);
+            font-family: var(--fontMono);
+            color: var(--textMild);
+        }
+
+        .table-panel ::deep td.status .rz-cell-data {
+            /*font-weight: bold;*/
+        }
+
+        .table-panel ::deep td.status .rz-cell-data .icon {
+            margin-right: 7px;
+        }
+
+            .table-panel ::deep td.status .rz-cell-data .started {
+                color: var(--colorGreen);
+            }
+
+            .table-panel ::deep td.status .rz-cell-data .stopped {
+                color: var(--colorRed);
+            }
+
+            .table-panel ::deep td.status .rz-cell-data .running {
+                color: var(--colorGreen);
+            }
+
+            .table-panel ::deep td.status .rz-cell-data .wait {
+                color: var(--colorOrange);
+            }
+
+            .table-panel ::deep td.status .rz-cell-data .completed {
+                color: var(--accentLight);
+            }
+
+            .table-panel ::deep td.status .rz-cell-data .error {
+                color: var(--colorRed);
+            }
+
+
+.loading-panel {
+    display: grid;
+    grid-template-rows: 1fr max-content 1fr;
+    grid-template-columns: 1fr max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .loading-panel .loading-container {
+        grid-row: 2;
+        grid-column: 2;
+        text-align: center;
+    }
+
+    .loading-panel .icon {
+        display: block;
+        font-size: 1.75rem;
+        color: var(--textLight);
+        margin: 0;
+        height: 28px;
+        text-align: center;
+    }
+
+    .loading-panel .message {
+        display: block;
+        font-size: var(--fontSizeMd);
+        font-weight: bold;
+        color: var(--textMild);
+        margin-top: 20px;
+        text-align: center;
+    }
+
+
+.not-found-panel {
+    display: grid;
+    grid-template-rows: 1fr max-content 1fr;
+    grid-template-columns: 1fr max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--borderColorLight);
+}
+
+    .not-found-panel .not-found-container {
+        grid-row: 2;
+        grid-column: 2;
+        text-align: center;
+    }
+
+    .not-found-panel .icon {
+        display: block;
+        font-size: 2.25rem;
+        color: var(--textVeryLight);
+        margin: 0;
+        height: 36px;
+        text-align: center;
+    }
+
+    .not-found-panel .title {
+        display: block;
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textMild);
+        margin-top: 20px;
+        text-align: center;
+    }
+
+    .not-found-panel .subtitle {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+        margin-top: 5px;
+        text-align: center;
+    }

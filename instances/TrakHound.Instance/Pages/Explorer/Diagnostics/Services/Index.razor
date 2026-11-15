@@ -1,0 +1,630 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/services"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="Service Metrics - Diagnostics" />
+
+<div class="service-metrics-page" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-server"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Service Metrics</span>
+                <span class="header-description">Request rate, errors and response time for each Service · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <MetricsDisabledNotice Area="Services" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (!tableItems.IsNullOrEmpty())
+            {
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@tableItems"
+                                    TItem="TableItem"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Name" Title="Service" MinWidth="140px">
+                                <Template Context="item">
+                                    <span title="@item.ServiceId">@item.Name</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="PackageId" Title="Package" MinWidth="140px">
+                                <Template Context="item">
+                                    <span>@item.PackageId</span>
+                                    @if (!string.IsNullOrEmpty(item.PackageVersion))
+                                    {
+                                        <span class="version">@item.PackageVersion</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Types" Title="Types" MinWidth="110px">
+                                <Template Context="item">
+                                    <span class="source-types" title="@item.Types">@item.Types</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalRequests" Title="Requests" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.TotalRequests.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="RequestRate" Title="Req/s" Width="85px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatRate(item.RequestRate)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalErrors" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number @(item.TotalErrors > 0 ? "error" : null)">@item.TotalErrors.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="AverageDuration" Title="Avg Time" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.HasRecentRequests ? FormatDuration(item.AverageDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="MaxDuration" Title="Max Time" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.HasRecentRequests ? FormatDuration(item.MaxDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastRequested" Title="Last Request" Width="130px">
+                                <Template Context="item">
+                                    <span class="number">@FormatTimestamp(item.LastRequested)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = tableItems.FirstOrDefault(o => o.ServiceId == selectedServiceId);
+                if (selected != null)
+                {
+                    var samples = GetSamples(selected.ServiceId);
+
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <span class="detail-name">@selected.Name</span>
+                            @if (!string.IsNullOrEmpty(selected.PackageId))
+                            {
+                                <span class="detail-type">@selected.PackageId @selected.PackageVersion</span>
+                            }
+                            <span class="detail-state"><span class="icon fa-regular fa-sharp fa-clock"></span>@(selected.LastRequested != null ? $"Last request {FormatTimestamp(selected.LastRequested)}" : "No requests yet")</span>
+                        </div>
+
+                        @* Current values (also the text equivalent of each chart Series) *@
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-1"></span>Requests</span>
+                                <span class="stat-value">@FormatRate(selected.RequestRate)<span class="stat-unit">req/s</span></span>
+                                <span class="stat-detail">@selected.TotalRequests.ToString("N0") total</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-2"></span>Errors</span>
+                                <span class="stat-value">@FormatRate(selected.ErrorRate)<span class="stat-unit">err/s</span></span>
+                                <span class="stat-detail">@selected.TotalErrors.ToString("N0") total (@GetErrorPercent(selected)) · status ≥ 400</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-3"></span>Avg Response</span>
+                                <span class="stat-value">@(selected.HasRecentRequests ? FormatDuration(selected.AverageDuration) : "-")</span>
+                                <span class="stat-detail">last @_metricsWindowText</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-4"></span>Max Response</span>
+                                <span class="stat-value">@(selected.HasRecentRequests ? FormatDuration(selected.MaxDuration) : "-")</span>
+                                <span class="stat-detail">last @_metricsWindowText</span>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(selected.LastErrorMessage))
+                        {
+                            <div class="last-error">
+                                <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                                <span class="last-error-text">Last Error (@FormatTimestamp(selected.LastError)) : @selected.LastErrorMessage</span>
+                            </div>
+                        }
+
+                        <div class="chart-grid">
+                            <MetricsChart TItem="ServiceSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                          Title="Requests"
+                                          Subtitle="@($"per second · last {_windowText}")"
+                                          Samples="@samples"
+                                          Series="@requestSeries"
+                                          ValueFormatter="@FormatRate" />
+
+                            <MetricsChart TItem="ServiceSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                          Title="Response Time"
+                                          Subtitle="@($"milliseconds · last {_windowText}")"
+                                          Samples="@samples"
+                                          Series="@durationSeries"
+                                          ValueFormatter="@FormatDuration" />
+                        </div>
+
+                        @if (!selected.Operations.IsNullOrEmpty())
+                        {
+                            <div class="section-title">Operations</div>
+                            <div class="table-panel endpoints-panel">
+                                <RadzenDataGrid Data="@selected.Operations"
+                                                TItem="TrakHoundServiceOperationMetrics"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="Type" Title="Type" Width="120px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="Operation" Title="Operation" MinWidth="160px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="TotalRequestCount" Title="Requests" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="operation">
+                                                <span class="number">@operation.TotalRequestCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="TotalErrorCount" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="operation">
+                                                <span class="number @(operation.TotalErrorCount > 0 ? "error" : null)">@operation.TotalErrorCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="operation">
+                                                <span class="number">@FormatDuration(operation.AverageDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="MaxDuration" Title="Max Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="operation">
+                                                <span class="number">@FormatDuration(operation.MaxDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="LastStatusCode" Title="Last Status" Width="95px" TextAlign="TextAlign.Right">
+                                            <Template Context="operation">
+                                                <span class="number @(operation.LastStatusCode >= 400 ? "error" : null)">@(operation.LastStatusCode > 0 ? operation.LastStatusCode.ToString() : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceOperationMetrics" Property="LastRequested" Title="Last Request" Width="130px">
+                                            <Template Context="operation">
+                                                <span class="number">@FormatTimestamp(operation.LastRequested)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+
+                        @if (!selected.Routers.IsNullOrEmpty())
+                        {
+                            <div class="section-title">Routers <span class="section-subtitle">which Routers sent the requests</span></div>
+                            <div class="table-panel endpoints-panel">
+                                <RadzenDataGrid Data="@selected.Routers"
+                                                TItem="TrakHoundServiceRouterMetrics"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceRouterMetrics" Property="RouterId" Title="Router" MinWidth="160px">
+                                            <Template Context="router">
+                                                @if (router.RouterId == selected.ServiceId)
+                                                {
+                                                    <span title="@router.RouterId">Direct</span>
+                                                    <span class="version">this Service only</span>
+                                                }
+                                                else
+                                                {
+                                                    <span title="@router.RouterId">@GetRouterName(router.RouterId)</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceRouterMetrics" Property="TotalRequestCount" Title="Requests" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="router">
+                                                <span class="number">@router.TotalRequestCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceRouterMetrics" Property="TotalErrorCount" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="router">
+                                                <span class="number @(router.TotalErrorCount > 0 ? "error" : null)">@router.TotalErrorCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceRouterMetrics" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="router">
+                                                <span class="number">@FormatDuration(router.AverageDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundServiceRouterMetrics" Property="LastRequested" Title="Last Request" Width="130px">
+                                            <Template Context="router">
+                                                <span class="number">@FormatTimestamp(router.LastRequested)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-server"></span>
+                    <span class="empty-title">No Services</span>
+                    <span class="empty-description">No Services are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+
+    private readonly Dictionary<string, Queue<ServiceSample>> _history = new Dictionary<string, Queue<ServiceSample>>();
+    private readonly object _lock = new object();
+    private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>();
+
+    private IEnumerable<TrakHoundServiceInformation> services;
+    private Dictionary<string, string> routerNames = new Dictionary<string, string>(); // Router ID => Name
+    private IEnumerable<TableItem> tableItems;
+    private string selectedServiceId;
+    private string _metricsWindowText = "10 sec";
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    // Each Series has its own color slot across all charts on the page
+    private MetricsChartSeries[] requestSeries;
+    private MetricsChartSeries[] durationSeries;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Selects this Service (Configuration ID) when the page opens
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string ServiceId { get; set; }
+
+
+    public class TableItem
+    {
+        public string ServiceId { get; set; }
+        public string Name { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public long TotalRequests { get; set; }
+        public long TotalErrors { get; set; }
+        public double RequestRate { get; set; }
+        public double ErrorRate { get; set; }
+        public double AverageDuration { get; set; }
+        public double MaxDuration { get; set; }
+        public DateTime? LastRequested { get; set; }
+        public DateTime? LastError { get; set; }
+        public string LastErrorMessage { get; set; }
+        public IEnumerable<TrakHoundServiceOperationMetrics> Operations { get; set; }
+        public IEnumerable<TrakHoundServiceRouterMetrics> Routers { get; set; }
+
+        /// <summary>
+        /// The Service Types that received Requests (most Requests first)
+        /// </summary>
+        public string Types { get; set; }
+
+        public bool HasRecentRequests => RequestRate > 0;
+
+        public TableItem(string serviceId, TrakHoundServiceInformation information, TrakHoundServiceMetrics metrics)
+        {
+            ServiceId = serviceId;
+            Update(information, metrics);
+        }
+
+        public void Update(TrakHoundServiceInformation information, TrakHoundServiceMetrics metrics)
+        {
+            Name = !string.IsNullOrEmpty(information?.Name) ? information.Name : !string.IsNullOrEmpty(metrics?.Name) ? metrics.Name : ServiceId;
+            PackageId = information?.PackageId ?? metrics?.PackageId;
+            PackageVersion = information?.PackageVersion ?? metrics?.PackageVersion;
+
+            TotalRequests = metrics?.TotalRequestCount ?? 0;
+            TotalErrors = metrics?.TotalErrorCount ?? 0;
+            RequestRate = metrics?.RequestRate ?? 0;
+            ErrorRate = metrics?.ErrorRate ?? 0;
+            AverageDuration = metrics?.AverageDuration ?? 0;
+            MaxDuration = metrics?.MaxDuration ?? 0;
+            LastRequested = metrics?.LastRequested;
+            LastError = metrics?.LastError;
+            LastErrorMessage = metrics?.LastErrorMessage;
+            Operations = metrics?.Operations;
+            Routers = metrics?.Routers;
+
+            Types = null;
+            if (!(metrics?.Operations).IsNullOrEmpty())
+            {
+                Types = string.Join(", ", metrics.Operations
+                    .GroupBy(o => o.Type)
+                    .OrderByDescending(o => o.Sum(x => x.TotalRequestCount))
+                    .Select(o => o.Key));
+            }
+        }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Service Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            lock (_lock) _history.Clear();
+            tableItems = null;
+            _tableItemsById.Clear();
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+            if (!string.IsNullOrEmpty(ServiceId)) selectedServiceId = ServiceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Services", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client?.Services?.Drivers != null)
+            {
+                // List every configured Service (including those without Requests yet)
+                services = await client.Services.Drivers.GetDrivers();
+
+                var routers = client.Services.Routers != null ? await client.Services.Routers.GetRouters() : null;
+                routerNames = routers?.Where(o => !string.IsNullOrEmpty(o?.Id)).GroupBy(o => o.Id).ToDictionary(o => o.Key, o => o.First().Name) ?? new Dictionary<string, string>();
+
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var metrics = await client.Services.Drivers.GetMetrics();
+        var metricsByService = metrics?.Where(o => !string.IsNullOrEmpty(o?.ServiceId)).ToDictionary(o => o.ServiceId) ?? new Dictionary<string, TrakHoundServiceMetrics>();
+        var servicesById = services?.Where(o => !string.IsNullOrEmpty(o?.ConfigurationId)).GroupBy(o => o.ConfigurationId).ToDictionary(o => o.Key, o => o.First()) ?? new Dictionary<string, TrakHoundServiceInformation>();
+
+        var window = metricsByService.Values.FirstOrDefault()?.Window ?? 0;
+        if (window > 0) _metricsWindowText = $"{window} sec";
+
+        var now = DateTime.UtcNow;
+        var items = new List<TableItem>();
+
+        lock (_lock)
+        {
+            // Configured Services, plus Services that received Requests but are no longer configured
+            foreach (var serviceId in servicesById.Keys.Union(metricsByService.Keys))
+            {
+                metricsByService.TryGetValue(serviceId, out var serviceMetrics);
+                items.Add(GetTableItem(serviceId, servicesById.GetValueOrDefault(serviceId), serviceMetrics));
+
+                if (!_history.TryGetValue(serviceId, out var samples))
+                {
+                    samples = new Queue<ServiceSample>();
+                    _history.Add(serviceId, samples);
+                }
+
+                samples.Enqueue(ServiceSample.Create(serviceMetrics, now));
+                while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
+            }
+        }
+
+        SetTableItems(items.OrderBy(o => o.Name).ToList());
+
+        // Select the busiest Service by default (or if the selected one went away)
+        if (selectedServiceId == null || !items.Any(o => o.ServiceId == selectedServiceId))
+        {
+            selectedServiceId = items.OrderByDescending(o => o.TotalRequests).FirstOrDefault()?.ServiceId;
+        }
+    }
+
+    // Rows are updated in place (and the list kept while the Services are the same) so the grid
+    // doesn't replace every row on each update
+    private TableItem GetTableItem(string serviceId, TrakHoundServiceInformation information, TrakHoundServiceMetrics metrics)
+    {
+        if (_tableItemsById.TryGetValue(serviceId, out var item))
+        {
+            item.Update(information, metrics);
+            return item;
+        }
+
+        item = new TableItem(serviceId, information, metrics);
+        _tableItemsById[serviceId] = item;
+        return item;
+    }
+
+    private void SetTableItems(List<TableItem> items)
+    {
+        if (tableItems != null && tableItems.SequenceEqual(items)) return;
+
+        tableItems = items;
+
+        var ids = items.Select(o => o.ServiceId).ToHashSet();
+        foreach (var id in _tableItemsById.Keys.Where(o => !ids.Contains(o)).ToList()) _tableItemsById.Remove(id);
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private IEnumerable<ServiceSample> GetSamples(string serviceId)
+    {
+        lock (_lock)
+        {
+            return _history.TryGetValue(serviceId, out var samples) ? samples.ToArray() : Array.Empty<ServiceSample>();
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        selectedServiceId = args.Data?.ServiceId;
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        if (args.Data?.ServiceId == selectedServiceId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        requestSeries = new[]
+        {
+            new MetricsChartSeries("Requests", nameof(ServiceSample.RequestRate), colors[0]),
+            new MetricsChartSeries("Errors", nameof(ServiceSample.ErrorRate), colors[1])
+        };
+        durationSeries = new[]
+        {
+            new MetricsChartSeries("Average", nameof(ServiceSample.AverageDuration), colors[2]),
+            new MetricsChartSeries("Max", nameof(ServiceSample.MaxDuration), colors[3])
+        };
+    }
+
+    private static double GetSampleValue(ServiceSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(ServiceSample sample) => sample.Timestamp;
+
+
+    private string GetRouterName(string routerId)
+    {
+        var name = routerNames.GetValueOrDefault(routerId ?? string.Empty);
+        return !string.IsNullOrEmpty(name) ? name : routerId;
+    }
+
+    private static string GetErrorPercent(TableItem item)
+    {
+        if (item.TotalRequests < 1) return "0%";
+        return $"{(double)item.TotalErrors / item.TotalRequests:0.#%}";
+    }
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.##} s";
+        if (milliseconds >= 100) return $"{milliseconds:0} ms";
+        if (milliseconds >= 1) return $"{milliseconds:0.#} ms";
+        return $"{milliseconds:0.##} ms";
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

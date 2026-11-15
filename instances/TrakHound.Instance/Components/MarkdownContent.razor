@@ -1,0 +1,33 @@
+@using Markdig
+
+@if (!string.IsNullOrEmpty(markup))
+{
+    <div class="markdown-content">
+        @((MarkupString)markup)
+    </div>
+}
+
+@code {
+
+    // Advanced Extensions adds GitHub style Markdown support (pipe tables, auto-links, task lists, etc.)
+    private static readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    private string markdown;
+    private string markup;
+
+    [Parameter]
+    public string Markdown { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (Markdown != markdown)
+        {
+            markdown = Markdown;
+            markup = !string.IsNullOrEmpty(markdown) ? Markdig.Markdown.ToHtml(markdown, _pipeline) : null;
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

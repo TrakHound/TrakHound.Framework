@@ -1,0 +1,33 @@
+{
+  // Build and Publish the Module Packages : th packages build modules
+  // Each project publishes to the Publish Target in the nearest trakhound.package.publish.json (its own directory, or a parent)
+  "defaults": {
+    "projectConfiguration": "Release",
+    "publish": true
+  },
+  "projects": [
+    { "path": "TrakHound.ApiExplorer.App" },
+    { "path": "TrakHound.FileSystem.Service" },
+    { "path": "TrakHound.Functions.Api" },
+    { "path": "TrakHound.Functions.Retention.Function" },
+    { "path": "TrakHound.Http.Service" },
+    { "path": "TrakHound.InfluxDb.Service" },
+    { "path": "TrakHound.Memory.Service" },
+    { "path": "TrakHound.Mqtt.Service" },
+    { "path": "TrakHound.Packages.Api" },
+    { "path": "TrakHound.Packages.App" },
+    { "path": "TrakHound.Packages.Retention.Function" },
+    { "path": "TrakHound.RabbitMq.Service" },
+    { "path": "TrakHound.Redis.Service" },
+    { "path": "TrakHound.ScheduledTasks.Api" },
+    { "path": "TrakHound.ScheduledTasks.Worker" },
+    { "path": "TrakHound.SqlServer.Service" },
+    { "path": "TrakHound.Timescale.Service" },
+    { "path": "TrakHound.Ldap.Identity" },
+    { "path": "TrakHound.Oidc.Identity" },
+    { "path": "TrakHound.Token.Identity" },
+
+    // Not published, so only build the package file
+    { "path": "TrakHound.Welcome.App", "publish": false, "output": "../build/output/packages" }
+  ]
+}

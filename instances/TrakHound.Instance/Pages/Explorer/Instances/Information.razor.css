@@ -1,0 +1,111 @@
+/* Groups sit side by side when there's room, and shrink to one column on narrow pages (a narrow screen or a wide Explorer tree) */
+.information-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr));
+    gap: 4px 20px;
+    align-items: start;
+    padding-top: 12px;
+    container: instance-information / inline-size;
+}
+
+.group {
+    min-width: 0;
+}
+
+    /* Spans every column (ex. Directories, whose long paths need the room) */
+    .group.wide {
+        grid-column: 1 / -1;
+    }
+
+        /* Not across a whole ultra-wide screen, which would put the values far from their labels */
+        .group.wide .table {
+            max-width: 1100px;
+        }
+
+.group-title {
+    margin: 10px 0 6px;
+    font-size: var(--fontSizeSm);
+    font-weight: bold;
+    color: var(--textMild);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+    .group-title .icon {
+        margin-right: 8px;
+        color: var(--textLight);
+    }
+
+.information-panel .table {
+    margin-bottom: 8px;
+    border: none;
+    table-layout: fixed;
+}
+
+    .information-panel .table td {
+        font-size: var(--fontSizeSm);
+        padding: 5px 12px;
+        vertical-align: middle;
+    }
+
+        .information-panel .table td.label {
+            width: 170px;
+            font-weight: 600;
+            color: var(--textMild);
+        }
+
+        .information-panel .table td.value {
+            border-bottom-color: var(--borderColor);
+            overflow-wrap: anywhere;
+        }
+
+        .information-panel .table td.path {
+            font-family: var(--fontMono);
+            font-size: var(--fontSizeXs);
+        }
+
+.not-set {
+    color: var(--textLight);
+    font-style: italic;
+}
+
+.settings-link {
+    margin-left: 10px;
+    font-size: var(--fontSizeXs);
+    color: var(--accent);
+}
+
+.warning {
+    color: var(--colorOrange);
+    font-weight: bold;
+}
+
+.secondary {
+    color: var(--textMild);
+}
+
+.shutdown-details summary {
+    cursor: pointer;
+}
+
+.shutdown-details pre {
+    max-height: 300px;
+    overflow: auto;
+    margin: 4px 0 8px;
+    padding: 6px 8px;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeXs);
+    white-space: pre-wrap;
+    background: var(--tableHeaderBackground);
+    border: 1px solid var(--borderColor);
+}
+
+@container instance-information (max-width: 500px) {
+    .information-panel .table td.label {
+        width: 120px;
+    }
+
+    .information-panel .table td {
+        padding: 5px 8px;
+    }
+}

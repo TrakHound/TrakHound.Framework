@@ -1,0 +1,11 @@
+<Project>
+	<PropertyGroup>
+		<VersionPrefix>0.18.0</VersionPrefix>
+		<VersionSuffix>dev</VersionSuffix>
+		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+		<TrakHoundTargetFramework>net10.0</TrakHoundTargetFramework>
+
+		<!-- Published TrakHound.Debug.* package used by the example and module projects -->
+		<TrakHoundDebugVersion>0.8.2.9-prerelease</TrakHoundDebugVersion>
+	</PropertyGroup>
+</Project>

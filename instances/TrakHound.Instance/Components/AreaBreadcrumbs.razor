@@ -1,0 +1,21 @@
+@* Sets the Breadcrumbs shown in the area's header (AreaHeader) while this page is shown. The last item is the page itself *@
+@implements IDisposable
+@inject AreaBreadcrumbService breadcrumbService
+
+@code {
+
+    [Parameter]
+    public IEnumerable<BreadcrumbItem> Items { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        breadcrumbService.Set(this, Items);
+    }
+
+    void IDisposable.Dispose()
+    {
+        breadcrumbService.Clear(this);
+    }
+
+}

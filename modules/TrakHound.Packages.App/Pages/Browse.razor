@@ -1,0 +1,654 @@
+@inject TrakHoundDownloadService downloadService
+@inject NavigationManager navigation
+@using System.IO
+@using System.IO.Compression
+@using TrakHound.Blazor.Services
+@implements IDisposable
+
+<div class="browse-panel">
+
+    @* Toolbar *@
+    <div class="toolbar-panel">
+        <label class="toolbar-field">
+            <span>Server</span>
+            <select class="server-select" value="@Context.BrowseServerId" @onchange="ServerChanged" disabled="@copying">
+                @foreach (var server in Context.Servers)
+                {
+                    <option value="@server.Id">@server.DisplayName</option>
+                }
+            </select>
+        </label>
+
+        <div class="search-input">
+            <span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="search" placeholder="Search Packages" @bind="searchText" @bind:event="oninput" />
+        </div>
+
+        <select class="server-select category-select" @bind="categoryFilter" title="Filter by Category">
+            <option value="">All Categories</option>
+            @foreach (var category in GetCategories())
+            {
+                <option value="@category">@category.ToTitleCase()</option>
+            }
+        </select>
+
+        <button class="btn btn-light btn-refresh" title="Reload the Packages from the Server" @onclick="Reload" disabled="@loading"><span class="icon fa-solid fa-sharp fa-rotate @(loading ? "spin" : "")"></span>Refresh</button>
+
+        <div class="toolbar-buttons">
+            @{
+                var checkedCount = rows.Count(o => o.Checked);
+            }
+            @if (checkedCount > 0)
+            {
+                <span class="selection-summary">@checkedCount selected <button class="btn btn-link btn-clear-selection" @onclick="ClearSelection">Clear</button></span>
+            }
+            <button class="btn btn-light" @onclick="DownloadSelected" disabled="@(checkedCount == 0 || downloadingArchive)">
+                <span class="icon fa-solid fa-sharp @(downloadingArchive ? "fa-loader spin" : "fa-download")"></span>Download@(checkedCount > 1 ? $" {checkedCount} (zip)" : "")
+            </button>
+            <button class="btn btn-primary" @onclick="() => OpenCopy(rows.Where(o => o.Checked))" disabled="@(checkedCount == 0)">
+                <span class="icon fa-solid fa-sharp fa-copy"></span>Copy@(checkedCount > 0 ? $" {checkedCount}" : "") to..
+            </button>
+        </div>
+    </div>
+
+    @* Packages *@
+    <div class="table-panel">
+        @if (loading && rows.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-loader spin"></span>
+                <span class="empty-title">Loading Packages..</span>
+                <span class="empty-description">@server?.Description</span>
+            </div>
+        }
+        else if (loadError != null)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-signal-slash"></span>
+                <span class="empty-title">Could not load Packages from @server?.DisplayName</span>
+                <span class="empty-description">@loadError</span>
+                <div class="empty-actions">
+                    <button class="btn btn-light" @onclick="Reload"><span class="icon fa-solid fa-sharp fa-rotate"></span>Retry</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            var visible = GetVisibleRows().ToList();
+
+            if (visible.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-solid fa-sharp fa-box-open"></span>
+                    <span class="empty-title">No Packages Found</span>
+                    <span class="empty-description">@(rows.Count > 0 ? "No Packages match the search or category filter" : $"{server?.DisplayName} has no Packages in the {server?.Organization} Organization")</span>
+                </div>
+            }
+            else
+            {
+                var allChecked = visible.All(o => o.Checked);
+
+                <table class="packages-table">
+                    <thead>
+                        <tr>
+                            <th class="col-check"><input type="checkbox" title="Select all" checked="@allChecked" @onchange="e => CheckAll(visible, (bool)e.Value)" /></th>
+                            <th>Package</th>
+                            <th class="col-category">Category</th>
+                            <th class="col-version">Version</th>
+                            <th class="col-built">Built</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in visible)
+                        {
+                            var description = PackagesAppContext.GetDescription(row.Info ?? row.Latest);
+
+                            <tr class="@(row.Checked ? "checked" : "")">
+                                <td class="col-check"><input type="checkbox" checked="@row.Checked" @onchange="e => row.Checked = (bool)e.Value" /></td>
+                                <td>
+                                    <span class="package-id">@row.Id</span>
+                                    @if (!string.IsNullOrEmpty(description))
+                                    {
+                                        <span class="package-description">@description</span>
+                                    }
+                                </td>
+                                <td class="col-category"><span class="category-chip @row.Latest.Category?.ToLower()">@row.Latest.Category?.ToTitleCase()</span></td>
+                                <td class="col-version">
+                                    @if (row.Versions == null)
+                                    {
+                                        <button class="btn btn-version" title="Select a different Version" @onclick="() => LoadVersions(row)" disabled="@row.LoadingVersions">
+                                            <span class="version-chip">v@(row.Version)</span>
+                                            <span class="latest-tag">Latest</span>
+                                            <span class="fa-solid fa-sharp @(row.LoadingVersions ? "fa-loader spin" : "fa-chevron-down") version-caret"></span>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <select class="version-select" value="@row.Version" @onchange="e => SelectVersion(row, e.Value?.ToString())" disabled="@row.LoadingInfo">
+                                            @foreach (var version in row.Versions)
+                                            {
+                                                <option value="@version">v@(version)@(version == row.Latest.Version ? " (latest)" : "")</option>
+                                            }
+                                        </select>
+                                    }
+                                </td>
+                                <td class="col-built">
+                                    @if (row.LoadingInfo)
+                                    {
+                                        <span class="fa-solid fa-sharp fa-loader spin muted"></span>
+                                    }
+                                    else
+                                    {
+                                        <span>@(PackagesAppContext.FormatBuildDate(row.Info) ?? "-")</span>
+                                    }
+                                </td>
+                                <td class="col-actions">
+                                    <button class="btn btn-sm btn-command" title="Download v@(row.Version)" @onclick="() => Download(row)" disabled="@row.Downloading">
+                                        <span class="icon fa-solid fa-sharp @(row.Downloading ? "fa-loader spin" : "fa-download")"></span>Download
+                                    </button>
+                                    <button class="btn btn-sm btn-command" title="Copy v@(row.Version) to another Server" @onclick="() => OpenCopy(new[] { row })">
+                                        <span class="icon fa-solid fa-sharp fa-copy"></span>Copy
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+
+    @* Copy Dialog *@
+    <Modal Class="packages-modal copy-modal" Visible="@copyVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-copy"></span>
+            <span class="modal-header-title">Copy @(copyItems.Count == 1 ? copyItems[0].PackageId : $"{copyItems.Count} Packages")</span>
+        </HeaderContent>
+        <BodyContent>
+            @{
+                var targets = GetCopyTargets().ToList();
+            }
+            <div class="copy-route">
+                <div class="form-field">
+                    <label>From</label>
+                    <div class="copy-source">
+                        <span class="copy-server-name">@server?.DisplayName</span>
+                        <span class="field-hint">@server?.Description</span>
+                    </div>
+                </div>
+                <span class="copy-arrow fa-solid fa-sharp fa-arrow-right"></span>
+                <div class="form-field">
+                    <label>To</label>
+                    @if (targets.Count > 0)
+                    {
+                        <select class="server-select" @bind="copyTargetId" disabled="@(copying || copyFinished)">
+                            @foreach (var target in targets)
+                            {
+                                <option value="@target.Id">@target.DisplayName</option>
+                            }
+                        </select>
+                        <span class="field-hint">@Context.GetServer(copyTargetId)?.Description</span>
+                    }
+                    else
+                    {
+                        <span class="field-error">Add another Package Server to copy to (on the Servers tab)</span>
+                    }
+                </div>
+            </div>
+
+            <div class="copy-list">
+                @foreach (var item in copyItems)
+                {
+                    <div class="copy-item">
+                        <div class="copy-info">
+                            <span class="package-id">@item.PackageId</span>
+                            <span class="version-chip">v@(item.PackageVersion)</span>
+                            @if (!string.IsNullOrEmpty(item.Message))
+                            {
+                                <span class="copy-message @item.Status.ToString().ToLower()">@item.Message</span>
+                            }
+                        </div>
+                        <TransferState Status="item.Status" />
+                    </div>
+                }
+            </div>
+
+            @if (!copying && !copyFinished)
+            {
+                <p class="copy-note">If a Version already exists on the target Server, you will be asked whether to overwrite it.</p>
+            }
+        </BodyContent>
+        <FooterContent>
+            @if (copying)
+            {
+                <button class="btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Copying..</button>
+            }
+            else if (copyFinished)
+            {
+                <button class="btn btn-primary" @onclick="CloseCopy"><span class="icon fa-solid fa-sharp fa-check"></span>Done</button>
+            }
+            else
+            {
+                <button class="btn btn-secondary" @onclick="CloseCopy"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="btn btn-primary" @onclick="StartCopy" disabled="@(Context.GetServer(copyTargetId) == null)"><span class="icon fa-solid fa-sharp fa-copy"></span>Copy @copyItems.Count @(copyItems.Count == 1 ? "Package" : "Packages")</button>
+            }
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private class PackageRow
+    {
+        public TrakHoundPackage Latest { get; set; }
+        public string Id => Latest.Id;
+
+        /// <summary>
+        /// The selected Version (defaults to the Latest)
+        /// </summary>
+        public string Version { get; set; }
+
+        /// <summary>
+        /// Information for the selected Version (null if it couldn't be read)
+        /// </summary>
+        public TrakHoundPackage Info { get; set; }
+
+        public List<string> Versions { get; set; }
+        public bool LoadingVersions { get; set; }
+        public bool LoadingInfo { get; set; }
+        public bool Checked { get; set; }
+        public bool Downloading { get; set; }
+    }
+
+    private class CopyItem
+    {
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public TrakHoundPackage Incoming { get; set; }
+        public TransferStatus Status { get; set; }
+        public string Message { get; set; }
+    }
+
+
+    private List<PackageRow> rows = new List<PackageRow>();
+    private PackageServer server;
+    private TrakHoundPackageClient client;
+    private bool loading;
+    private string loadError;
+    private int loadVersion;
+    private string searchText;
+    private string categoryFilter = "";
+    private bool downloadingArchive;
+    private bool disposed;
+
+    private bool copyVisible;
+    private bool copying;
+    private bool copyFinished;
+    private string copyTargetId;
+    private List<CopyItem> copyItems = new List<CopyItem>();
+
+
+    [CascadingParameter]
+    public PackagesAppContext Context { get; set; }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Context.GetServer(Context.BrowseServerId) == null) Context.BrowseServerId = Context.Servers.FirstOrDefault()?.Id;
+        await Load();
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+    }
+
+    private async Task Refresh()
+    {
+        if (!disposed) await InvokeAsync(StateHasChanged);
+    }
+
+
+    #region "Load"
+
+    private async Task ServerChanged(ChangeEventArgs args)
+    {
+        Context.BrowseServerId = args.Value?.ToString();
+        rows = new List<PackageRow>();
+        await Load();
+    }
+
+    private async Task Reload()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        var version = ++loadVersion;
+
+        server = Context.GetServer(Context.BrowseServerId);
+        client = PackagesAppContext.CreateClient(server);
+        loading = true;
+        loadError = null;
+        await Refresh();
+
+        var (packages, error) = await PackagesAppContext.QueryLatest(client);
+
+        // Ignore the result if another Server was selected meanwhile
+        if (version != loadVersion) return;
+
+        if (packages != null)
+        {
+            // Keep the Selection and the selected Versions when Refreshing
+            var previous = rows.ToDictionary(o => o.Id, StringComparer.OrdinalIgnoreCase);
+
+            rows = packages.Select(o =>
+            {
+                var row = new PackageRow { Latest = o, Version = o.Version, Info = o };
+                var existing = previous.GetValueOrDefault(o.Id);
+                if (existing != null) row.Checked = existing.Checked;
+                return row;
+            }).ToList();
+        }
+        else
+        {
+            rows = new List<PackageRow>();
+        }
+
+        loadError = error;
+        loading = false;
+        await Refresh();
+    }
+
+    private IEnumerable<string> GetCategories()
+    {
+        return rows.Select(o => o.Latest.Category?.ToLower()).Where(o => !string.IsNullOrEmpty(o)).Distinct()
+            .OrderBy(o => Array.IndexOf(PackagesAppContext.Categories, o) is var i && i >= 0 ? i : int.MaxValue).ThenBy(o => o);
+    }
+
+    private IEnumerable<PackageRow> GetVisibleRows()
+    {
+        IEnumerable<PackageRow> visible = rows;
+
+        if (!string.IsNullOrEmpty(categoryFilter))
+        {
+            visible = visible.Where(o => string.Equals(o.Latest.Category, categoryFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.Trim();
+            visible = visible.Where(o => o.Id.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                (PackagesAppContext.GetDescription(o.Latest)?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return visible;
+    }
+
+    #endregion
+
+    #region "Selection"
+
+    private void CheckAll(IEnumerable<PackageRow> visible, bool value)
+    {
+        foreach (var row in visible) row.Checked = value;
+    }
+
+    private void ClearSelection()
+    {
+        foreach (var row in rows) row.Checked = false;
+    }
+
+    #endregion
+
+    #region "Versions"
+
+    private async Task LoadVersions(PackageRow row)
+    {
+        row.LoadingVersions = true;
+        await Refresh();
+
+        var versions = await PackagesAppContext.GetVersions(client, row.Id);
+        if (versions.IsNullOrEmpty())
+        {
+            Context.Notify(PackageNotificationType.Error, $"Could not load the Versions of {row.Id}", $"No response from {server?.DisplayName}");
+        }
+        else
+        {
+            if (!versions.Contains(row.Version)) versions.Insert(0, row.Version);
+            row.Versions = versions;
+        }
+
+        row.LoadingVersions = false;
+        await Refresh();
+    }
+
+    private async Task SelectVersion(PackageRow row, string version)
+    {
+        if (string.IsNullOrEmpty(version) || version == row.Version) return;
+
+        row.Version = version;
+
+        if (version == row.Latest.Version)
+        {
+            row.Info = row.Latest;
+            return;
+        }
+
+        // Read the Build Date and Description of the selected Version
+        row.Info = null;
+        row.LoadingInfo = true;
+        await Refresh();
+
+        try
+        {
+            var info = await client.Get(row.Id, version);
+            if (row.Version == version) row.Info = info;
+        }
+        catch { }
+
+        row.LoadingInfo = false;
+        await Refresh();
+    }
+
+    #endregion
+
+    #region "Download"
+
+    private async Task Download(PackageRow row)
+    {
+        row.Downloading = true;
+        await Refresh();
+
+        try
+        {
+            var bytes = await client.Download(row.Id, row.Version);
+            if (!bytes.IsNullOrEmpty())
+            {
+                StartDownload(PackagesAppContext.GetFilename(row.Id, row.Version), bytes);
+            }
+            else
+            {
+                Context.Notify(PackageNotificationType.Error, $"Download {row.Id} Failed", $"Could not download v{row.Version} from {server?.DisplayName}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Context.Notify(PackageNotificationType.Error, $"Download {row.Id} Failed", ex.Message);
+        }
+
+        row.Downloading = false;
+        await Refresh();
+    }
+
+    /// <summary>
+    /// Download the selected Packages (a single Package file, or a zip archive of multiple Package files)
+    /// </summary>
+    private async Task DownloadSelected()
+    {
+        var selected = rows.Where(o => o.Checked).ToList();
+        if (selected.Count == 0) return;
+        if (selected.Count == 1)
+        {
+            await Download(selected[0]);
+            return;
+        }
+
+        downloadingArchive = true;
+        await Refresh();
+
+        var failed = new List<string>();
+        try
+        {
+            using (var archiveStream = new MemoryStream())
+            {
+                var added = 0;
+                using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true))
+                {
+                    foreach (var row in selected)
+                    {
+                        var bytes = await client.Download(row.Id, row.Version);
+                        if (!bytes.IsNullOrEmpty())
+                        {
+                            var entry = archive.CreateEntry(PackagesAppContext.GetFilename(row.Id, row.Version), CompressionLevel.NoCompression);
+                            using (var entryStream = entry.Open())
+                            {
+                                await entryStream.WriteAsync(bytes);
+                            }
+                            added++;
+                        }
+                        else
+                        {
+                            failed.Add($"{row.Id} v{row.Version}");
+                        }
+                    }
+                }
+
+                if (added > 0)
+                {
+                    var serverName = new string((server?.DisplayName ?? "server").ToLower().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
+                    StartDownload($"trakhound-packages-{serverName}-{DateTime.Now:yyyyMMdd-HHmmss}.zip", archiveStream.ToArray(), "application/zip");
+                }
+            }
+
+            if (failed.Count > 0)
+            {
+                Context.Notify(PackageNotificationType.Warning, $"{failed.Count} {(failed.Count == 1 ? "Package" : "Packages")} could not be Downloaded", string.Join(", ", failed));
+            }
+        }
+        catch (Exception ex)
+        {
+            Context.Notify(PackageNotificationType.Error, "Download Failed", ex.Message);
+        }
+
+        downloadingArchive = false;
+        await Refresh();
+    }
+
+    /// <summary>
+    /// Send a file to the browser (served from "_download/{key}" for a few minutes)
+    /// </summary>
+    private void StartDownload(string filename, byte[] content, string contentType = "application/octet-stream")
+    {
+        var key = downloadService.AddItem(new TrakHoundDownloadItem
+        {
+            Filename = filename,
+            ContentType = contentType,
+            Content = content
+        });
+
+        // The response is an attachment, so the browser saves the file and stays on this page
+        navigation.NavigateTo($"_download/{key}", forceLoad: true);
+    }
+
+    #endregion
+
+    #region "Copy"
+
+    private IEnumerable<PackageServer> GetCopyTargets()
+    {
+        return Context.Servers.Where(o => o.Id != server?.Id && !o.IsSameLocation(server));
+    }
+
+    private void OpenCopy(IEnumerable<PackageRow> selected)
+    {
+        copyItems = selected.Select(o => new CopyItem
+        {
+            PackageId = o.Id,
+            PackageVersion = o.Version,
+            Incoming = o.Info,
+            Status = TransferStatus.Pending
+        }).ToList();
+
+        if (copyItems.Count == 0) return;
+
+        // Default to the last used Target
+        var targets = GetCopyTargets().ToList();
+        copyTargetId = targets.Any(o => o.Id == Context.TargetServerId) ? Context.TargetServerId : targets.FirstOrDefault()?.Id;
+
+        copyFinished = false;
+        copyVisible = true;
+    }
+
+    private void CloseCopy()
+    {
+        copyVisible = false;
+    }
+
+    private async Task StartCopy()
+    {
+        var target = Context.GetServer(copyTargetId);
+        if (target == null || copying) return;
+
+        Context.TargetServerId = target.Id;
+
+        var sourceClient = client;
+        var targetClient = PackagesAppContext.CreateClient(target);
+        var batch = new OverwriteBatch();
+
+        copying = true;
+        await Refresh();
+
+        for (var i = 0; i < copyItems.Count; i++)
+        {
+            var item = copyItems[i];
+            item.Message = null;
+
+            var result = await Context.Transfer(
+                target,
+                targetClient,
+                item.PackageId,
+                item.PackageVersion,
+                () => sourceClient.Download(item.PackageId, item.PackageVersion),
+                batch,
+                incoming: item.Incoming,
+                hasRemaining: i < copyItems.Count - 1,
+                onStatus: async status =>
+                {
+                    item.Status = status;
+                    await Refresh();
+                });
+
+            item.Status = result.Status;
+            item.Message = result.Message;
+            await Refresh();
+        }
+
+        copying = false;
+        copyFinished = true;
+
+        var completed = copyItems.Count(o => o.Status == TransferStatus.Completed);
+        var skipped = copyItems.Count(o => o.Status == TransferStatus.Skipped);
+        var failed = copyItems.Count(o => o.Status == TransferStatus.Failed);
+        var summary = string.Join(" · ", new[] { $"{completed} copied", skipped > 0 ? $"{skipped} skipped" : null, failed > 0 ? $"{failed} failed" : null }.Where(o => o != null));
+
+        Context.Notify(failed > 0 ? (completed > 0 ? PackageNotificationType.Warning : PackageNotificationType.Error) : PackageNotificationType.Success, $"Copy to {target.DisplayName} Finished", summary);
+        await Refresh();
+    }
+
+    #endregion
+
+}

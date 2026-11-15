@@ -1,0 +1,13 @@
+{
+  // Settings for the local debug host (Program.cs). Left out of the package
+  "instanceUrl": "{instanceUrl}",
+  "apiKey": "",
+
+  // Configuration Parameters (as set in the Function's Configuration on an Instance)
+  "parameters": {},
+
+  // The input Parameters the Function is run with when none are passed to dotnet run
+  "input": {
+    "name": "World"
+  }
+}

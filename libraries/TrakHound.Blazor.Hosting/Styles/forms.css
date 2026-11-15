@@ -1,0 +1,177 @@
+/* Inputs and textareas (TrakHound and Radzen components) */
+
+
+.text-box input,
+textarea,
+.spin-edit input,
+.rz-numeric,
+.rz-numeric input,
+.rz-datepicker input,
+.rz-autocomplete input,
+.rz-textbox {
+    background: var(--inputBackground) !important;
+    border-color: var(--inputBorder) !important;
+    color: var(--inputText) !important;
+}
+
+    .text-box input:hover,
+    textarea:hover,
+    .rz-numeric:hover,
+    .rz-numeric:hover input,
+    .rz-datepicker input:hover,
+    .rz-autocomplete input:hover,
+    .spin-edit input:hover {
+        background: var(--inputBackgroundHover) !important;
+        border-color: var(--inputBorderHover) !important;
+        color: var(--inputTextHover) !important;
+    }
+
+    .text-box input:focus,
+    textarea:focus,
+    .rz-numeric:focus,
+    .rz-numeric input:focus,
+    .rz-datepicker input:focus,
+    .rz-autocomplete input:focus,
+    .spin-edit input:focus {
+        background: var(--inputBackgroundHighlight) !important;
+        border-color: var(--inputBorderHighlight) !important;
+        color: var(--inputTextHighlight) !important;
+        box-shadow: inset 0px 0px 1px 1px var(--accentLight) !important;
+        outline: none;
+    }
+
+    /* Disabled inputs drop to the panel background with a dashed border and muted text, so they
+       don't read as editable next to enabled ones (listed after :hover so hovering doesn't light them up) */
+    .text-box input.disabled,
+    .text-box input:disabled,
+    textarea.disabled,
+    textarea:disabled,
+    .rz-textbox:disabled,
+    .rz-textbox.rz-state-disabled,
+    .rz-numeric.rz-state-disabled,
+    .rz-datepicker.rz-state-disabled input,
+    .rz-autocomplete input:disabled,
+    .spin-edit input.disabled,
+    .spin-edit input:disabled {
+        background: var(--inputBackgroundDisabled) !important;
+        border-color: var(--inputBorderDisabled) !important;
+        border-style: dashed !important;
+        color: var(--inputTextDisabled) !important;
+        box-shadow: none !important;
+        cursor: not-allowed;
+    }
+
+    /* The input inside a numeric has no border of its own (the numeric draws it) */
+    .rz-numeric.rz-state-disabled input {
+        background: transparent !important;
+        color: var(--inputTextDisabled) !important;
+        cursor: not-allowed;
+    }
+
+/* Placeholder text (all inputs, textareas and Radzen inputs) */
+:root {
+    --rz-input-placeholder-color: var(--inputPlaceholder);
+    --rz-input-disabled-placeholder-color: var(--inputPlaceholderDisabled);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--inputPlaceholder);
+    opacity: 1;
+}
+
+input:hover::placeholder,
+textarea:hover::placeholder {
+    color: var(--inputPlaceholderHover);
+}
+
+input:focus::placeholder,
+textarea:focus::placeholder {
+    color: var(--inputPlaceholderHighlight);
+}
+
+input:disabled::placeholder,
+textarea:disabled::placeholder,
+input.disabled::placeholder,
+textarea.disabled::placeholder {
+    color: var(--inputPlaceholderDisabled);
+}
+
+
+/* Dropdowns : a native select (.form-select) looks the same as a Radzen dropdown (radzen.css).
+   .dropdown-sm makes either one compact, for toolbars and table cells */
+
+.form-select {
+    height: 38px;
+    max-width: 100%;
+    padding: 0 32px 0 15px;
+    font-size: 14px;
+    line-height: 36px;
+    color: var(--inputText);
+    background-color: var(--inputBackground);
+    /* The chevron, drawn with gradients so it takes the theme's text color */
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    border: 1px solid var(--inputBorder);
+    border-radius: 2px;
+    outline: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    text-overflow: ellipsis;
+}
+
+    .form-select:hover {
+        color: var(--inputTextHover);
+        background-color: var(--inputBackgroundHover);
+        border-color: var(--inputBorderHover);
+    }
+
+    .form-select:focus {
+        color: var(--inputTextHighlight);
+        background-color: var(--inputBackgroundHighlight);
+        border-color: var(--inputBorderHighlight);
+        box-shadow: inset 0px 0px 1px 1px var(--accentLight);
+    }
+
+    .form-select:disabled {
+        color: var(--inputTextDisabled);
+        background-color: var(--inputBackgroundDisabled);
+        border: 1px dashed var(--inputBorderDisabled);
+        box-shadow: none;
+        cursor: not-allowed;
+    }
+
+    .form-select option {
+        color: var(--textDark);
+        background: var(--panelItemBackground);
+    }
+
+.form-select.dropdown-sm {
+    height: 30px;
+    padding: 0 26px 0 8px;
+    font-size: var(--fontSizeSm, 12px);
+    line-height: 28px;
+    background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+}
+
+.rz-dropdown.dropdown-sm {
+    height: 30px !important;
+    padding: 0 20px 0 8px;
+    font-size: var(--fontSizeSm, 12px);
+}
+
+    .rz-dropdown.dropdown-sm .rz-dropdown-label {
+        line-height: 28px;
+        font-size: var(--fontSizeSm, 12px);
+    }
+
+    .rz-dropdown.dropdown-sm .rz-dropdown-trigger,
+    .rz-dropdown.dropdown-sm .rz-dropdown-trigger-icon {
+        height: 28px !important;
+        line-height: 28px !important;
+        padding-top: 0;
+    }

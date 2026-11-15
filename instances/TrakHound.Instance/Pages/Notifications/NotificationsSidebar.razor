@@ -1,0 +1,133 @@
+@implements IDisposable
+@inject TrakHound.Instance.Notifications.TrakHoundInstanceNotificationService notificationService
+@inject NotificationsSidebarState sidebarState
+@inject NavigationManager navigationManager
+@using TrakHound.Instance.Notifications
+
+@* Notifications sidebar (right side) : Instance, Package and Configuration Notifications *@
+
+<aside class="notifications-sidebar" aria-label="Notifications">
+    <div class="notifications-header">
+        <span class="notifications-header-icon fa-solid fa-sharp fa-bell"></span>
+        <span class="notifications-header-title">Notifications</span>
+        @if (unreadCount > 0)
+        {
+            <span class="notifications-header-count">@unreadCount.ToString("N0") new</span>
+        }
+        <button class="btn btn-link notifications-close" title="Close" @onclick="sidebarState.Close"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+    </div>
+
+    @if (notifications.Count > 0)
+    {
+        <div class="notifications-toolbar">
+            <button class="btn btn-sm btn-light" disabled="@(unreadCount < 1)" @onclick="notificationService.MarkAllRead"><span class="icon fa-solid fa-sharp fa-check-double"></span>Mark all read</button>
+            <button class="btn btn-sm btn-light" @onclick="notificationService.DismissAll"><span class="icon fa-solid fa-sharp fa-trash"></span>Clear all</button>
+        </div>
+
+        <div class="notifications-list" role="list">
+            @foreach (var notification in notifications)
+            {
+                var type = notification.Type.ToString().ToLower();
+                var unread = notification.Read ? "" : "unread";
+                var icon = notification.Type switch
+                {
+                    TrakHoundInstanceNotificationType.Success => "fa-circle-check",
+                    TrakHoundInstanceNotificationType.Warning => "fa-triangle-exclamation",
+                    TrakHoundInstanceNotificationType.Error => "fa-circle-exclamation",
+                    _ => GetCategoryIcon(notification.Category)
+                };
+                var timestamp = notification.Timestamp.ToLocalTime();
+                var ago = DateTime.UtcNow - notification.Timestamp;
+
+                <div class="notification @type @unread" role="listitem" @key="notification.Id" @onclick="() => notificationService.MarkRead(notification.Id)">
+                    <span class="notification-icon fa-solid fa-sharp @icon"></span>
+                    <div class="notification-text">
+                        <span class="notification-title">@notification.Title</span>
+                        @if (!string.IsNullOrEmpty(notification.Message))
+                        {
+                            <span class="notification-message">@notification.Message</span>
+                        }
+                        <span class="notification-footer">
+                            @if (!string.IsNullOrEmpty(notification.Category))
+                            {
+                                <span class="notification-category">@notification.Category</span>
+                            }
+                            <span class="notification-time" title="@timestamp.ToString("yyyy-MM-dd HH:mm:ss")">@(ago.TotalMinutes < 1 ? "Just now" : $"{ago.ToSimpleFormattedString()} ago")</span>
+                            @if (!string.IsNullOrEmpty(notification.Link))
+                            {
+                                <a class="notification-link" href="@notification.Link" @onclick="() => Open(notification)" @onclick:preventDefault @onclick:stopPropagation>@(notification.LinkText ?? "View")</a>
+                            }
+                        </span>
+                    </div>
+                    <button class="btn btn-link notification-dismiss" title="Dismiss" @onclick="() => notificationService.Dismiss(notification.Id)" @onclick:stopPropagation><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="notifications-empty">
+            <span class="notifications-empty-icon fa-regular fa-sharp fa-bell-slash"></span>
+            <span class="notifications-empty-title">No Notifications</span>
+            <span class="notifications-empty-description">Notifications about the Instance, Package Updates and Configuration changes are shown here.</span>
+        </div>
+    }
+</aside>
+
+@code {
+
+    private readonly System.Timers.Timer refreshTimer = new System.Timers.Timer(30000);
+    private List<TrakHoundInstanceNotification> notifications = new List<TrakHoundInstanceNotification>();
+    private int unreadCount;
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+        notificationService.Changed += NotificationsChanged;
+
+        // Update the "ago" times
+        refreshTimer.Elapsed += async (s, e) => await InvokeAsync(StateHasChanged);
+        refreshTimer.Start();
+    }
+
+    public void Dispose()
+    {
+        notificationService.Changed -= NotificationsChanged;
+        refreshTimer.Dispose();
+    }
+
+
+    private void Load()
+    {
+        notifications = notificationService.Notifications.ToList();
+        unreadCount = notifications.Count(o => !o.Read);
+    }
+
+    private async void NotificationsChanged()
+    {
+        await InvokeAsync(() =>
+        {
+            Load();
+            StateHasChanged();
+        });
+    }
+
+    private void Open(TrakHoundInstanceNotification notification)
+    {
+        notificationService.MarkRead(notification.Id);
+        navigationManager.NavigateTo(notification.Link);
+    }
+
+    private static string GetCategoryIcon(string category)
+    {
+        switch (category)
+        {
+            case TrakHoundInstanceNotificationCategories.Instance: return "fa-server";
+            case TrakHoundInstanceNotificationCategories.Packages: return "fa-box";
+            case TrakHoundInstanceNotificationCategories.Configuration: return "fa-sliders";
+            default: return "fa-circle-info";
+        }
+    }
+
+}

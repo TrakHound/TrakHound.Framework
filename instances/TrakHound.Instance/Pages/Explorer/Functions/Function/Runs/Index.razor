@@ -1,0 +1,442 @@
+﻿@page "/_admin/explorer/{instanceId}/functions/{functionId}/runs/{runId}"
+@inject ExplorerService explorerService
+@inject JavascriptService javascriptService
+@using System.Text.Json.Serialization
+@using TrakHound.Blazor.Services
+@using TrakHound.Functions
+
+<TrakHoundPageTitle Text="@($"Run {RunId} - {FunctionId} - Functions")" />
+
+@if (!loading)
+{
+    if (functionInformation != null && runInformation != null)
+    {
+        var statusIcon = "";
+        var statusDescription = "";
+
+        var statusType = runInformation.Status.ConvertEnum<TrakHoundFunctionStatusType>();
+        var statusClass = statusType.ToString().ToLower();
+
+        switch (statusType)
+        {
+            case TrakHoundFunctionStatusType.Completed:
+                statusIcon = "fa-sharp fa-solid fa-circle-check";
+                statusDescription = "Function Completed Successfully";
+                break;
+
+            case TrakHoundFunctionStatusType.Running:
+                statusIcon = "fa-sharp fa-solid fa-play";
+                statusDescription = "Function is Currently Running";
+                break;
+
+            case TrakHoundFunctionStatusType.Started:
+                statusIcon = "fa-sharp fa-solid fa-play";
+                statusDescription = "Function has been Started";
+                break;
+
+            case TrakHoundFunctionStatusType.Wait:
+                statusIcon = "fa-sharp fa-solid fa-timer";
+                statusDescription = "Function is Waiting for a signal";
+                break;
+
+            case TrakHoundFunctionStatusType.Stopped:
+                statusIcon = "fa-sharp fa-solid fa-stop";
+                statusDescription = "Function was Stopped or Cancelled";
+                break;
+
+            case TrakHoundFunctionStatusType.Error:
+                statusIcon = "fa-sharp fa-solid fa-triangle-exclamation";
+                statusDescription = "Function Returned an Error";
+                break;
+        }
+
+        // The Header shows the installed Package version, which may not be the one that ran
+        var ranVersion = runInformation.PackageVersion;
+        var versionChanged = !string.IsNullOrEmpty(ranVersion) && ranVersion != functionInformation.PackageVersion;
+
+
+        <div class="run-panel">
+
+            <div class="header-panel">
+                <Header FunctionInformation="@functionInformation" />
+            </div>
+
+            <div class="summary-panel @statusClass">
+
+                <div class="summary-status">
+                    <div class="status-icon-container">
+                        <span class="status-icon @statusIcon"></span>
+                    </div>
+                    <div class="status-description-container">
+                        <span class="status-type">@statusType <span class="status-code">@runInformation.StatusCode</span></span>
+                        <span class="status-description">@statusDescription</span>
+                    </div>
+                    <div class="status-message-container">
+                        @if (!string.IsNullOrEmpty(message))
+                        {
+                            <span class="status-message" title="@message">@message</span>
+                        }
+                    </div>
+                    <div class="status-actions-container">
+                        <a href="@GetRunAgainLink()" class="admin-write btn btn-light btn-run-again" title="Open the Run tab with this Run's Job and Input Parameters"><span class="icon fa-solid fa-rotate-right"></span>Run Again</a>
+                    </div>
+                </div>
+
+                <div class="summary-facts">
+                    <div class="fact" title="@runInformation.Start.ToISO8601String()">
+                        <span class="fact-label">Started</span>
+                        <span class="fact-value">@runInformation.Start.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") <span class="fact-detail">(@runInformation.Ago.ToSimpleFormattedString() ago)</span></span>
+                    </div>
+                    <div class="fact" title="@($"Completed {runInformation.End.ToISO8601String()}")">
+                        <span class="fact-label">Duration</span>
+                        <span class="fact-value">@runInformation.Duration.ToDetailedFormattedString()</span>
+                    </div>
+                    <div class="fact" title="@(runInformation.CpuUsage != null ? $"{FormatPercent(runInformation.CpuUsage.Value)} of machine capacity while running" : null)">
+                        <span class="fact-label">CPU</span>
+                        <span class="fact-value">
+                            @if (runInformation.CpuTime != null)
+                            {
+                                @FormatCpuTime(runInformation.CpuTime.Value) <span class="fact-detail">(@FormatPercent(runInformation.CpuUsage ?? 0))</span>
+                            }
+                            else
+                            {
+                                <span class="fact-detail">Not Recorded</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="fact">
+                        <span class="fact-label">Trigger</span>
+                        <span class="fact-value">
+                            @GetTriggerText(runInformation.Trigger)
+                            @if (!string.IsNullOrEmpty(runInformation.TaskId))
+                            {
+                                <a href="@GetFunctionLink("scheduled-tasks")" class="fact-link" title="Scheduled Task">@runInformation.TaskId</a>
+                            }
+                        </span>
+                    </div>
+                    <div class="fact">
+                        <span class="fact-label">Job</span>
+                        <span class="fact-value">
+                            @if (!string.IsNullOrEmpty(runInformation.JobId))
+                            {
+                                <a href="@GetFunctionLink("jobs")">@runInformation.JobId</a>
+                            }
+                            else
+                            {
+                                <span class="fact-detail">None</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="fact @(versionChanged ? "warning" : null)" title="@(versionChanged ? $"Version {functionInformation.PackageVersion} is installed now" : null)">
+                        <span class="fact-label">Version</span>
+                        <span class="fact-value">
+                            @if (!string.IsNullOrEmpty(ranVersion))
+                            {
+                                @ranVersion
+                                if (versionChanged)
+                                {
+                                    <span class="fact-detail">(@functionInformation.PackageVersion installed)</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="fact-detail">Not Recorded</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="fact">
+                        <span class="fact-label">Run ID</span>
+                        <span class="fact-value run-id">
+                            @runInformation.Id
+                            <button class="btn btn-link btn-copy" title="@(runIdCopied ? "Copied" : "Copy the Run ID")" @onclick="CopyRunId"><span class="icon fa-solid fa-sharp @(runIdCopied ? "fa-check" : "fa-copy")"></span></button>
+                        </span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="tab-panel">
+                @* The Level filter is shown in the tab row (over the right end of the Tabs) *@
+                @if (selectedTab == 0)
+                {
+                    <div class="tab-tools">
+                        <span class="log-count">@GetLogCountText()</span>
+                        <RadzenDropDown class="dropdown-sm" TValue="TrakHoundLogLevel" @bind-Value="@logMinimumLevel" Data="@logLevels" title="The lowest Log Level to show" />
+                    </div>
+                }
+
+                <RadzenTabs RenderMode="TabRenderMode.Client" @bind-SelectedIndex="@selectedTab">
+                    <Tabs>
+                        <RadzenTabsItem Text="@($"Logs ({logs?.Count ?? 0})")">
+                            <div class="log-panel">
+                                <LogRows Rows="@GetLogLines()" TimeFormat="LogRowTimeFormat.SinceFirst" MaxRows="@maxLogRows" EmptyMessage="@(logs.IsNullOrEmpty() ? "No logs were recorded for this run" : "No logs at this level")" />
+                            </div>
+                        </RadzenTabsItem>
+                        <RadzenTabsItem Text="@($"Input ({inputParameters?.Count ?? 0})")">
+                            <div class="parameters-panel">
+                                <RunParameters Parameters="@inputParameters" Definitions="@functionInformation.Parameters" EmptyMessage="No input was recorded for this run" />
+                            </div>
+                        </RadzenTabsItem>
+                        <RadzenTabsItem Text="@($"Output ({outputParameters?.Count ?? 0})")">
+                            <div class="parameters-panel">
+                                <RunParameters Parameters="@outputParameters" EmptyMessage="No output was recorded for this run" />
+                            </div>
+                        </RadzenTabsItem>
+                    </Tabs>
+                </RadzenTabs>
+            </div>
+
+        </div>
+    }
+    else
+    {
+        <div class="not-found-panel">
+            <div class="not-found-container">
+                <span class="icon fa-solid fa-sharp fa-ban"></span>
+                <span class="title">@(functionInformation == null ? "Function Not Found" : "Function Run Not Found")</span>
+                <span class="subtitle">@(functionInformation == null ? FunctionId : RunId)</span>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <span class="subtitle">@errorMessage</span>
+                }
+            </div>
+        </div>
+    }
+}
+else
+{
+    <Loading Message="Loading Function Run.." />
+}
+
+@code {
+
+    private const int copiedDisplayDelay = 1500;
+    private const int maxLogRows = 1000; // Shown before "Show all" (a Run can have up to 10,000)
+
+    private static readonly TrakHoundLogLevel[] logLevels = Enum.GetValues<TrakHoundLogLevel>();
+
+    private string previousInstanceId;
+    private string previousFunctionId;
+    private string previousRunId;
+    private TrakHoundFunctionInformation functionInformation;
+    private FunctionRun runInformation;
+    private List<LogRow> logs;
+    private TrakHoundLogLevel logMinimumLevel = TrakHoundLogLevel.Trace;
+    private int selectedTab;
+    private Dictionary<string, string> inputParameters;
+    private Dictionary<string, string> outputParameters;
+    private string message;
+    private string errorMessage;
+    private bool runIdCopied;
+
+    private bool loading = true;
+
+
+    class FunctionRun
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; }
+
+        [JsonPropertyName("statusCode")]
+        public int StatusCode { get; set; }
+
+        [JsonIgnore]
+        public TimeSpan Ago => DateTime.UtcNow - End;
+
+        [JsonPropertyName("start")]
+        public DateTime Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public DateTime End { get; set; }
+
+        [JsonPropertyName("duration")]
+        public TimeSpan Duration { get; set; }
+
+        [JsonPropertyName("trigger")]
+        public string Trigger { get; set; }
+
+        [JsonPropertyName("taskId")]
+        public string TaskId { get; set; }
+
+        [JsonPropertyName("packageVersion")]
+        public string PackageVersion { get; set; }
+
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; }
+
+        [JsonPropertyName("cpuTime")]
+        public double? CpuTime { get; set; }
+
+        [JsonPropertyName("cpuUsage")]
+        public double? CpuUsage { get; set; }
+    }
+
+    class FunctionLog
+    {
+        [JsonPropertyName("level")]
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+        public TrakHoundLogLevel Level { get; set; }
+
+        [JsonPropertyName("message")]
+        public string Message { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public DateTime Timestamp { get; set; }
+    }
+
+
+    [Parameter]
+    public string FunctionId { get; set; }
+
+    [Parameter]
+    public string RunId { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId || FunctionId != previousFunctionId || RunId != previousRunId)
+        {
+            previousInstanceId = explorerService.SelectedInstanceId;
+            previousFunctionId = FunctionId;
+            previousRunId = RunId;
+
+            functionInformation = null;
+            runInformation = null;
+            logs = null;
+            inputParameters = null;
+            outputParameters = null;
+            message = null;
+            errorMessage = null;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                loading = true;
+                await InvokeAsync(StateHasChanged);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var runRoute = Url.Combine("functions", FunctionId, "runs", RunId);
+
+                        var functionTask = client.Functions.GetInformation(FunctionId);
+                        var runTask = client.Api.GetJson<FunctionRun>(runRoute);
+                        var logsTask = client.Api.GetJson<IEnumerable<FunctionLog>>(Url.Combine(runRoute, "log"));
+                        var inputTask = client.Api.GetJson<Dictionary<string, string>>(Url.Combine(runRoute, "input"));
+                        var outputTask = client.Api.GetJson<Dictionary<string, string>>(Url.Combine(runRoute, "output"));
+
+                        await Task.WhenAll(functionTask, runTask, logsTask, inputTask, outputTask);
+
+                        functionInformation = functionTask.Result;
+                        runInformation = runTask.Result;
+                        logs = logsTask.Result?.OrderBy(o => o.Timestamp).Select((o, i) => new LogRow { Key = i, Level = o.Level, Message = o.Message, Timestamp = o.Timestamp.ToLocalTime() }).ToList();
+                        inputParameters = inputTask.Result;
+
+                        // The message is shown with the Status (the other Output Parameters in the Output tab)
+                        outputParameters = outputTask.Result;
+                        message = outputParameters?.GetValueOrDefault("message");
+                        outputParameters?.Remove("message");
+
+                        if (functionInformation != null)
+                        {
+                            // Set Explorer Breadcrumbs
+                            var breadcrumbItems = new List<BreadcrumbItem>();
+                            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+                            breadcrumbItems.Add(new BreadcrumbItem("Functions", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions")));
+                            breadcrumbItems.Add(new BreadcrumbItem(functionInformation.FunctionId, Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions", functionInformation.FunctionId)));
+                            breadcrumbItems.Add(new BreadcrumbItem("Runs", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions", functionInformation.FunctionId, "history")));
+                            breadcrumbItems.Add(new BreadcrumbItem(RunId, null));
+                            explorerService.BreadcrumbItems = breadcrumbItems;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errorMessage = ex.Message;
+                    }
+                    finally
+                    {
+                        loading = false;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                });
+            }
+            else
+            {
+                errorMessage = "Client Not Found";
+                loading = false;
+            }
+        }
+    }
+
+    private List<LogRow> GetLogLines()
+    {
+        if (logs == null || logMinimumLevel == TrakHoundLogLevel.Trace) return logs;
+        return logs.Where(o => o.Level <= logMinimumLevel).ToList();
+    }
+
+    private string GetLogCountText()
+    {
+        if (logs == null) return null;
+        var warnings = logs.Count(o => o.Level == TrakHoundLogLevel.Warning);
+        var errors = logs.Count(o => o.Level <= TrakHoundLogLevel.Error);
+        return $"{logs.Count} Logs · {warnings} Warnings · {errors} Errors";
+    }
+
+    private async Task CopyRunId()
+    {
+        await javascriptService.CopyClipboard(runInformation?.Id);
+
+        runIdCopied = true;
+        await InvokeAsync(StateHasChanged);
+
+        await Task.Delay(copiedDisplayDelay);
+        runIdCopied = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string GetFunctionLink(string page)
+    {
+        return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "functions", FunctionId, page);
+    }
+
+    private string GetRunAgainLink()
+    {
+        // The Run tab reads the Run's Job and Input Parameters (see Run.RerunId)
+        return $"{GetFunctionLink("run")}?rerun={Uri.EscapeDataString(RunId)}";
+    }
+
+    private static string GetTriggerText(string trigger)
+    {
+        switch (trigger)
+        {
+            case "scheduled": return "Scheduled Task";
+            case "manual": return "Manual";
+            case "api": return "API";
+            default: return "Not Recorded";
+        }
+    }
+
+    private static string FormatCpuTime(double milliseconds)
+    {
+        if (milliseconds < 1000) return $"{milliseconds:0} ms";
+        return TimeSpan.FromMilliseconds(milliseconds).ToFormattedString(true);
+    }
+
+    private static string FormatPercent(double value)
+    {
+        if (value >= 10) return $"{value:0}%";
+        if (value >= 1) return $"{value:0.#}%";
+        return $"{value:0.##}%";
+    }
+
+}

@@ -1,0 +1,32 @@
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject AreaBreadcrumbService breadcrumbService
+
+@* Gives the Breadcrumbs that the Explorer pages set (ExplorerService.BreadcrumbItems) to the area's header (AreaHeader).
+   Pages set them while loading, after the Layout has already rendered for the navigation, and the header re-renders
+   on its own, so updating the Breadcrumbs doesn't re-render (and reload) the page *@
+
+@code {
+
+    protected override void OnInitialized()
+    {
+        explorerService.PageUpdated += PageUpdated;
+        Update();
+    }
+
+    void IDisposable.Dispose()
+    {
+        explorerService.PageUpdated -= PageUpdated;
+        breadcrumbService.Clear(this);
+    }
+
+    private void PageUpdated(object sender, EventArgs args)
+    {
+        Update();
+    }
+
+    private void Update()
+    {
+        breadcrumbService.Set(this, explorerService.BreadcrumbItems);
+    }
+}

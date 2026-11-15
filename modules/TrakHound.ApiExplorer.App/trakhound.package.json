@@ -1,0 +1,12 @@
+{
+  "id": "TrakHound.ApiExplorer.App",
+  "category": "app",
+  "version": "0.2",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Browse the APIs you can use, try them out, and download their OpenAPI documents",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.ApiExplorer.App",
+    ".defaultRoute": "api-explorer"
+  }
+}

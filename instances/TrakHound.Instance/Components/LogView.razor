@@ -1,0 +1,770 @@
+@implements IDisposable
+@inject TrakHound.Blazor.Services.JavascriptService javascriptService
+@using TrakHound.Logging
+
+<div class="log-view">
+    <RadzenTabs SelectedIndex="@selectedTab" SelectedIndexChanged="TabChanged">
+        <Tabs>
+            <RadzenTabsItem Text="Live">
+                <div class="log-live-panel @(liveError != null ? "has-status" : null)">
+                    <div class="log-toolbar-panel">
+                        <div class="log-buttons-container">
+
+                            @if (!liveLoading)
+                            {
+                                @if (logConsumer != null)
+                                {
+                                    <button class="btn btn-secondary btn-subscribe" @onclick="@Unsubscribe"><span class="icon fa-solid fa-sharp fa-pause"></span>Unsubscribe</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-primary btn-subscribe" @onclick="@Subscribe"><span class="icon fa-solid fa-sharp fa-play"></span>Subscribe</button>
+                                }
+                            }
+                            else
+                            {
+                                <button class="btn btn-primary btn-subscribe disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Loading..</button>
+                            }
+
+                        </div>
+                        <div class="log-options-container">
+                            <RadzenDropDown class="dropdown-sm" Data="@logLevels" TValue="TrakHoundLogLevel" Value="@SelectedLogLevel" ValueChanged="SelectLogLevel" title="Minimum Log Level" />
+                        </div>
+                        <div class="log-filter-container">
+                            <TextBox Value="@liveFilter" ValueChanged="SelectLiveFilter" PlaceHolder="Filter lines" />
+                        </div>
+                        @if (ToolbarContent != null)
+                        {
+                            <div class="log-toolbar-content">@ToolbarContent</div>
+                        }
+                    </div>
+                    @if (liveError != null)
+                    {
+                    <div class="log-status-panel">
+                        <span class="log-status error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>Subscribe failed : @liveError</span>
+                    </div>
+                    }
+                    <div class="log-table-panel">
+                        <LogStream Consumer="@logConsumer" Buffer="@liveBuffer" Filter="@liveFilter" />
+                    </div>
+                </div>
+            </RadzenTabsItem>
+            <RadzenTabsItem Text="History">
+                <div class="log-history-panel">
+                    <div class="log-toolbar-panel">
+                        <div class="log-buttons-container">
+
+                            @if (!historyLoading)
+                            {
+                                <button class="btn btn-primary btn-query" title="Query again (a time range ending now is moved to now)" @onclick="@RefreshHistory"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-primary btn-query disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Loading..</button>
+                            }
+
+                        </div>
+                        <div class="log-options-container" title="@GetKeptLevelsText()">
+                            <label class="log-option-label">Minimum Level</label>
+                            <RadzenDropDown class="dropdown-sm" Data="@GetHistoryLevels()" TValue="TrakHoundLogLevel" Value="@historyLevel" ValueChanged="SelectHistoryLevel" />
+                        </div>
+                        @if (QueryLogs != null)
+                        {
+                            <div class="log-search-container">
+                                <TextBox @bind-Value="@historySearch" PlaceHolder="Search messages" Size="Size.Small" Submitted="SearchSubmitted" />
+                            </div>
+                        }
+                        <div class="log-range-container">
+                            <label class="log-option-label">Range</label>
+                            <RadzenDropDown class="dropdown-sm" Data="@_rangeOptions" TValue="string" Value="@selectedRange" ValueChanged="SelectRange" />
+                            @if (selectedRange == CustomRange)
+                            {
+                                <TimeRangeSelection From="@From" To="@To" FromChanged="SelectFrom" ToChanged="SelectTo" ShowTime="true" />
+                            }
+                        </div>
+                        <div class="log-download-container">
+                            <button class="btn btn-light btn-download" title="Download the lines shown (as a .log file)" disabled="@logLines.IsNullOrEmpty()" @onclick="DownloadLines"><span class="icon fa-solid fa-sharp fa-download"></span>Download</button>
+                            @if (downloadHref != null)
+                            {
+                                <a id="@downloadElementId" class="log-download-link" href="@downloadHref" download="@downloadFilename"></a>
+                            }
+                        </div>
+                        @if (ToolbarContent != null)
+                        {
+                            <div class="log-toolbar-content">@ToolbarContent</div>
+                        }
+                    </div>
+                    @if (historyError != null || historyQueried || levelFilter != null || sourceFilter != null)
+                    {
+                    <div class="log-status-panel">
+                        @if (historyError != null)
+                        {
+                            <span class="log-status error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>Query failed : @historyError</span>
+                        }
+                        else if (historyQueried)
+                        {
+                            var count = logLines?.Count ?? 0;
+                            var total = GetFilteredTotal();
+
+                            @if (total != null && total > count)
+                            {
+                                <span class="log-status">Showing @count.ToString("N0") of @total.Value.ToString("N0") lines · newest first</span>
+                            }
+                            else
+                            {
+                                <span class="log-status">@count.ToString("N0") @(count == 1 ? "line" : "lines") · newest first@(hasMore ? " · more available" : "")</span>
+                            }
+
+                            @* Click a Level to show only it (click again to show every Level from the Minimum) *@
+                            @if (levelCounts != null && levelCounts.Values.Sum() > 0)
+                            {
+                                <span class="log-level-counts">
+                                    @foreach (var levelCount in levelCounts.Where(o => o.Value > 0).OrderBy(o => o.Key))
+                                    {
+                                        var selected = levelFilter == levelCount.Key;
+                                        <button class="log-level-count @levelCount.Key.ToString().ToLower() @(selected ? "selected" : null)" title="@(selected ? "Show every level" : $"Only show {levelCount.Key} lines")" @onclick="() => SelectLevelFilter(levelCount.Key)">@levelCount.Key @levelCount.Value.ToString("N0")</button>
+                                    }
+                                </span>
+                            }
+                        }
+
+                        @if (sourceFilter != null)
+                        {
+                            <span class="log-filter-chip" title="@sourceFilter">
+                                <span class="log-filter-chip-label">Source : @sourceFilter</span>
+                                <button class="btn-chip-remove" title="Show every Source" @onclick="ClearSourceFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                            </span>
+                        }
+
+                        @if (HistoryMinimumLevel != null)
+                        {
+                            <span class="log-kept-levels">@GetKeptLevelsText()</span>
+                        }
+                    </div>
+                    }
+                    <div class="log-table-panel">
+                        @if (!historyQueried && historyError == null)
+                        {
+                            <div class="log-empty-state">
+                                <span class="log-empty-state-icon fa-regular fa-sharp fa-clock-rotate-left"></span>
+                                <span class="log-empty-state-title">@(historyLoading ? "Loading Log History.." : "Log History")</span>
+                                <span class="log-empty-state-description">The lines kept in Log History, newest first</span>
+                            </div>
+                        }
+                        else if (historyQueried && logLines.IsNullOrEmpty())
+                        {
+                            <div class="log-empty-state">
+                                <span class="log-empty-state-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                                <span class="log-empty-state-title">No log lines found</span>
+                                <span class="log-empty-state-description">No @GetLevelDescription() lines@(GetSourceDescription())@(GetSearchDescription()) between @From.ToString("g") and @To.ToString("g")</span>
+                                @if (HistoryMinimumLevel != null && historyLevel == HistoryMinimumLevel)
+                                {
+                                    <span class="log-empty-state-description">@GetKeptLevelsText()</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <LogTable LogLines="@logLines" SourceSelected="SelectSourceFilter" ShowAround="ShowAround">
+                                @if (hasMore)
+                                {
+                                    <div class="log-load-more">
+                                        @if (!loadingMore)
+                                        {
+                                            <button class="btn btn-light btn-load-more" @onclick="LoadMoreLogLines"><span class="icon fa-solid fa-sharp fa-angles-down"></span>Load @PageSize.ToString("N0") More</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-light btn-load-more disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Loading..</button>
+                                        }
+                                    </div>
+                                }
+                            </LogTable>
+                        }
+                    </div>
+                </div>
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
+</div>
+
+@code {
+
+    private const int HistoryTab = 1;
+    private const string CustomRange = "Custom";
+    private static readonly TimeSpan _aroundDuration = TimeSpan.FromMinutes(1);
+
+    private record TimeRangePreset(string Label, TimeSpan Duration);
+
+    private static readonly TimeRangePreset[] _timeRangePresets = new[]
+    {
+        new TimeRangePreset("Last hour", TimeSpan.FromHours(1)),
+        new TimeRangePreset("Last 12 hours", TimeSpan.FromHours(12)),
+        new TimeRangePreset("Last 24 hours", TimeSpan.FromHours(24)),
+        new TimeRangePreset("Last 7 days", TimeSpan.FromDays(7)),
+        new TimeRangePreset("Last 30 days", TimeSpan.FromDays(30))
+    };
+
+    private static readonly string[] _rangeOptions = _timeRangePresets.Select(o => o.Label).Append(CustomRange).ToArray();
+    private static readonly TimeRangePreset _defaultPreset = _timeRangePresets[2]; // Last 24 hours
+    private static TrakHoundLogLevel[] logLevels = Enum.GetValues<TrakHoundLogLevel>();
+
+    private readonly string downloadElementId = "log-download-" + Guid.NewGuid().ToString("N");
+
+    private string selectedRange;
+
+    private ITrakHoundStream<IEnumerable<TrakHoundLogItem>> logConsumer;
+    // The Live lines. Kept here because only the selected tab is rendered, so the Live tab's LogStream is removed while History is shown
+    private readonly LogStreamBuffer liveBuffer = new LogStreamBuffer();
+    private List<TrakHoundLogItem> logLines;
+    private TrakHoundLogLevel historyLevel;
+    private TrakHoundLogLevel? levelFilter; // Only this Level (from a Level count)
+    private string sourceFilter; // Only this Sender (from a line's Source)
+    private string historySearch;
+    private string nextCursor;
+    private bool hasMore;
+    private bool loadingMore;
+    private Dictionary<TrakHoundLogLevel, long> levelCounts;
+    private bool liveLoading;
+    private string liveError;
+    private string liveFilter; // The Live tab's text filter (separate from Filter, which callers set to the Logger Pattern)
+    private int liveVersion; // Each Subscribe supersedes the previous one (so a slow, stale subscribe never wins)
+    private bool disposed;
+    private bool historyLoading;
+    private int historyVersion; // Each Query supersedes the previous one (its results, and Load More pages, are discarded)
+    private TrakHoundLogQuery historyQuery; // The Query of the lines shown (Load More continues it)
+    private bool historyQueried;
+    private string historyError;
+    private bool defaultRangeApplied;
+    private int selectedTab;
+    private string downloadHref;
+    private string downloadFilename;
+    private bool downloadPending;
+
+
+    [Parameter]
+    public Func<Task<ITrakHoundStream<IEnumerable<TrakHoundLogItem>>>> GetLogLineConsumer { get; set; }
+
+    /// <summary>
+    /// Query Log History with Search and paging (the History tab stays empty without it)
+    /// </summary>
+    [Parameter]
+    public Func<TrakHoundLogQuery, Task<TrakHoundLogQueryResult>> QueryLogs { get; set; }
+
+    /// <summary>
+    /// Count the entries matching a Query by Logger and Level (optional, used with QueryLogs)
+    /// </summary>
+    [Parameter]
+    public Func<TrakHoundLogQuery, Task<IEnumerable<TrakHoundLoggerLogCount>>> QueryLogCounts { get; set; }
+
+    /// <summary>
+    /// The number of lines per page (used with QueryLogs)
+    /// </summary>
+    [Parameter]
+    public int PageSize { get; set; } = 500;
+
+    /// <summary>
+    /// The Live tab's minimum Level (History has its own, which starts from this one)
+    /// </summary>
+    [Parameter]
+    public TrakHoundLogLevel SelectedLogLevel { get; set; } = TrakHoundLogLevel.Debug;
+
+    [Parameter]
+    public EventCallback<TrakHoundLogLevel> SelectedLogLevelChanged { get; set; }
+
+    /// <summary>
+    /// The least severe Level that Log History keeps (ex. Information). History doesn't offer less severe Levels, and says which are kept
+    /// </summary>
+    [Parameter]
+    public TrakHoundLogLevel? HistoryMinimumLevel { get; set; }
+
+    [Parameter]
+    public string Filter { get; set; }
+
+    [Parameter]
+    public DateTime From { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime> FromChanged { get; set; }
+
+    [Parameter]
+    public DateTime To { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime> ToChanged { get; set; }
+
+    /// <summary>
+    /// Open on the History tab and Query it (ex. from a link to a Logger's History)
+    /// </summary>
+    [Parameter]
+    public bool ShowHistory { get; set; }
+
+    /// <summary>
+    /// Subscribe to the Live tab when the View is shown (instead of waiting for Subscribe). Ignored when ShowHistory is set
+    /// </summary>
+    [Parameter]
+    public bool AutoSubscribe { get; set; }
+
+    /// <summary>
+    /// The initial History Search
+    /// </summary>
+    [Parameter]
+    public string Search { get; set; }
+
+    /// <summary>
+    /// Shown at the right end of the Live and History toolbars (ex. a link to the full Log)
+    /// </summary>
+    [Parameter]
+    public RenderFragment ToolbarContent { get; set; }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Default to a recent time range (instead of an empty range that never returns results)
+        if (!defaultRangeApplied)
+        {
+            defaultRangeApplied = true;
+
+            if (From == default && To == default)
+            {
+                await ApplyPreset(_defaultPreset);
+            }
+            else
+            {
+                selectedRange = CustomRange;
+            }
+
+            historyLevel = ClampToKept(SelectedLogLevel);
+
+            if (!string.IsNullOrWhiteSpace(Search)) historySearch = Search;
+            if (ShowHistory) selectedTab = HistoryTab;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && ShowHistory) await QueryLogLines();
+        else if (firstRender && AutoSubscribe) await Subscribe();
+
+        // The Download link is rendered first, then clicked
+        if (downloadPending)
+        {
+            downloadPending = false;
+            await javascriptService.ClickElement(downloadElementId);
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+
+        // LogStream only detaches from the Consumer, so the Live subscription is ended here
+        var consumer = logConsumer;
+        logConsumer = null;
+        try { consumer?.Dispose(); } catch { }
+
+        liveBuffer.Dispose();
+    }
+
+
+    // History is Queried the first time its tab is opened
+    private async Task TabChanged(int index)
+    {
+        selectedTab = index;
+        if (index == HistoryTab && !historyQueried && !historyLoading && historyError == null) await QueryLogLines();
+    }
+
+    private async Task SelectLogLevel(TrakHoundLogLevel level)
+    {
+        // A subscribe in progress counts as subscribed (it's superseded by one at the new level)
+        var wasSubscribed = logConsumer != null || liveLoading;
+
+        if (logConsumer != null) logConsumer.Dispose();
+        logConsumer = null;
+
+        SelectedLogLevel = level;
+        await SelectedLogLevelChanged.InvokeAsync(level);
+
+        // Keep the Live stream running (at the new level) if it was subscribed
+        if (wasSubscribed) await Subscribe();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Subscribe()
+    {
+        if (GetLogLineConsumer != null && !disposed)
+        {
+            var version = ++liveVersion;
+            liveLoading = true;
+            liveError = null;
+            await InvokeAsync(StateHasChanged);
+
+            ITrakHoundStream<IEnumerable<TrakHoundLogItem>> consumer = null;
+            string error = null;
+
+            try
+            {
+                consumer = await GetLogLineConsumer();
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+
+            // Disposed or superseded while subscribing : end this subscription (nothing else will)
+            if (disposed || version != liveVersion)
+            {
+                try { consumer?.Dispose(); } catch { }
+                return;
+            }
+
+            logConsumer = consumer;
+            liveBuffer.SetConsumer(consumer); // Lines are kept even while the Live tab isn't shown
+            liveError = error;
+            liveLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Filters the lines shown as you type (LogStream keeps every line, so clearing the filter shows them again)
+    private void SelectLiveFilter(string value)
+    {
+        liveFilter = value;
+    }
+
+    private async Task Unsubscribe()
+    {
+        if (logConsumer != null) logConsumer.Dispose();
+        logConsumer = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    #region "History : Levels, Filters and Range"
+
+    // The Levels History can return : the most severe down to the least severe Level that Log History keeps
+    private IEnumerable<TrakHoundLogLevel> GetHistoryLevels()
+    {
+        return HistoryMinimumLevel != null ? logLevels.Where(o => o <= HistoryMinimumLevel.Value) : logLevels;
+    }
+
+    private TrakHoundLogLevel ClampToKept(TrakHoundLogLevel level)
+    {
+        return HistoryMinimumLevel != null && level > HistoryMinimumLevel.Value ? HistoryMinimumLevel.Value : level;
+    }
+
+    private string GetKeptLevelsText()
+    {
+        if (HistoryMinimumLevel == null) return null;
+        return HistoryMinimumLevel.Value == TrakHoundLogLevel.Trace ? "Log History keeps every level" : $"Log History keeps {HistoryMinimumLevel.Value} and above (Settings > Logs)";
+    }
+
+    private async Task SelectHistoryLevel(TrakHoundLogLevel level)
+    {
+        historyLevel = level;
+        if (levelFilter != null && levelFilter > level) levelFilter = null; // No longer included
+        await QueryLogLines();
+    }
+
+    private async Task SelectLevelFilter(TrakHoundLogLevel level)
+    {
+        levelFilter = levelFilter == level ? null : level;
+        await QueryLogLines();
+    }
+
+    private async Task SelectSourceFilter(LogRow row)
+    {
+        sourceFilter = row?.Source;
+        await QueryLogLines();
+    }
+
+    private async Task ClearSourceFilter()
+    {
+        sourceFilter = null;
+        await QueryLogLines();
+    }
+
+    private async Task SearchSubmitted(string value)
+    {
+        historySearch = value;
+        await QueryLogLines();
+    }
+
+    private async Task SelectRange(string range)
+    {
+        selectedRange = range;
+
+        var preset = _timeRangePresets.FirstOrDefault(o => o.Label == range);
+        if (preset != null)
+        {
+            await ApplyPreset(preset);
+            await QueryLogLines();
+        }
+    }
+
+    // Set the range relative to now (ex. the last hour)
+    private async Task ApplyPreset(TimeRangePreset preset)
+    {
+        var now = DateTime.Now;
+        From = now - preset.Duration;
+        To = now;
+        selectedRange = preset.Label;
+
+        await FromChanged.InvokeAsync(From);
+        await ToChanged.InvokeAsync(To);
+    }
+
+    private async Task SelectFrom(DateTime timestamp)
+    {
+        From = timestamp;
+        selectedRange = CustomRange;
+        await FromChanged.InvokeAsync(timestamp);
+        await QueryLogLines();
+    }
+
+    private async Task SelectTo(DateTime timestamp)
+    {
+        To = timestamp;
+        selectedRange = CustomRange;
+        await ToChanged.InvokeAsync(timestamp);
+        await QueryLogLines();
+    }
+
+    // A range ending now is moved to now (ex. "Last hour" is the hour up to now again)
+    private async Task RefreshHistory()
+    {
+        var preset = _timeRangePresets.FirstOrDefault(o => o.Label == selectedRange);
+        if (preset != null) await ApplyPreset(preset);
+
+        await QueryLogLines();
+    }
+
+    // The lines around a line's time : every kept Level and Source for a minute either side
+    private async Task ShowAround(LogRow row)
+    {
+        if (row == null) return;
+
+        From = row.Timestamp - _aroundDuration;
+        To = row.Timestamp + _aroundDuration;
+        selectedRange = CustomRange;
+        await FromChanged.InvokeAsync(From);
+        await ToChanged.InvokeAsync(To);
+
+        historyLevel = HistoryMinimumLevel ?? TrakHoundLogLevel.Trace;
+        levelFilter = null;
+        sourceFilter = null;
+        historySearch = null;
+
+        await QueryLogLines();
+    }
+
+    private string GetLevelDescription()
+    {
+        return levelFilter != null ? levelFilter.Value.ToString() : $"{historyLevel} (or higher)";
+    }
+
+    private string GetSourceDescription()
+    {
+        return sourceFilter != null ? $" from {sourceFilter}" : "";
+    }
+
+    private string GetSearchDescription()
+    {
+        return !string.IsNullOrWhiteSpace(historySearch) ? $" containing '{historySearch.Trim()}'" : "";
+    }
+
+    // The number of lines the Query matches (from the Level counts)
+    private long? GetFilteredTotal()
+    {
+        if (levelCounts == null) return null;
+        return levelFilter != null ? levelCounts.GetValueOrDefault(levelFilter.Value) : levelCounts.Values.Sum();
+    }
+
+    #endregion
+
+    #region "History : Query"
+
+    private void ClearHistory()
+    {
+        logLines = null;
+        historyQueried = false;
+        historyError = null;
+        nextCursor = null;
+        hasMore = false;
+        levelCounts = null;
+        historyQuery = null;
+    }
+
+    private TrakHoundLogQuery CreateQuery(string cursor = null, bool includeLevelFilter = true)
+    {
+        return new TrakHoundLogQuery
+        {
+            From = From,
+            To = To,
+            MinimumLevel = historyLevel,
+            Levels = includeLevelFilter && levelFilter != null ? new[] { levelFilter.Value } : null,
+            Search = !string.IsNullOrWhiteSpace(historySearch) ? historySearch.Trim() : null,
+            Sender = sourceFilter,
+            Take = PageSize,
+            SortOrder = TrakHoundSortOrder.Descending,
+            Cursor = cursor
+        };
+    }
+
+    private async Task QueryLogLines()
+    {
+        if (QueryLogs != null) await QueryLogPage();
+    }
+
+    // First page (results are already sorted and paged by the Log Provider)
+    private async Task QueryLogPage()
+    {
+        // A change during a Query starts a new one (instead of being dropped), and the latest wins
+        var version = ++historyVersion;
+        historyLoading = true;
+        loadingMore = false; // A Load More in progress is for the superseded Query
+        historyError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var query = CreateQuery();
+            var resultTask = QueryLogs(query);
+
+            // The counts leave out the Level filter, so every Level's count stays visible to choose from
+            var countsTask = QueryLogCounts != null ? QueryLogCounts(CreateQuery(includeLevelFilter: false)) : Task.FromResult<IEnumerable<TrakHoundLoggerLogCount>>(null);
+
+            var result = await resultTask;
+            if (version != historyVersion) return;
+
+            historyQuery = query;
+            logLines = result?.Items?.ToList() ?? new List<TrakHoundLogItem>();
+            hasMore = result?.HasMore ?? false;
+            nextCursor = result?.NextCursor;
+            historyQueried = true;
+
+            IEnumerable<TrakHoundLoggerLogCount> counts = null;
+            try
+            {
+                counts = await countsTask;
+            }
+            catch { } // Counts are optional
+
+            if (version != historyVersion) return;
+            levelCounts = SumByLevel(counts);
+        }
+        catch (Exception ex)
+        {
+            if (version != historyVersion) return;
+
+            ClearHistory();
+            historyError = ex.Message;
+        }
+        finally
+        {
+            // A superseded Query leaves the flag to the Query that replaced it
+            if (version == historyVersion)
+            {
+                historyLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task LoadMoreLogLines()
+    {
+        // Not while a new Query is loading (the cursor is the previous Query's)
+        if (QueryLogs == null || historyQuery == null || !hasMore || loadingMore || historyLoading) return;
+
+        var version = historyVersion;
+        loadingMore = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Continue the Query of the lines shown (ex. not a Search typed but not yet submitted)
+            var result = await QueryLogs(CreateNextPageQuery(historyQuery, nextCursor));
+            if (version != historyVersion) return; // A newer Query replaced the lines shown
+
+            if (result?.Items != null) logLines.AddRange(result.Items);
+            hasMore = result?.HasMore ?? false;
+            nextCursor = result?.NextCursor;
+        }
+        catch (Exception ex)
+        {
+            if (version != historyVersion) return;
+
+            historyError = ex.Message;
+        }
+        finally
+        {
+            if (version == historyVersion)
+            {
+                loadingMore = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    // A copy of the Query from the cursor (the Log Provider may change the Query it's given, ex. its Patterns)
+    private static TrakHoundLogQuery CreateNextPageQuery(TrakHoundLogQuery query, string cursor)
+    {
+        return new TrakHoundLogQuery
+        {
+            Patterns = query.Patterns,
+            From = query.From,
+            To = query.To,
+            MinimumLevel = query.MinimumLevel,
+            Levels = query.Levels,
+            Search = query.Search,
+            Code = query.Code,
+            Sender = query.Sender,
+            Take = query.Take,
+            SortOrder = query.SortOrder,
+            Cursor = cursor
+        };
+    }
+
+    private static Dictionary<TrakHoundLogLevel, long> SumByLevel(IEnumerable<TrakHoundLoggerLogCount> counts)
+    {
+        if (counts == null) return null;
+
+        var levels = new Dictionary<TrakHoundLogLevel, long>();
+        foreach (var count in counts)
+        {
+            foreach (var entry in count.Counts)
+            {
+                levels[entry.Key] = levels.GetValueOrDefault(entry.Key) + entry.Value;
+            }
+        }
+        return levels;
+    }
+
+    #endregion
+
+    #region "History : Download"
+
+    // The lines shown, oldest first, as a tab separated .log file
+    private void DownloadLines()
+    {
+        if (logLines.IsNullOrEmpty()) return;
+
+        var text = new System.Text.StringBuilder();
+        foreach (var line in logLines.OrderBy(o => o.Timestamp))
+        {
+            text.Append(line.Timestamp.ToLocalDateTime().ToString("yyyy-MM-dd HH:mm:ss.fff")).Append('\t');
+            text.Append(line.LogLevel).Append('\t');
+            text.Append(line.Sender).Append('\t');
+            text.Append(line.Message).Append('\n');
+        }
+
+        var name = !string.IsNullOrEmpty(Filter) ? new string(Filter.Select(c => char.IsLetterOrDigit(c) || c == '.' || c == '-' ? c : '_').ToArray()).Trim('_') : "log";
+        downloadFilename = $"{(string.IsNullOrEmpty(name) ? "log" : name)}-{DateTime.Now:yyyyMMdd-HHmmss}.log";
+        downloadHref = "data:text/plain;charset=utf-8;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text.ToString()));
+        downloadPending = true;
+    }
+
+    #endregion
+
+}

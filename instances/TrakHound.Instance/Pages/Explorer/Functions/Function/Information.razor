@@ -1,0 +1,182 @@
+﻿@inject ExplorerService explorerService
+@using TrakHound.Functions
+
+@if (FunctionInformation != null)
+{
+    <div class="information-panel">
+
+        <div class="properties-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Function ID</td>
+                        <td class="value">@FunctionInformation.FunctionId</td>
+                    </tr>
+                    <tr>
+                        <td class="label">TrakHound Version</td>
+                        <td class="value">@FunctionInformation.TrakHoundVersion</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="configuration-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Configuration ID</td>
+                        <td class="value">@FunctionInformation.ConfigurationId</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="package-panel">
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Package ID</td>
+                        <td class="value">@FunctionInformation.PackageId</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package Version</td>
+                        <td class="value">@FunctionInformation.PackageVersion</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package UUID</td>
+                        <td class="value">@FunctionInformation.PackageUuid</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package Hash</td>
+                        <td class="value">@FunctionInformation.PackageHash</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Package Build Date</td>
+                        <td class="value">@FunctionInformation.PackageBuildDate?.ToLocalTime()</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        @if (FunctionInformation.Repository != null)
+        {
+            <div class="repository-panel">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td class="label">Repository</td>
+                            <td class="value"><a href="@FunctionInformation.Repository" target="_blank">@FunctionInformation.Repository</a></td>
+                        </tr>
+                        <tr>
+                            <td class="label">Repository Branch</td>
+                            <td class="value">@RepositoryLink(GetRepositoryBranchLink(FunctionInformation), FunctionInformation.RepositoryBranch)</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Repository Directory</td>
+                            <td class="value">@RepositoryLink(GetRepositoryDirectoryLink(FunctionInformation), FunctionInformation.RepositoryDirectory)</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Repository Commit</td>
+                            <td class="value">@RepositoryLink(GetRepositoryCommitLink(FunctionInformation), FunctionInformation.RepositoryCommit)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (FunctionInformation.PackageReadMe != null)
+        {
+            <div class="readme-panel">
+                <MarkdownContent Markdown="@FunctionInformation.PackageReadMe" />
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+
+	[Parameter]
+	public string ServerId { get; set; }
+
+	[Parameter]
+	public TrakHoundFunctionInformation FunctionInformation { get; set; }
+
+
+    private enum RepositoryHost
+    {
+        Unknown,
+        GitHub,
+        GitLab,
+        Bitbucket
+    }
+
+    private static RepositoryHost GetRepositoryHost(string repository)
+    {
+        if (Uri.TryCreate(repository, UriKind.Absolute, out var uri))
+        {
+            var host = uri.Host.ToLower();
+            if (host.Contains("github")) return RepositoryHost.GitHub;
+            if (host.Contains("gitlab")) return RepositoryHost.GitLab;
+            if (host.Contains("bitbucket")) return RepositoryHost.Bitbucket;
+        }
+
+        return RepositoryHost.Unknown;
+    }
+
+    private static RenderFragment RepositoryLink(string link, string text) => builder =>
+    {
+        if (!string.IsNullOrEmpty(link) && !string.IsNullOrEmpty(text))
+        {
+            builder.OpenElement(0, "a");
+            builder.AddAttribute(1, "href", link);
+            builder.AddAttribute(2, "target", "_blank");
+            builder.AddContent(3, text);
+            builder.CloseElement();
+        }
+        else
+        {
+            // Unknown repository hosts use different URL formats, so show plain text instead of a broken link
+            builder.AddContent(4, text);
+        }
+    };
+
+    private static string GetRepositoryBranchLink(TrakHoundFunctionInformation information)
+    {
+        return GetRepositoryTreeLink(information.Repository, information.RepositoryBranch, null);
+    }
+
+    private static string GetRepositoryDirectoryLink(TrakHoundFunctionInformation information)
+    {
+        return GetRepositoryTreeLink(information.Repository, information.RepositoryBranch, information.RepositoryDirectory);
+    }
+
+    private static string GetRepositoryTreeLink(string repository, string branch, string directory)
+    {
+        if (string.IsNullOrEmpty(branch)) return null;
+
+        switch (GetRepositoryHost(repository))
+        {
+            case RepositoryHost.GitHub: return Url.Combine(repository, "tree", branch, directory);
+            case RepositoryHost.GitLab: return Url.Combine(repository, "-/tree", branch, directory);
+            case RepositoryHost.Bitbucket: return Url.Combine(repository, "src", branch, directory);
+            default: return null;
+        }
+    }
+
+    private static string GetRepositoryCommitLink(TrakHoundFunctionInformation information)
+    {
+        var repository = information.Repository;
+        var commit = information.RepositoryCommit;
+        if (string.IsNullOrEmpty(commit)) return null;
+
+        switch (GetRepositoryHost(repository))
+        {
+            case RepositoryHost.GitHub: return Url.Combine(repository, "commit", commit);
+            case RepositoryHost.GitLab: return Url.Combine(repository, "-/commit", commit);
+            case RepositoryHost.Bitbucket: return Url.Combine(repository, "commits", commit);
+            default: return null;
+        }
+    }
+
+}

@@ -1,0 +1,177 @@
+@page "/_admin/security/providers"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.IdentityProviders)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject NavigationManager navigationManager
+@using TrakHound.Instances
+@using TrakHound.Security
+
+<TrakHoundPageTitle Text="Identity Providers" />
+<AreaBreadcrumbs Items="@([new("Identity Providers")])" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-id-badge"></span>
+        <div class="page-title">
+            <span class="title">Identity Providers</span>
+            <span class="description">Identity Providers verify who is making a Request. Profiles choose which Provider protects their Resources</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-buttons">
+            <a class="btn btn-sm btn-command" href="_admin/configuration/identity"><span class="icon fa-solid fa-sharp fa-sliders"></span>Manage Configurations</a>
+            <a class="admin-write btn btn-primary" href="_admin/configuration/identity/new"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Identity Provider</a>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Identity Provider</th>
+                    <th>Sign In</th>
+                    <th class="col-narrow">Status</th>
+                    <th class="hide-narrow">Profiles</th>
+                    <th class="col-actions"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var provider in state.Providers)
+                {
+                    <tr>
+                        <td>
+                            <span class="item-name">@provider.DisplayName</span>
+                            <span class="item-description">
+                                @if (provider.IsBuiltIn && provider.Id == TrakHoundUserIdentityProvider.ProviderId)
+                                {
+                                    <span>Built in · Users are managed on the <a href="_admin/security/users">Users</a> page</span>
+                                }
+                                else if (provider.IsBuiltIn)
+                                {
+                                    <span>Built in · Keys are managed on the <a href="_admin/security/api-keys">API Keys</a> page</span>
+                                }
+                                else if (provider.PackageId != provider.DisplayName)
+                                {
+                                    <span>@provider.PackageId</span>
+                                }
+                            </span>
+                            <code class="resource-id">@provider.Id</code>
+                        </td>
+                        <td>
+                            <div class="chips">
+                                @if (!provider.IsLoaded)
+                                {
+                                    <span class="muted">Unknown (not loaded)</span>
+                                }
+                                @if (provider.Features.HasFlag(TrakHoundIdentityProviderFeatures.Redirect))
+                                {
+                                    <span class="chip" title="Browsers are redirected to an external sign in page (ex. OpenID Connect)"><span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span>External Sign In</span>
+                                }
+                                @if (provider.Features.HasFlag(TrakHoundIdentityProviderFeatures.Credentials))
+                                {
+                                    <span class="chip" title="Browsers sign in with a Username and Password on this Instance"><span class="icon fa-solid fa-sharp fa-user-lock"></span>Username &amp; Password</span>
+                                }
+                                @if (provider.Features.HasFlag(TrakHoundIdentityProviderFeatures.Token))
+                                {
+                                    <span class="chip" title="Scripts and Api clients send credentials with each Request"><span class="icon fa-solid fa-sharp fa-ticket"></span>Request Token</span>
+                                }
+                            </div>
+                            @if (provider.Features.HasFlag(TrakHoundIdentityProviderFeatures.Redirect))
+                            {
+                                var callbackUrl = GetCallbackUrl(provider);
+                                <div class="callback-url" title="Register this Redirect URI with the external Identity server">
+                                    <span class="callback-label">Redirect URI</span>
+                                    <CopyLabel Value="@callbackUrl" />
+                                </div>
+                            }
+                        </td>
+                        <td class="col-narrow">
+                            @if (provider.IsLoaded)
+                            {
+                                <span class="status ok"><span class="status-dot"></span>Loaded</span>
+                            }
+                            else
+                            {
+                                <span class="status error" title="The Identity Provider's Package could not be loaded (rebuild or update it)"><span class="status-dot"></span>Not loaded</span>
+                            }
+                        </td>
+                        <td class="hide-narrow">
+                            @if (provider.ProfileIds.Count == 0)
+                            {
+                                <span class="muted">Not used</span>
+                            }
+                            else
+                            {
+                                <div class="chips">
+                                    @foreach (var profileId in provider.ProfileIds)
+                                    {
+                                        <a class="chip" href="@($"_admin/configuration/security-profiles/{Uri.EscapeDataString(profileId)}")">@profileId</a>
+                                    }
+                                </div>
+                            }
+                        </td>
+                        <td class="col-actions">
+                            @if (provider.CanSignIn && provider.IsLoaded)
+                            {
+                                <a class="btn btn-sm btn-command" href="@GetSignInLink(provider)" target="_blank" title="Open the sign in page in a new tab"><span class="icon fa-solid fa-sharp fa-right-to-bracket"></span>Test Sign In</a>
+                            }
+                            @if (provider.ConfigurationLink != null)
+                            {
+                                <a class="btn btn-sm btn-command" href="@provider.ConfigurationLink"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Configure</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (!state.Providers.Any(o => o.CanSignIn))
+        {
+            <div class="section">
+                <div class="callout">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    <div>
+                        No Identity Provider supports signing in from a browser, so protected App Pages can't be opened.
+                        Add an <strong>OpenID Connect</strong> (TrakHound.Oidc.Identity) or <strong>LDAP</strong> (TrakHound.Ldap.Identity) Identity Provider to let users sign in.
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@code {
+
+    private SecurityState state;
+
+
+    protected override void OnInitialized()
+    {
+        state = SecurityState.Load(instance);
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+    }
+
+    private void SecurityChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { state = SecurityState.Load(instance); StateHasChanged(); });
+
+    private string GetBaseUrl()
+    {
+        var basePath = instance.Configuration.BasePath?.Trim('/');
+        // Sign In is served on the HTTP Port when the Admin Interface has its own Port
+        var uri = new Uri(TrakHound.Instance.Http.TrakHoundAdminPort.GetHttpBaseUri(navigationManager.BaseUri));
+        return $"{uri.Scheme}://{uri.Authority}{(string.IsNullOrEmpty(basePath) ? "" : "/" + basePath)}";
+    }
+
+    private string GetCallbackUrl(SecurityProviderInfo provider) => $"{GetBaseUrl()}/_identity/callback/{Uri.EscapeDataString(provider.Id)}";
+
+    private string GetSignInLink(SecurityProviderInfo provider) => TrakHound.Instance.Http.TrakHoundAdminPort.GetHttpLink(navigationManager.BaseUri, $"_identity/signin/{Uri.EscapeDataString(provider.Id)}?returnUrl=%2F");
+
+}

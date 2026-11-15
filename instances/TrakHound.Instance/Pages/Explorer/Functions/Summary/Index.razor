@@ -1,0 +1,619 @@
+@page "/_admin/explorer/{instanceId}/functions-summary"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+@using TrakHound.Functions
+
+<TrakHoundPageTitle Text="Functions Summary" />
+
+<div class="functions-summary-page" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-regular fa-sharp fa-calendar-clock"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Functions Summary</span>
+                <span class="header-description">Runs of each Function and its Scheduled Tasks over the @selectedWindow.Title.ToLower() · updated every @(_updateInterval / 1000) seconds</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <div class="btn-group window-buttons">
+            @foreach (var window in _windows)
+            {
+                <button class="btn btn-sm @(window == selectedWindow ? "btn-primary" : "btn-light")" @onclick="() => WindowClicked(window)">@window.Title</button>
+            }
+        </div>
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (summaries == null)
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-regular fa-sharp fa-calendar-clock"></span>
+                    <span class="empty-title">Function Runs Unavailable</span>
+                    <span class="empty-description">Install the TrakHound.Functions.Api package to record Function Runs (and TrakHound.ScheduledTasks for Scheduled Tasks)</span>
+                </div>
+            }
+            else if (summaries.Count == 0)
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-code"></span>
+                    <span class="empty-title">No Functions</span>
+                    <span class="empty-description">No Functions are configured in this Instance</span>
+                </div>
+            }
+            else
+            {
+                var totalRuns = summaries.Sum(o => o.RunCount);
+                var totalSuccess = summaries.Sum(o => o.SuccessCount);
+                var totalErrors = summaries.Sum(o => o.ErrorCount);
+                var totalTasks = summaries.Sum(o => o.TaskCount);
+                var enabledTasks = summaries.Sum(o => o.EnabledTaskCount);
+                var totalMissed = summaries.Sum(o => o.MissedRunCount);
+                var nextRun = summaries.Where(o => o.NextRun != null).Select(o => o.NextRun).Min();
+
+                <div class="stat-tiles">
+                    <div class="stat-tile">
+                        <span class="stat-label">Runs</span>
+                        <span class="stat-value">@totalRuns.ToString("N0")</span>
+                        <span class="stat-detail">@summaries.Count(o => o.RunCount > 0).ToString("N0") of @summaries.Count.ToString("N0") Functions run</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Success Rate</span>
+                        <span class="stat-value">@(totalRuns > 0 ? $"{(double)totalSuccess / totalRuns * 100:0.#}" : "-")<span class="stat-unit">%</span></span>
+                        <span class="stat-detail">@totalSuccess.ToString("N0") succeeded</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Errors</span>
+                        <span class="stat-value @(totalErrors > 0 ? "error" : null)">@totalErrors.ToString("N0")</span>
+                        <span class="stat-detail">@summaries.Count(o => o.ErrorCount > 0).ToString("N0") Functions with errors</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Scheduled Tasks</span>
+                        <span class="stat-value">@enabledTasks.ToString("N0")<span class="stat-unit">enabled</span></span>
+                        <span class="stat-detail">@totalTasks.ToString("N0") total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Missed Runs</span>
+                        <span class="stat-value @(totalMissed > 0 ? "warning" : null)">@totalMissed.ToString("N0")</span>
+                        <span class="stat-detail">scheduled occurrences without a Run</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">Next Run</span>
+                        <span class="stat-value">@FormatRelative(nextRun)</span>
+                        <span class="stat-detail">@FormatTimestamp(nextRun)</span>
+                    </div>
+                </div>
+
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@summaries"
+                                    TItem="FunctionSummary"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="FunctionId" Title="Function" MinWidth="160px" />
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="EnabledTaskCount" Title="Schedules" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    @if (item.TaskCount > 0)
+                                    {
+                                        <span class="number" title="@item.EnabledTaskCount enabled of @item.TaskCount">@item.EnabledTaskCount / @item.TaskCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">-</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="RunCount" Title="Runs" Width="80px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.RunCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="ErrorCount" Title="Errors" Width="80px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number @(item.ErrorCount > 0 ? "error" : null)">@item.ErrorCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="SuccessRate" Title="Success" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.RunCount > 0 ? $"{item.SuccessRate:0.#}%" : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="AverageDuration" Title="Avg Time" Width="95px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.RunCount > 0 ? FormatDuration(item.AverageDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="MaxDuration" Title="Max Time" Width="95px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.RunCount > 0 ? FormatDuration(item.MaxDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="MissedRunCount" Title="Missed" Width="85px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number @(item.MissedRunCount > 0 ? "warning" : null)">@(item.TaskCount > 0 ? item.MissedRunCount.ToString("N0") : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="LastStatusCode" Title="Last Result" Width="105px">
+                                <Template Context="item">
+                                    @if (item.LastStatusCode != null)
+                                    {
+                                        <span class="result @GetResultClass(item.LastStatusCode.Value)">@item.LastStatusCode</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">-</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="LastRun" Title="Last Run" Width="140px">
+                                <Template Context="item">
+                                    <span class="number">@FormatTimestamp(item.LastRun)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="FunctionSummary" Property="NextRun" Title="Next Run" Width="140px">
+                                <Template Context="item">
+                                    <span class="number" title="@FormatTimestamp(item.NextRun)">@FormatRelative(item.NextRun)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = summaries.FirstOrDefault(o => o.FunctionId == selectedFunctionId);
+                if (selected != null)
+                {
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <a class="detail-name" href="@GetFunctionLink(selected.FunctionId)">@selected.FunctionId</a>
+                            @if (!string.IsNullOrEmpty(selected.PackageId))
+                            {
+                                <span class="detail-type">@selected.PackageId @selected.PackageVersion</span>
+                            }
+                            <span class="detail-state"><span class="icon fa-regular fa-sharp fa-clock"></span>@(selected.LastRun != null ? $"Last run {FormatTimestamp(selected.LastRun)}" : $"Not run in the {selectedWindow.Title.ToLower()}")</span>
+                        </div>
+
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label">Runs</span>
+                                <span class="stat-value">@selected.RunCount.ToString("N0")</span>
+                                <span class="stat-detail">in the @selectedWindow.Title.ToLower()</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Success Rate</span>
+                                <span class="stat-value">@(selected.RunCount > 0 ? $"{selected.SuccessRate:0.#}" : "-")<span class="stat-unit">%</span></span>
+                                <span class="stat-detail">@selected.SuccessCount.ToString("N0") succeeded · @selected.CancelledCount.ToString("N0") cancelled</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Errors</span>
+                                <span class="stat-value @(selected.ErrorCount > 0 ? "error" : null)">@selected.ErrorCount.ToString("N0")</span>
+                                <span class="stat-detail">@(selected.LastStatus != null ? $"last result {selected.LastStatus}" : "no runs")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Avg Duration</span>
+                                <span class="stat-value">@(selected.RunCount > 0 ? FormatDuration(selected.AverageDuration) : "-")</span>
+                                <span class="stat-detail">max @(selected.RunCount > 0 ? FormatDuration(selected.MaxDuration) : "-")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Triggered By</span>
+                                <span class="stat-value">@selected.ScheduledRunCount.ToString("N0")<span class="stat-unit">scheduled</span></span>
+                                <span class="stat-detail" title="@(selected.UntrackedRunCount > 0 ? $"{selected.UntrackedRunCount:N0} Runs were recorded before Triggers were tracked" : null)">@selected.ManualRunCount.ToString("N0") manual · @selected.ApiRunCount.ToString("N0") API@(selected.UntrackedRunCount > 0 ? $" · {selected.UntrackedRunCount:N0} other" : null)</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Next Run</span>
+                                <span class="stat-value">@FormatRelative(selected.NextRun)</span>
+                                <span class="stat-detail">@(selected.NextRun != null ? FormatTimestamp(selected.NextRun) : "no enabled Scheduled Tasks")</span>
+                            </div>
+                        </div>
+
+                        <MetricsChart TItem="FunctionTimelineBucket"
+                                      Title="Runs"
+                                      Subtitle="@($"per {FormatBucket(selectedWindow)}")"
+                                      Samples="@selected.Timeline"
+                                      Series="@timelineSeries"
+                                      GetTimestamp="@(o => o.Timestamp)"
+                                      GetValue="@GetBucketValue"
+                                      TimestampFormat="@selectedWindow.TimestampFormat"
+                                      ValueFormatter="@(o => o.ToString("0"))" />
+
+                        <div class="section-title">
+                            Scheduled Tasks
+                            <span class="section-subtitle"><a href="@GetFunctionLink(selected.FunctionId, "scheduled-tasks")">Manage</a></span>
+                        </div>
+                        @if (!selected.Tasks.IsNullOrEmpty())
+                        {
+                            <div class="table-panel tasks-panel">
+                                <RadzenDataGrid Data="@selected.Tasks"
+                                                TItem="FunctionTaskSummary"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="Enabled" Title="State" Width="90px">
+                                            <Template Context="task">
+                                                <span class="state @(task.Enabled ? "enabled" : "disabled")">@(task.Enabled ? "Enabled" : "Disabled")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="Description" Title="Task" MinWidth="180px">
+                                            <Template Context="task">
+                                                <span class="path" title="@task.Id">@(!string.IsNullOrEmpty(task.Description) ? task.Description : task.Id)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="Schedule" Title="Schedule" Width="140px">
+                                            <Template Context="task">
+                                                <span class="schedule">@task.Schedule</span>
+                                                @if (!string.IsNullOrEmpty(task.ScheduleError))
+                                                {
+                                                    <span class="icon schedule-error fa-solid fa-sharp fa-circle-exclamation" title="@task.ScheduleError"></span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="NextRun" Title="Next Run" Width="120px">
+                                            <Template Context="task">
+                                                <span class="number" title="@FormatTimestamp(task.NextRun)">@FormatRelative(task.NextRun)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="LastRun" Title="Last Run" Width="140px">
+                                            <Template Context="task">
+                                                @if (task.LastRunId != null)
+                                                {
+                                                    <a class="number" href="@GetFunctionLink(selected.FunctionId, $"runs/{task.LastRunId}")">@FormatTimestamp(task.LastRun)</a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="muted">-</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="LastStatusCode" Title="Last Result" Width="100px">
+                                            <Template Context="task">
+                                                @if (task.LastStatusCode != null)
+                                                {
+                                                    <span class="result @GetResultClass(task.LastStatusCode.Value)">@task.LastStatusCode</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="muted">-</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="RunCount" Title="Runs" Width="75px" TextAlign="TextAlign.Right">
+                                            <Template Context="task">
+                                                <span class="number">@task.RunCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="ErrorCount" Title="Errors" Width="75px" TextAlign="TextAlign.Right">
+                                            <Template Context="task">
+                                                <span class="number @(task.ErrorCount > 0 ? "error" : null)">@task.ErrorCount.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="SuccessRate" Title="Success" Width="85px" TextAlign="TextAlign.Right">
+                                            <Template Context="task">
+                                                <span class="number">@(task.RunCount > 0 ? $"{task.SuccessRate:0.#}%" : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="AverageDuration" Title="Avg Time" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="task">
+                                                <span class="number">@(task.RunCount > 0 ? FormatDuration(task.AverageDuration) : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="FunctionTaskSummary" Property="MissedRunCount" Title="Missed" Width="80px" TextAlign="TextAlign.Right">
+                                            <Template Context="task">
+                                                <span class="number @(task.MissedRunCount > 0 ? "warning" : null)" title="@(task.ExpectedRunCount != null ? $"{task.ExpectedRunCount:N0} scheduled since the first Run in the window" : "No Runs to compare against")">@(task.MissedRunCount != null ? task.MissedRunCount.Value.ToString("N0") : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="empty-panel small">
+                                <span class="empty-description">This Function has no Scheduled Tasks</span>
+                            </div>
+                        }
+
+                    </div>
+                }
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 10000;
+
+    public class TimeWindow
+    {
+        public string Title { get; set; }
+        public TimeSpan Duration { get; set; }
+        public int BucketCount { get; set; }
+        public string TimestampFormat { get; set; }
+    }
+
+    private static readonly TimeWindow[] _windows = new[]
+    {
+        new TimeWindow { Title = "Last Hour", Duration = TimeSpan.FromHours(1), BucketCount = 12, TimestampFormat = "HH:mm" },
+        new TimeWindow { Title = "Last 24 Hours", Duration = TimeSpan.FromDays(1), BucketCount = 24, TimestampFormat = "HH:mm" },
+        new TimeWindow { Title = "Last 7 Days", Duration = TimeSpan.FromDays(7), BucketCount = 28, TimestampFormat = "MM-dd HH:mm" }
+    };
+
+    private TimeWindow selectedWindow = _windows[1];
+    private List<FunctionSummary> summaries;
+    private string selectedFunctionId;
+    private IEnumerable<MetricsChartSeries> timelineSeries;
+
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Selects this Function when the page opens
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string FunctionId { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        themeService.ThemeChanged += ThemeChanged;
+        UpdateSeries();
+    }
+
+    void IDisposable.Dispose()
+    {
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Functions Summary..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            summaries = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+            if (!string.IsNullOrEmpty(FunctionId)) selectedFunctionId = FunctionId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Functions", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Summary", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                await UpdateSummaries(client);
+
+                // Poll for new Runs
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateSummaries(ITrakHoundClient client)
+    {
+        var window = selectedWindow;
+        var now = DateTime.UtcNow;
+
+        var parameters = new Dictionary<string, string>
+        {
+            { "start", now.Subtract(window.Duration).ToUnixTime().ToString() },
+            { "stop", now.ToUnixTime().ToString() },
+            { "bucketCount", window.BucketCount.ToString() }
+        };
+
+        List<FunctionSummary> items = null;
+        try
+        {
+            // Null when the TrakHound.Functions.Api package isn't installed
+            items = (await client.Api.GetJson<IEnumerable<FunctionSummary>>("functions/summary", queryParameters: parameters))?.ToList();
+        }
+        catch { }
+
+        if (window != selectedWindow) return; // The Window changed while loading
+
+        summaries = items;
+
+        if (!items.IsNullOrEmpty())
+        {
+            // Select the most recently Run Function by default (or if the selected one went away)
+            var selected = items.FirstOrDefault(o => string.Equals(o.FunctionId, selectedFunctionId, StringComparison.OrdinalIgnoreCase));
+            if (selected == null)
+            {
+                selected = items.OrderByDescending(o => o.LastRun ?? DateTime.MinValue).First();
+            }
+            selectedFunctionId = selected.FunctionId;
+        }
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateSummaries(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private async Task WindowClicked(TimeWindow window)
+    {
+        if (window == selectedWindow) return;
+
+        selectedWindow = window;
+
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null)
+        {
+            await UpdateSummaries(client);
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<FunctionSummary> args)
+    {
+        selectedFunctionId = args.Data?.FunctionId;
+    }
+
+    private void RowRender(RowRenderEventArgs<FunctionSummary> args)
+    {
+        if (args.Data?.FunctionId == selectedFunctionId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        timelineSeries = new[]
+        {
+            new MetricsChartSeries("Runs", nameof(FunctionTimelineBucket.RunCount), colors[0]),
+            new MetricsChartSeries("Errors", nameof(FunctionTimelineBucket.ErrorCount), colors[1])
+        };
+    }
+
+    private static double GetBucketValue(FunctionTimelineBucket bucket, string property)
+    {
+        return property == nameof(FunctionTimelineBucket.ErrorCount) ? bucket.ErrorCount : bucket.RunCount;
+    }
+
+
+    private string GetFunctionLink(string functionId, string page = null)
+    {
+        var link = $"/_admin/explorer/{explorerService.SelectedInstanceId}/functions/{functionId}";
+        return page != null ? $"{link}/{page}" : link;
+    }
+
+    private static string GetResultClass(int statusCode)
+    {
+        if (statusCode >= 200 && statusCode < 400) return "success";
+        if (statusCode == TrakHoundFunctionMetricsCollector.CancelledStatusCode) return "cancelled";
+        return "error";
+    }
+
+    private static string FormatBucket(TimeWindow window)
+    {
+        var bucket = TimeSpan.FromTicks(window.Duration.Ticks / window.BucketCount);
+        if (bucket.TotalHours >= 1) return bucket.TotalHours == 1 ? "hour" : $"{bucket.TotalHours:0} hours";
+        return $"{bucket.TotalMinutes:0} minutes";
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
+        if (duration.TotalHours >= 1) return $"{(int)duration.TotalHours}h {duration.Minutes:00}m";
+        if (duration.TotalMinutes >= 1) return $"{duration.Minutes}m {duration.Seconds:00}s";
+        if (duration.TotalSeconds >= 10) return $"{duration.TotalSeconds:0} s";
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.#} s";
+        if (milliseconds >= 10) return $"{milliseconds:0} ms";
+        return $"{milliseconds:0.#} ms";
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    /// <summary>
+    /// A future Timestamp as "in 5m" (ex. Next Run)
+    /// </summary>
+    private static string FormatRelative(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var remaining = timestamp.Value.ToUniversalTime() - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero) return "now";
+        if (remaining.TotalDays >= 1) return $"in {(int)remaining.TotalDays}d {remaining.Hours}h";
+        if (remaining.TotalHours >= 1) return $"in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+        if (remaining.TotalMinutes >= 1) return $"in {(int)remaining.TotalMinutes}m";
+        return $"in {Math.Max(1, (int)remaining.TotalSeconds)}s";
+    }
+}

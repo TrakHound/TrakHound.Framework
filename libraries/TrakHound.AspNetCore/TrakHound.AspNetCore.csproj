@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+		<!-- Listed so a Runtime-specific publish builds this (and TrakHound.Common) per Runtime. Without it the SDK treats it as Runtime-agnostic and
+		     builds TrakHound.Common without a Runtime too, to one obj folder that parallel publishes (ex. win-x64 and win-x86) both write to -->
+		<RuntimeIdentifiers>win-x64;win-x86;osx-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<AssemblyName>TrakHound.AspNetCore</AssemblyName>
+		<RootNamespace>TrakHound</RootNamespace>
+		<Configurations>Debug;Release;Package</Configurations>
+		<Description>Contains the ASP.NET Core classes shared by the TrakHound Instance and the debug hosts (ex. the WebSocket and Server-Sent Events Stream handling)</Description>
+		<RunAnalyzersDuringLiveAnalysis>False</RunAnalyzersDuringLiveAnalysis>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Microsoft.AspNetCore.Http" />
+		<Using Include="Microsoft.AspNetCore.Routing" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\TrakHound.Common\TrakHound.Common.csproj" />
+	</ItemGroup>
+
+</Project>

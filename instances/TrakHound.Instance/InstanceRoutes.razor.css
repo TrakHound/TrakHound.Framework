@@ -1,0 +1,9 @@
+﻿/* Shown for Admin routes that are not found when the Error Page is disabled */
+
+.not-found {
+    padding: 48px 16px;
+    text-align: center;
+    font-size: var(--fontSizeLg);
+    font-family: var(--fontSans);
+    color: var(--textMuted);
+}

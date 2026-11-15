@@ -1,0 +1,566 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/connections/http/requests"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+@using TrakHound.Http
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="HTTP Requests - Diagnostics" />
+
+<div class="http-requests-page @(_selected != null ? "has-details" : null)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-arrow-right-arrow-left"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">HTTP Requests</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        <div class="toolbar-row">
+            <div class="btn-group">
+                @if (!loading)
+                {
+                    <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+                }
+                else
+                {
+                    <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+                }
+
+                @if (_paused)
+                {
+                    <button class="btn btn-light btn-paused" @onclick="PauseClicked" title="Resume updating every second"><span class="icon fa-solid fa-sharp fa-play"></span>Resume</button>
+                }
+                else
+                {
+                    <button class="btn btn-light" @onclick="PauseClicked" title="Stop updating so the rows stay where they are"><span class="icon fa-solid fa-sharp fa-pause"></span>Pause</button>
+                }
+            </div>
+
+            <a class="btn btn-light" href="@GetMetricsLink(null, null)"><span class="icon fa-solid fa-sharp fa-globe"></span>HTTP Metrics</a>
+
+            <span class="update-status">@GetUpdateStatus()</span>
+        </div>
+
+        <div class="toolbar-row filters">
+            <div class="status-filter" role="group" aria-label="Status">
+                @foreach (var filter in _statusFilters)
+                {
+                    <button class="btn btn-filter @(filter == _statusFilter ? "active" : null)" @onclick="() => StatusFilterClicked(filter)">@filter</button>
+                }
+            </div>
+
+            <RadzenDropDown TValue="string" Data="@_areas" @bind-Value="_areaFilter" @bind-Value:after="FilterChanged" AllowClear="true" Placeholder="All Areas" class="area-filter dropdown-sm" />
+
+            <div class="slow-filter" title="Only show Requests that took at least this long (Streams are hidden)">
+                <span class="filter-label">Slower than</span>
+                <RadzenNumeric TValue="int?" @bind-Value="_slowFilter" @bind-Value:after="FilterChanged" Min="0" Step="100" Placeholder="ms" class="slow-filter-input" />
+                <span class="filter-label">ms</span>
+            </div>
+
+            <label class="streams-filter" title="WebSocket and Event Stream Requests stay open for the life of the connection">
+                <RadzenCheckBox TValue="bool" @bind-Value="_showStreams" @bind-Value:after="FilterChanged" />
+                <span class="filter-label">Streams</span>
+            </label>
+
+            @if (IsFiltered)
+            {
+                <button class="btn btn-link btn-clear" @onclick="ClearFiltersClicked">Clear filters</button>
+            }
+        </div>
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="table-panel">
+
+            @if (_capacity == 0 && _received)
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-arrow-right-arrow-left"></span>
+                    <span class="empty-title">Recent Requests are not kept</span>
+                    <span class="empty-description">Set the HTTP Requests to Keep in Settings > Metrics > Recent Requests (applied when the Instance is restarted)</span>
+                </div>
+            }
+            else if (!_received)
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-arrow-right-arrow-left"></span>
+                    <span class="empty-title">No HTTP Requests</span>
+                    <span class="empty-description">The Recent HTTP Requests are not available for this Instance</span>
+                </div>
+            }
+            else
+            {
+                <RadzenDataGrid @ref="_grid"
+                                Data="@_visible"
+                                TItem="TrakHoundHttpRequestRecord"
+                                Density="Density.Compact"
+                                AllowFiltering="true"
+                                FilterMode="FilterMode.Simple"
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                AllowSorting="true"
+                                AllowColumnResize="true"
+                                AllowPaging="true"
+                                PageSize="@_pageSize"
+                                Page="@GridPageChanged"
+                                RowClick="@RowClicked"
+                                RowRender="@RowRender"
+                                EmptyText="No Requests match the filters">
+                    <Columns>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="Requested" Title="Time" Width="95px" Filterable="false">
+                            <Template Context="context">
+                                <span class="number" title="@FormatTimestamp(context.Requested)">@context.Requested.ToLocalTime().ToString("HH:mm:ss")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="Client" Title="Client" Width="140px" />
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="Method" Title="Method" Width="85px" />
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="Area" Title="Area" Width="110px" Filterable="false" />
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="Url" Title="Url" MinWidth="260px">
+                            <Template Context="context">
+                                <span class="url" title="@context.Url">@if (context.IsStream) {<span class="stream-tag">@context.Stream</span>}@context.Url</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="StatusCode" Title="Status" Width="90px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number @GetStatusClass(context.StatusCode)">@(context.StatusCode > 0 ? context.StatusCode.ToString() : "-")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="Duration" Title="Duration" Width="100px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                @if (context.IsStream)
+                                {
+                                    <span class="number stream-duration" title="How long the @context.Stream was open (not a response time)">@FormatDuration(context.Duration)</span>
+                                }
+                                else
+                                {
+                                    <span class="number">@FormatDuration(context.Duration)</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Title="" Width="90px" Sortable="false" Filterable="false" CssClass="duration-bar-column">
+                            <Template Context="context">
+                                @if (!context.IsStream)
+                                {
+                                    <DurationBar Min="0" Max="@_maxDuration" Value="@context.Duration.TotalMilliseconds" />
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="RequestBytes" Title="Received" Width="90px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number">@(context.RequestBytes > 0 ? context.RequestBytes.ToFileSize() : "-")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                        <RadzenDataGridColumn TItem="TrakHoundHttpRequestRecord" Property="ResponseBytes" Title="Sent" Width="90px" TextAlign="TextAlign.Right" Filterable="false">
+                            <Template Context="context">
+                                <span class="number">@(context.ResponseBytes > 0 ? context.ResponseBytes.ToFileSize() : "-")</span>
+                            </Template>
+                        </RadzenDataGridColumn>
+                    </Columns>
+                </RadzenDataGrid>
+            }
+
+        </div>
+
+        @if (_selected != null)
+        {
+            var request = _selected;
+            var parameters = GetQueryParameters(request.Url);
+
+            <div class="details-panel">
+                <div class="details-header">
+                    <span class="details-method">@request.Method</span>
+                    <span class="details-url" title="@request.Url">@GetPath(request.Url)</span>
+                    <span class="details-status @GetStatusClass(request.StatusCode)">@(request.StatusCode > 0 ? request.StatusCode.ToString() : "-")</span>
+                    <button class="btn btn-link btn-close-details" @onclick="CloseDetailsClicked" title="Close (and resume updating)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                </div>
+
+                <div class="details-content">
+                    <table class="details-table">
+                        <tr><td class="label">Area</td><td class="value">@request.Area@if (request.IsStream) {<span class="stream-tag">@request.Stream</span>}</td></tr>
+                        <tr><td class="label">Route</td><td class="value">@(request.Route ?? "-")</td></tr>
+                        <tr><td class="label">Client</td><td class="value">@(request.Client ?? "-")</td></tr>
+                        <tr><td class="label">Requested</td><td class="value number">@FormatTimestamp(request.Requested)</td></tr>
+                        <tr><td class="label">Completed</td><td class="value number">@FormatTimestamp(request.Completed)</td></tr>
+                        <tr><td class="label">Duration</td><td class="value number">@FormatDuration(request.Duration)@if (request.IsStream) {<span class="muted"> (how long the @request.Stream was open)</span>}</td></tr>
+                        <tr><td class="label">Received</td><td class="value number">@FormatExactBytes(request.RequestBytes)</td></tr>
+                        <tr><td class="label">Sent</td><td class="value number">@FormatExactBytes(request.ResponseBytes)</td></tr>
+                    </table>
+
+                    <div class="details-query">
+                        <span class="details-section-title">Query</span>
+                        @if (!parameters.IsNullOrEmpty())
+                        {
+                            <table class="details-table query-table">
+                                @foreach (var parameter in parameters)
+                                {
+                                    <tr><td class="label">@parameter.Key</td><td class="value @(parameter.Value == TrakHoundHttpQueryMask.Mask ? "masked" : null)" title="@(parameter.Value == TrakHoundHttpQueryMask.Mask ? "Hidden (sensitive parameter)" : null)">@parameter.Value</td></tr>
+                                }
+                            </table>
+                        }
+                        else
+                        {
+                            <span class="muted">No Query parameters</span>
+                        }
+
+                        @if (!string.IsNullOrEmpty(request.Route))
+                        {
+                            <a class="btn btn-light btn-endpoint" href="@GetMetricsLink(request.Method, request.Route)"><span class="icon fa-solid fa-sharp fa-chart-simple"></span>View Endpoint in HTTP Metrics</a>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private const string _statusAll = "All";
+    private const string _statusErrors = "Errors";
+    private static readonly string[] _statusFilters = new[] { _statusAll, "2xx", "3xx", "4xx", "5xx", _statusErrors };
+
+    private TrakHoundHttpRequestRecord[] _requests = Array.Empty<TrakHoundHttpRequestRecord>();
+    private List<TrakHoundHttpRequestRecord> _visible = new List<TrakHoundHttpRequestRecord>();
+
+    // The grid returns to the first page when its Data changes, so the page being viewed is restored after each update
+    private const int _pageSize = 50;
+    private RadzenDataGrid<TrakHoundHttpRequestRecord> _grid;
+    private int _pageIndex;
+    private bool _restorePage;
+    private readonly SortedSet<string> _areas = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+    private int _capacity;
+    private bool _received;
+    private double _maxDuration;
+    private DateTime? _lastUpdated;
+
+    // Identifies the buffer's contents (Request count and the sum of their Ids) so an unchanged buffer isn't sorted or rendered again
+    private int _previousCount = -1;
+    private long _previousIdSum;
+
+    private System.Threading.Timer _updateTimer;
+    private int _updating;
+    private volatile bool _disposed;
+
+    // Updates stop while Paused or while a Request's details are open (so the rows don't move)
+    private bool _paused;
+    private TrakHoundHttpRequestRecord _selected;
+
+    private string _statusFilter = _statusAll;
+    private string _areaFilter;
+    private int? _slowFilter;
+    private bool _showStreams = true;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    void IDisposable.Dispose()
+    {
+        _disposed = true;
+        _updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading HTTP Requests..";
+            await InvokeAsync(StateHasChanged);
+
+            _updateTimer?.Dispose();
+            _requests = Array.Empty<TrakHoundHttpRequestRecord>();
+            _visible = new List<TrakHoundHttpRequestRecord>();
+            _areas.Clear();
+            _received = false;
+            _previousCount = -1;
+            _selected = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Connections", null));
+            breadcrumbItems.Add(new BreadcrumbItem("HTTP", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Requests", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            // Read from the selected Instance (which may not be the one hosting this page)
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                try { await UpdateRequests(client); } catch { }
+
+                _updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<bool> UpdateRequests(ITrakHoundClient client)
+    {
+        var recent = await client.HttpRequests.GetRecentRequests();
+        if (recent != null)
+        {
+            _received = true;
+            _capacity = recent.Capacity;
+
+            // Requests are added when they complete (a Stream can complete long after newer Ids), so compare every Id rather than only the newest
+            var count = recent.Requests?.Count() ?? 0;
+            long idSum = 0;
+            if (recent.Requests != null) foreach (var request in recent.Requests) idSum += request.Id;
+            if (count == _previousCount && idSum == _previousIdSum) return false;
+            _previousCount = count;
+            _previousIdSum = idSum;
+
+            _requests = recent.Requests?.OrderByDescending(o => o.Id).ToArray() ?? Array.Empty<TrakHoundHttpRequestRecord>();
+            _lastUpdated = DateTime.Now;
+
+            // Areas seen so far (kept so the filter's options don't change as Requests leave the buffer)
+            foreach (var area in _requests.Select(o => o.Area).Where(o => !string.IsNullOrEmpty(o))) _areas.Add(area);
+
+            UpdateVisible();
+            return true;
+        }
+
+        return false;
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip while Paused, or if the previous update is still running
+        if (_disposed || _paused || _selected != null || Interlocked.Exchange(ref _updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                // On the Renderer's context so the rows don't change while they are rendered
+                await InvokeAsync(async () =>
+                {
+                    if (_disposed) return;
+
+                    // Only render when the Requests changed (rendering the grid is the expensive part)
+                    if (await UpdateRequests(client))
+                    {
+                        _restorePage = _pageIndex > 0;
+                        StateHasChanged();
+                    }
+                });
+            }
+        }
+        catch
+        {
+            // The page may have been Disposed while updating
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _updating, 0);
+        }
+    }
+
+    private void GridPageChanged(PagerEventArgs args)
+    {
+        _pageIndex = args.PageIndex;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_restorePage && _grid != null)
+        {
+            _restorePage = false;
+
+            var lastPage = Math.Max(0, (_visible.Count - 1) / _pageSize);
+            var page = Math.Min(_pageIndex, lastPage);
+            if (page > 0) await _grid.GoToPage(page);
+        }
+    }
+
+    private void UpdateVisible()
+    {
+        IEnumerable<TrakHoundHttpRequestRecord> requests = _requests;
+
+        switch (_statusFilter)
+        {
+            case "2xx": requests = requests.Where(o => o.StatusCode >= 200 && o.StatusCode < 300); break;
+            case "3xx": requests = requests.Where(o => o.StatusCode >= 300 && o.StatusCode < 400); break;
+            case "4xx": requests = requests.Where(o => o.StatusCode >= 400 && o.StatusCode < 500); break;
+            case "5xx": requests = requests.Where(o => o.StatusCode >= 500); break;
+            case _statusErrors: requests = requests.Where(o => o.StatusCode >= 400); break;
+        }
+
+        if (!string.IsNullOrEmpty(_areaFilter)) requests = requests.Where(o => string.Equals(o.Area, _areaFilter, StringComparison.OrdinalIgnoreCase));
+        if (_slowFilter > 0) requests = requests.Where(o => !o.IsStream && o.Duration.TotalMilliseconds >= _slowFilter.Value);
+        if (!_showStreams) requests = requests.Where(o => !o.IsStream);
+
+        _visible = requests.ToList();
+
+        // The Duration bars are relative to the slowest Request shown (Streams would dwarf every other Request)
+        var durations = _visible.Where(o => !o.IsStream).Select(o => o.Duration.TotalMilliseconds);
+        _maxDuration = durations.Any() ? durations.Max() : 0;
+    }
+
+    private bool IsFiltered => _statusFilter != _statusAll || !string.IsNullOrEmpty(_areaFilter) || _slowFilter > 0 || !_showStreams;
+
+    private void FilterChanged() => UpdateVisible();
+
+    private void StatusFilterClicked(string filter)
+    {
+        _statusFilter = filter;
+        UpdateVisible();
+    }
+
+    private void ClearFiltersClicked()
+    {
+        _statusFilter = _statusAll;
+        _areaFilter = null;
+        _slowFilter = null;
+        _showStreams = true;
+        UpdateVisible();
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private void PauseClicked()
+    {
+        _paused = !_paused;
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TrakHoundHttpRequestRecord> args)
+    {
+        _selected = _selected?.Id == args.Data?.Id ? null : args.Data;
+    }
+
+    private void RowRender(RowRenderEventArgs<TrakHoundHttpRequestRecord> args)
+    {
+        var classes = "request-row";
+        if (_selected != null && args.Data?.Id == _selected.Id) classes += " selected";
+        if (args.Data?.IsStream == true) classes += " stream-row";
+        args.Attributes.Add("class", classes);
+    }
+
+    private void CloseDetailsClicked()
+    {
+        _selected = null;
+    }
+
+
+    private string GetDescription()
+    {
+        if (!_received) return "The most recent HTTP Requests received by this Instance";
+        if (_capacity == 0) return "Recent HTTP Requests are not kept by this Instance";
+        return $"The most recent {_capacity:N0} HTTP Requests received by this Instance";
+    }
+
+    private string GetUpdateStatus()
+    {
+        if (loading || !_received) return null;
+
+        var shown = IsFiltered ? $"{_visible.Count:N0} of {_requests.Length:N0} Requests" : $"{_requests.Length:N0} Requests";
+        var updated = _lastUpdated != null ? $"updated {_lastUpdated:HH:mm:ss}" : null;
+
+        if (_paused) return $"{shown} · Paused · {updated}";
+        if (_selected != null) return $"{shown} · Paused while a Request is open · {updated}";
+        return $"{shown} · {updated} · updates every second";
+    }
+
+    private string GetMetricsLink(string method, string route)
+    {
+        var link = $"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/http";
+        if (!string.IsNullOrEmpty(route)) link += $"?method={Uri.EscapeDataString(method ?? "")}&route={Uri.EscapeDataString(route)}";
+        return link;
+    }
+
+    private static string GetPath(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+        var index = url.IndexOf('?');
+        return index >= 0 ? url.Substring(0, index) : url;
+    }
+
+    private static List<KeyValuePair<string, string>> GetQueryParameters(string url)
+    {
+        var parameters = new List<KeyValuePair<string, string>>();
+        if (string.IsNullOrEmpty(url)) return parameters;
+
+        var index = url.IndexOf('?');
+        if (index < 0 || index == url.Length - 1) return parameters;
+
+        foreach (var parameter in url.Substring(index + 1).Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = parameter.IndexOf('=');
+            var name = separator >= 0 ? parameter.Substring(0, separator) : parameter;
+            var value = separator >= 0 ? parameter.Substring(separator + 1) : null;
+            parameters.Add(new KeyValuePair<string, string>(Decode(name), value == TrakHoundHttpQueryMask.Mask ? value : Decode(value)));
+        }
+
+        return parameters;
+    }
+
+    private static string Decode(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        try { return Uri.UnescapeDataString(value.Replace('+', ' ')); }
+        catch { return value; }
+    }
+
+    private static string GetStatusClass(int statusCode)
+    {
+        if (statusCode >= 500) return "status-server-error";
+        if (statusCode >= 400) return "status-error";
+        if (statusCode >= 300) return "status-redirect";
+        if (statusCode >= 100) return "status-success";
+        return null;
+    }
+
+    private static string FormatTimestamp(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff");
+
+    private static string FormatExactBytes(long bytes) => bytes > 0 ? $"{bytes.ToFileSize()} ({bytes:N0} bytes)" : "-";
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        var milliseconds = duration.TotalMilliseconds;
+        if (milliseconds >= 60000) return duration.ToFormattedString();
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.##} s";
+        if (milliseconds >= 10) return $"{milliseconds:0} ms";
+        return $"{milliseconds:0.#} ms";
+    }
+
+}

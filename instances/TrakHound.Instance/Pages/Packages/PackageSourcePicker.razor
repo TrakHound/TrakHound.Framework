@@ -1,0 +1,46 @@
+@* The selected Package Source, its status, and a Reload button (shared by the Packages and Configuration pages) *@
+
+<div class="source-panel">
+    @if (Context != null && Context.Sources.Any())
+    {
+        <span class="source-label">Source</span>
+        <RadzenDropDown TValue="string" Data="@Context.Sources" TextProperty="Name" ValueProperty="Id" Value="@Context.SelectedSource?.Id" ValueChanged="@((string id) => Context.SelectSource(id))" class="source-dropdown" />
+        <span class="source-status @Context.SourceStatus.ToString().ToLower()" title="@GetStatusTitle()">
+            @switch (Context.SourceStatus)
+            {
+                case PackageSourceStatus.Checking:
+                    <span class="icon fa-solid fa-sharp fa-loader spin"></span><span>Connecting..</span>
+                    break;
+                case PackageSourceStatus.Online:
+                    <span class="status-dot"></span><span>@Context.SourcePackageCount.ToString("N0") packages</span>
+                    break;
+                case PackageSourceStatus.Offline:
+                    <span class="status-dot"></span><span>Unreachable</span>
+                    break;
+            }
+        </span>
+        <button class="btn btn-light btn-icon" title="Reload Packages from the Source" @onclick="() => Context.RefreshSource()" disabled="@(Context.SourceStatus == PackageSourceStatus.Checking)"><span class="icon fa-solid fa-sharp fa-rotate-right"></span></button>
+    }
+    else
+    {
+        <a class="no-source" href="_admin/packages/sources"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>No Package Source configured</a>
+    }
+</div>
+
+@code {
+
+    [Parameter]
+    public PackagesContext Context { get; set; }
+
+
+    private string GetStatusTitle()
+    {
+        switch (Context.SourceStatus)
+        {
+            case PackageSourceStatus.Online: return $"{Context.SelectedSource?.BaseUrl} : {Context.SourcePackageCount:N0} packages ({Context.SelectedSource?.Organization})";
+            case PackageSourceStatus.Offline: return $"{Context.SelectedSource?.BaseUrl} : {Context.SourceError}";
+            default: return Context.SelectedSource?.BaseUrl;
+        }
+    }
+
+}

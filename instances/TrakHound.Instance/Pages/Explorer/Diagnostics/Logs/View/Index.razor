@@ -1,0 +1,241 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/logs/view"
+@inject ITrakHoundInstance _instance
+@inject ExplorerService explorerService
+@inject TrakHound.Instance.Logging.History.TrakHoundLogHistoryService logHistoryService
+@using TrakHound.Instances
+@using TrakHound.Logging
+
+<TrakHoundPageTitle Text="@($"{(!string.IsNullOrEmpty(FilterText) ? $"{FilterText} - " : "")}Logs")" />
+
+<div class="log-view-page">
+    <div class="header-container">
+        <div class="header-icon">
+            <span class="icon fa-solid fa-sharp fa-file-lines"></span>
+        </div>
+        <div class="header-text">
+            @if (!Patterns.IsNullOrEmpty())
+            {
+                <span class="header-name" title="@SelectedPath">@GetSelectedName()</span>
+                <span class="header-description header-patterns">@FilterText</span>
+            }
+            else
+            {
+                <span class="header-name">All Loggers</span>
+                <span class="header-description">Every Logger on the Instance</span>
+            }
+        </div>
+        <div class="header-actions">
+            @{
+                var source = GetSource();
+                if (source != null)
+                {
+                    <a class="btn btn-light btn-source" href="@source.Value.Link" title="@source.Value.Title"><span class="icon @source.Value.Icon"></span>@source.Value.Text</a>
+                }
+            }
+            <LogHistoryStatus />
+        </div>
+    </div>
+    <div class="content-container">
+        <LogView @key="@_lastPatterns"
+                 Filter="@FilterText"
+                 GetLogLineConsumer="SubscribeLogLines"
+                 QueryLogs="QueryLogs"
+                 QueryLogCounts="QueryLogCounts"
+                 @bind-From="@_from"
+                 @bind-To="@_to" 
+                 @bind-SelectedLogLevel="@_selectedLogLevel"
+                 HistoryMinimumLevel="@logHistoryService.RunningConfiguration?.MinimumLogLevel"
+                 ShowHistory="@(string.Equals(View, "history", StringComparison.OrdinalIgnoreCase))"
+                 Search="@Search"
+                 AutoSubscribe="true"
+                 />
+    </div>
+</div>
+
+@code {
+
+    private TrakHoundLogLevel _selectedLogLevel = TrakHoundLogLevel.Information;
+    private DateTime _from;
+    private DateTime _to;
+    private string _lastInstanceId;
+    private string _lastPatterns;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// One or more Logger Patterns (ex. "?pattern=system/**&pattern=instance/**")
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "pattern")]
+    public string[] Patterns { get; set; }
+
+    /// <summary>
+    /// "history" opens the History tab and Queries it (ex. "?pattern=access/apps/**&view=history")
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "view")]
+    public string View { get; set; }
+
+    /// <summary>
+    /// The initial History Search (ex. a Connection Code)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "search")]
+    public string Search { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        var patterns = string.Join("|", QueryPatterns);
+        if (InstanceId != _lastInstanceId || patterns != _lastPatterns)
+        {
+            _lastInstanceId = InstanceId;
+            _lastPatterns = patterns;
+
+            // The Apis and Workers (for the Source link)
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId);
+
+            // Set Explorer Breadcrumbs (Logs > each segment of the selected Logger, ex. Logs > api > TrakHound.Functions.Api)
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Logs", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "diagnostics/logs")));
+
+            var selectedPath = SelectedPath;
+            if (selectedPath != null)
+            {
+                var segments = selectedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                for (var i = 0; i < segments.Length; i++)
+                {
+                    var isLast = i == segments.Length - 1;
+                    var link = !isLast ? GetViewLink(string.Join("/", segments.Take(i + 1))) : null;
+                    breadcrumbItems.Add(new BreadcrumbItem(isLast && Patterns.Length > 1 ? $"{segments[i]} (+{Patterns.Length - 1})" : segments[i], link));
+                }
+            }
+            else
+            {
+                breadcrumbItems.Add(new BreadcrumbItem("All Loggers", null));
+            }
+
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // No Pattern (the Logs root) shows all Loggers
+    private string[] QueryPatterns
+    {
+        get
+        {
+            var patterns = Patterns?.Where(o => !string.IsNullOrEmpty(o)).ToArray();
+            return !patterns.IsNullOrEmpty() ? patterns : new[] { "**" };
+        }
+    }
+
+    private string FilterText => !Patterns.IsNullOrEmpty() ? string.Join(", ", Patterns) : null;
+
+    // The Logger path of the first Pattern (ex. "api/TrakHound.Functions.Api" for "api/TrakHound.Functions.Api/**")
+    private string SelectedPath
+    {
+        get
+        {
+            var pattern = Patterns?.FirstOrDefault(o => !string.IsNullOrEmpty(o));
+            if (pattern == null) return null;
+
+            var path = pattern.EndsWith("/**") ? pattern[..^3] : pattern;
+            return !string.IsNullOrEmpty(path) && path != "**" ? path : null;
+        }
+    }
+
+    private string GetSelectedName()
+    {
+        var path = SelectedPath;
+        if (path == null) return FilterText;
+
+        var name = path.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? path;
+        return Patterns.Length > 1 ? $"{name} (+{Patterns.Length - 1} more)" : name;
+    }
+
+    private string GetViewLink(string path)
+    {
+        return Url.AddQueryParameter(Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "diagnostics/logs/view"), "pattern", $"{path}/**");
+    }
+
+    /// <summary>
+    /// The Instance, Api or Worker that logged the selected Logger (ex. "api/{packageId}/**" => that Api's page)
+    /// </summary>
+    private (string Text, string Title, string Icon, string Link)? GetSource()
+    {
+        var path = SelectedPath;
+        if (path == null) return null;
+
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var instanceId = explorerService.SelectedInstanceId;
+        var instanceLink = Url.Combine("_admin/explorer", instanceId);
+
+        switch (segments[0].ToLowerInvariant())
+        {
+            case "instance":
+                return ("Open Instance", "Open the Instance", "fa-solid fa-sharp fa-server", instanceLink);
+
+            case "api" when segments.Length > 1:
+                var api = explorerService.GetApiRoutes(instanceId)?.FirstOrDefault(o => string.Equals(o.PackageId, segments[1], StringComparison.OrdinalIgnoreCase));
+                if (api != null) return ("Open Api", $"Open the {api.PackageId} Api", "fa-solid fa-sharp fa-circle-location-arrow", Url.Combine(instanceLink, "api", api.Id));
+                break;
+
+            case "workers" when segments.Length > 2:
+                var worker = explorerService.GetWorkers(instanceId)?.FirstOrDefault(o => string.Equals(o.Id, segments[2], StringComparison.OrdinalIgnoreCase));
+                if (worker != null) return ("Open Worker", $"Open the {worker.Id} Worker", "fa-solid fa-sharp fa-gear", Url.Combine(instanceLink, "workers", worker.Id));
+                break;
+        }
+
+        return null;
+    }
+
+    private async Task<ITrakHoundStream<IEnumerable<TrakHoundLogItem>>> SubscribeLogLines()
+    {
+        var client = _instance.ClientProvider.GetClient(InstanceId);
+        if (client == null) return null;
+
+        var patterns = QueryPatterns;
+        if (patterns.Length == 1) return await client.Logs.Subscribe(patterns[0], _selectedLogLevel);
+
+        // Subscriptions take a single Pattern, so subscribe to each and merge them into one Stream
+        // (the merged Stream starts and disposes the inner Streams)
+        var streams = new List<ITrakHoundStream<IEnumerable<TrakHoundLogItem>>>();
+        foreach (var pattern in patterns)
+        {
+            var stream = await client.Logs.Subscribe(pattern, _selectedLogLevel);
+            if (stream != null) streams.Add(stream);
+        }
+
+        return new TrakHoundStream<IEnumerable<TrakHoundLogItem>>(streams);
+    }
+
+    private async Task<TrakHoundLogQueryResult> QueryLogs(TrakHoundLogQuery query)
+    {
+        var client = _instance.ClientProvider.GetClient(InstanceId);
+        if (client != null)
+        {
+            query.Patterns = QueryPatterns;
+            return await client.Logs.Query(query);
+        }
+
+        return null;
+    }
+
+    private async Task<IEnumerable<TrakHoundLoggerLogCount>> QueryLogCounts(TrakHoundLogQuery query)
+    {
+        var client = _instance.ClientProvider.GetClient(InstanceId);
+        if (client != null)
+        {
+            query.Patterns = QueryPatterns;
+            return await client.Logs.QueryCounts(query);
+        }
+
+        return null;
+    }
+
+}

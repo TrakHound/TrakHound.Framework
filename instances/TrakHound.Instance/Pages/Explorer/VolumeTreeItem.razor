@@ -1,0 +1,61 @@
+﻿@using TrakHound.Clients
+
+<TreeItem Id="@Path" Title="@VolumeFileIcons.GetName(Path)" Icon="@VolumeFileIcons.Directory">
+
+    @if (!_directories.IsNullOrEmpty())
+    {
+        foreach (var directory in _directories)
+        {
+            <VolumeTreeItem Client="@Client" VolumeId="@VolumeId" Path="@directory" FileSelected="FileSelected" />
+        }
+    }
+
+    @if (!_files.IsNullOrEmpty())
+    {
+        foreach (var file in _files)
+        {
+            <TreeItem Id="@file" Title="@VolumeFileIcons.GetName(file)" Icon="@VolumeFileIcons.Get(file)" IsExpandable="false" Selected="FileSelected" />
+        }
+    }
+
+</TreeItem>
+
+@code {
+
+    private IEnumerable<string> _directories;
+    private IEnumerable<string> _files;
+
+
+    [Parameter]
+    public ITrakHoundClient Client { get; set; }
+
+    [Parameter]
+    public string VolumeId { get; set; }
+
+    [Parameter]
+    public string Path { get; set; }
+
+    [Parameter]
+    public EventCallback<string> FileSelected { get; set; }
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _directories = null;
+        _files = null;
+
+        if (Client != null)
+        {
+            _directories = await Client.Volumes.ListDirectories(VolumeId, Path);
+            _files = await Client.Volumes.ListFiles(VolumeId, Path);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

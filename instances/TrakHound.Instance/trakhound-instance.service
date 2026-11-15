@@ -1,0 +1,38 @@
+# TrakHound Instance systemd unit (see the Installation Guide, section 5)
+#
+# Program files: /opt/trakhound/instance (the Instance also writes logs, _temp, backup and deployments here)
+# Data:          /var/lib/trakhound/instance (configuration, packages and volumes)
+#
+# install.sh copies this file to /etc/systemd/system/ on every install and upgrade. To change a setting,
+# use 'sudo systemctl edit trakhound-instance', which keeps the change in a drop-in file that upgrades don't replace
+
+[Unit]
+Description=TrakHound Instance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# The Instance tells systemd when it has started (UseSystemd)
+Type=notify
+User=trakhound
+Group=trakhound
+WorkingDirectory=/opt/trakhound/instance
+ExecStart=/opt/trakhound/instance/TrakHound.Instance
+
+Environment=TRAKHOUND_CONFIGURATION_PATH=/var/lib/trakhound/instance/config
+Environment=TRAKHOUND_PACKAGE_PATH=/var/lib/trakhound/instance/packages
+Environment=TRAKHOUND_VOLUME_PATH=/var/lib/trakhound/instance/volumes
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+# Startup can take a while the first time (packages are loaded and deployments installed)
+TimeoutStartSec=300
+# The Instance can take up to 60 seconds to stop
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

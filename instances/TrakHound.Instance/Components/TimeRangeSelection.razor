@@ -1,0 +1,178 @@
+﻿<div class="time-range-selection">
+    <div class="date-selection-container">
+        <div class="select-container from-selection">
+            <label>From</label>
+            <RadzenDatePicker TValue="DateTime" Value="@From" Change="FromSelected" ShowTime="@ShowTime" ShowSeconds="true" HoursStep="1" MinutesStep="1" SecondsStep="1" Kind="DateTimeKind" HourFormat="12" />
+        </div>
+        <div class="select-container to-selection">
+            <label>To</label>
+            <RadzenDatePicker TValue="DateTime" Value="@To" Change="ToSelected" ShowTime="@ShowTime" ShowSeconds="true" HoursStep="1" MinutesStep="1" SecondsStep="1" Kind="DateTimeKind" HourFormat="12" />
+        </div>
+
+        @if (ShowMonths)
+        {
+            <div class="select-container month-selection">
+                <label>Month</label>
+                <RadzenDropDown TValue="string" Data="@GetMonthList()" @bind-Value="@selectedMonth" Change="MonthSelected" />
+            </div>
+        }
+
+        @if (ShowYears)
+        {
+            <div class="select-container year-selection">
+                <label>Year</label>
+                <RadzenDropDown TValue="string" Data="@GetYearList()" @bind-Value="@selectedYear" Change="YearSelected" />
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+
+    private string selectedMonth;
+    private string selectedYear;
+
+
+    [Parameter]
+    public DateTime From { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime> FromChanged { get; set; }
+
+    [Parameter]
+    public DateTime To { get; set; }
+
+    [Parameter]
+    public EventCallback<DateTime> ToChanged { get; set; }
+
+    [Parameter]
+    public DateTimeKind DateTimeKind { get; set; }
+
+    [Parameter]
+    public bool ShowYears { get; set; }
+
+    [Parameter]
+    public bool ShowMonths { get; set; }
+
+    [Parameter]
+    public bool ShowTime { get; set; }
+
+
+    private IEnumerable<string> GetMonthList()
+    {
+        return new string[]
+        {
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December"
+        };
+    }
+
+    private IEnumerable<string> GetYearList()
+    {
+        var currentYear = DateTime.Now.Year;
+
+        // Newest first, back to 2000
+        var years = new List<string>();
+        for (var year = currentYear; year >= 2000; year--)
+        {
+            years.Add(year.ToString());
+        }
+        return years;
+    }
+
+    private async Task MonthSelected(object value)
+    {
+        if (value != null)
+        {
+            selectedMonth = value.ToString();
+
+            await UpdateFilter();
+        }
+    }
+
+    private async Task YearSelected(object value)
+    {
+        if (value != null)
+        {
+            selectedYear = value.ToString();
+
+            await UpdateFilter();
+        }
+    }
+
+    private async Task UpdateFilter()
+    {
+        var year = selectedYear.ToInt();
+        if (year < 1)
+        {
+            // No Year selected yet (ToInt returns -1), so use the current Year
+            year = DateTime.Now.Year;
+            selectedYear = year.ToString();
+        }
+
+        DateTime? from = null;
+        DateTime? to = null;
+
+        if (selectedMonth != null)
+        {
+            var month = Array.IndexOf(GetMonthList().ToArray(), selectedMonth) + 1;
+            if (month > 0)
+            {
+                from = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind);
+                to = new DateTime(year, month, DateTime.DaysInMonth(year, month), 0, 0, 0, DateTimeKind);
+            }
+        }
+
+        if (from != null && to != null)
+        {
+            From = from.Value;
+            To = to.Value;
+
+            // Let the parent know, since it owns From and To (pass the locals: the parent can re-render, and set To, between the calls)
+            await FromChanged.InvokeAsync(from.Value);
+            await ToChanged.InvokeAsync(to.Value);
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task FromSelected(DateTime? value)
+    {
+        if (value != null)
+        {
+            var timestamp = DateTime.SpecifyKind(value.Value, DateTimeKind);
+
+            From = timestamp;
+            await FromChanged.InvokeAsync(timestamp);
+
+            selectedMonth = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ToSelected(DateTime? value)
+    {
+        if (value != null)
+        {
+            var timestamp = DateTime.SpecifyKind(value.Value, DateTimeKind);
+
+            To = timestamp;
+            await ToChanged.InvokeAsync(timestamp);
+
+            selectedMonth = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

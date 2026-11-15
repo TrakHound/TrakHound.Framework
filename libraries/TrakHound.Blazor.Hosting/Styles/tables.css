@@ -1,0 +1,86 @@
+.table-card {
+    border-radius: 2px;
+}
+
+    .table-card .card-header {
+        border-bottom: none;
+        border-color: var(--borderColorLight);
+        padding: 5px 10px;
+        font-size: 12px;
+        color: var(--textDark);
+        background: var(--panelBackground);
+    }
+
+        .table-card .card-header .oi {
+            color: var(--textLight);
+            font-size: 12px;
+            margin-right: 10px;
+        }
+
+    .table-card .table {
+        margin-bottom: 0;
+    }
+
+.data-table {
+    background: var(--tableBackground);
+    color: var(--textDark);
+    font-size: 12px;
+}
+
+    .data-table > .card {
+        background: none;
+    }
+
+    .data-table.table {
+        color: var(--textDark);
+        border-color: var(--borderColorDark) !important;
+    }
+
+    .data-table .column {
+        color: var(--textDark);
+        font-size: 12px;
+        font-weight: normal;
+        text-align: center;
+    }
+
+.column {
+    border: 1px solid var(--borderColorLight);
+    border-bottom-color: var(--borderColorLight) !important;
+    border-radius: 2px;
+    color: var(--textDark);
+    font-size: 0.8em;
+    font-weight: bold;
+    text-align: center;
+}
+
+
+/* Defaults for plain tables: a header fill and row borders (no column borders, and the cells show what's behind them).
+   :where() gives them no specificity, so any rule for a table (a page's, an App's or the Data Grid's) wins without !important */
+
+:where(table) tbody {
+    border-color: var(--tableBorderColor);
+}
+
+/* Without it a header row's border (ex. .table-bordered's top border) is the text color */
+:where(table) thead {
+    border-color: var(--tableHeaderBorderColor);
+}
+
+:where(table) th {
+    background: var(--tableHeaderBackground);
+    border-color: var(--tableHeaderBorderColor);
+    border-bottom: 1px solid var(--tableHeaderBorderColor);
+    color: var(--tableHeaderText);
+}
+
+:where(table) td {
+    border: none;
+    border-color: var(--tableBorderColor);
+    border-bottom: 1px solid var(--tableBorderColor);
+    color: var(--tableText);
+}
+
+/* On the row (not the cells), so a table's own row hover replaces it */
+:where(table tbody tr:hover) {
+    background: var(--tableBackgroundHover);
+}

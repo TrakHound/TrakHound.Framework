@@ -1,0 +1,96 @@
+﻿.endpoint-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    grid-template-columns: minmax(0, 1fr); /* Don't let wide content (ex. a long header) stretch the page past its container */
+    padding: 10px 20px;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.tab-panel {
+    grid-row: 2;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .tab-panel ::deep .rz-tabview-panels {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .tab-panel ::deep .rz-tabview-panel {
+        height: 100%;
+        overflow: hidden;
+        padding: 0;
+/*        padding-top: 15px;*/
+    }
+
+
+.parameters-panel {
+    margin-bottom: 30px;
+}
+
+    .parameters-panel label {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textMild);
+        color: var(--textMild);
+        margin-bottom: 10px;
+    }
+
+
+.responses-panel {
+    margin-bottom: 30px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .responses-panel label {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        margin-bottom: 10px;
+    }
+
+    .responses-panel .response-content {
+        height: 100%;
+        overflow: hidden;
+        padding-bottom: 100px;
+    }
+
+
+.not-found-panel {
+    display: grid;
+    grid-template-rows: 1fr max-content 1fr;
+    grid-template-columns: 1fr max-content 1fr;
+    height: 100%;
+    background: var(--panelBackground);
+}
+
+.not-found-container {
+    grid-row: 2;
+    grid-column: 2;
+    text-align: center;
+}
+
+    .not-found-container .icon {
+        display: block;
+        font-size: 2rem;
+        color: var(--textLight);
+        margin-bottom: 10px;
+    }
+
+    .not-found-container .title {
+        display: block;
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .not-found-container .subtitle {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }

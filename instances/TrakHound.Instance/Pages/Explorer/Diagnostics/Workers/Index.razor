@@ -1,0 +1,544 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/workers"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+@using TrakHound.Workers
+
+<TrakHoundPageTitle Text="Worker Metrics - Diagnostics" />
+
+<div class="worker-metrics-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-gears"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Worker Metrics</span>
+                <span class="header-description">Uptime, restarts, errors and CPU usage for each Worker since the Instance started · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <MetricsDisabledNotice Area="Workers" />
+        <MetricsDisabledNotice Area="Cpu" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (!tableItems.IsNullOrEmpty())
+            {
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@tableItems"
+                                    TItem="TableItem"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Name" Title="Worker" MinWidth="150px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="PackageId" Title="Package" MinWidth="140px">
+                                <Template Context="item">
+                                    <span>@item.PackageId</span>
+                                    @if (!string.IsNullOrEmpty(item.PackageVersion))
+                                    {
+                                        <span class="version">@item.PackageVersion</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Status" Title="Status" Width="110px">
+                                <Template Context="item">
+                                    <span class="status-badge @item.Status.ToString().ToLower()"><span class="status-dot"></span>@item.Status</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="CurrentUptime" Title="Uptime" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.CurrentUptime > 0 ? FormatDuration(item.CurrentUptime) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Availability" Title="Available" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.FirstStarted != null ? $"{item.Availability:0.##}%" : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalRestartCount" Title="Restarts" Width="95px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number @(item.TotalRestartCount > 0 ? "warning" : null)">@item.TotalRestartCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalErrorCount" Title="Errors" Width="85px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number @(item.TotalErrorCount > 0 ? "error" : null)">@item.TotalErrorCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="CpuUsage" Title="CPU" Width="80px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatPercent(item.CpuUsage)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastError" Title="Last Error" Width="130px">
+                                <Template Context="item">
+                                    <span class="number" title="@item.LastErrorMessage">@FormatTimestamp(item.LastError)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = tableItems.FirstOrDefault(o => o.WorkerId == selectedWorkerId);
+                if (selected != null)
+                {
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <a class="detail-name" href="@GetWorkerLink(selected.WorkerId)">@selected.Name</a>
+                            @if (!string.IsNullOrEmpty(selected.PackageId))
+                            {
+                                <span class="detail-type">@selected.PackageId @selected.PackageVersion</span>
+                            }
+                            <span class="detail-state">
+                                <span class="status-badge @selected.Status.ToString().ToLower()"><span class="status-dot"></span>@selected.Status</span>
+                                @if (selected.StatusChanged != null)
+                                {
+                                    <span class="muted">since @FormatTimestamp(selected.StatusChanged)</span>
+                                }
+                            </span>
+                        </div>
+
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label">Uptime</span>
+                                <span class="stat-value">@(selected.CurrentUptime > 0 ? FormatDuration(selected.CurrentUptime) : "-")</span>
+                                <span class="stat-detail">@FormatDuration(selected.TotalUptime) total</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Availability</span>
+                                <span class="stat-value">@(selected.FirstStarted != null ? $"{selected.Availability:0.##}" : "-")<span class="stat-unit">%</span></span>
+                                <span class="stat-detail">@(selected.FirstStarted != null ? $"of the time since {FormatTimestamp(selected.FirstStarted)}" : "not started yet")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Restarts</span>
+                                <span class="stat-value @(selected.TotalRestartCount > 0 ? "warning" : null)">@selected.TotalRestartCount.ToString("N0")</span>
+                                <span class="stat-detail">after errors · started @selected.TotalStartCount.ToString("N0") @(selected.TotalStartCount == 1 ? "time" : "times")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Errors</span>
+                                <span class="stat-value @(selected.TotalErrorCount > 0 ? "error" : null)">@selected.TotalErrorCount.ToString("N0")</span>
+                                <span class="stat-detail">@selected.TotalErrorLogCount.ToString("N0") errors · @selected.TotalWarningLogCount.ToString("N0") warnings logged</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">CPU</span>
+                                <span class="stat-value">@FormatPercent(selected.CpuUsage)</span>
+                                <span class="stat-detail">avg @FormatPercent(selected.AverageCpuUsage) · max @FormatPercent(selected.MaxCpuUsage) · last @_cpuWindowText</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">CPU Time</span>
+                                <span class="stat-value">@FormatDuration(selected.CpuTime)</span>
+                                <span class="stat-detail">used by the current Worker instance</span>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(selected.LastErrorMessage))
+                        {
+                            <div class="last-error">
+                                <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                                <span class="last-error-text">Last Error (@FormatTimestamp(selected.LastError)) : @selected.LastErrorMessage</span>
+                            </div>
+                        }
+
+                        <div class="chart-panel">
+                            <TrakHound.Instance.Pages.Explorer.Workers.CpuUsageChart Samples="@cpuSamples" Window="@TrakHoundWorkerEngine.CpuHistoryDuration" />
+                        </div>
+
+                        <div class="section-title">Status Changes<span class="section-subtitle">the last @TrakHoundWorkerMetricsCollector.MaxRecentEvents</span></div>
+                        @if (!recentEvents.IsNullOrEmpty())
+                        {
+                            <div class="table-panel events-panel">
+                                <RadzenDataGrid Data="@recentEvents"
+                                                TItem="TrakHoundWorkerStatusEvent"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundWorkerStatusEvent" Property="Timestamp" Title="Time" Width="150px">
+                                            <Template Context="statusEvent">
+                                                <span class="number">@FormatTimestamp(statusEvent.Timestamp)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundWorkerStatusEvent" Property="Status" Title="Status" Width="120px">
+                                            <Template Context="statusEvent">
+                                                <span class="status-badge @statusEvent.Status.ToString().ToLower()"><span class="status-dot"></span>@statusEvent.Status</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundWorkerStatusEvent" Property="Message" Title="Message" MinWidth="200px">
+                                            <Template Context="statusEvent">
+                                                <span class="path" title="@statusEvent.Message">@statusEvent.Message</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="empty-panel">
+                                <span class="empty-description">No Status changes since the Instance started</span>
+                            </div>
+                        }
+
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-gears"></span>
+                    <span class="empty-title">No Workers</span>
+                    <span class="empty-description">No Workers are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly string _cpuWindowText = $"{TrakHoundWorkerEngine.CpuHistoryDuration.TotalMinutes:0} min";
+
+    private IEnumerable<TrakHoundWorkerInformation> workers;
+    private IEnumerable<TableItem> tableItems;
+    private IEnumerable<TrakHoundWorkerStatusEvent> recentEvents;
+    private IEnumerable<TrakHoundWorkerCpuSample> cpuSamples;
+    private List<TrakHoundWorkerCpuSample> _cpuHistory; // Of _cpuHistoryWorkerId (appended to on each update)
+    private string _cpuHistoryWorkerId;
+    private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>(); // By lowercase Worker ID
+    private string selectedWorkerId;
+
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Selects this Worker when the page opens (ex. from the Worker page)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string WorkerId { get; set; }
+
+
+    public class TableItem
+    {
+        public string WorkerId { get; set; }
+        public string Name { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public TrakHoundWorkerStatusType Status { get; set; }
+        public DateTime? StatusChanged { get; set; }
+        public long TotalStartCount { get; set; }
+        public long TotalRestartCount { get; set; }
+        public long TotalErrorCount { get; set; }
+        public long TotalWarningLogCount { get; set; }
+        public long TotalErrorLogCount { get; set; }
+        public double CurrentUptime { get; set; }
+        public double TotalUptime { get; set; }
+        public double Availability { get; set; }
+        public DateTime? FirstStarted { get; set; }
+        public DateTime? LastError { get; set; }
+        public string LastErrorMessage { get; set; }
+        public double CpuUsage { get; set; }
+        public double AverageCpuUsage { get; set; }
+        public double MaxCpuUsage { get; set; }
+        public double CpuTime { get; set; }
+
+        public TableItem(string workerId, TrakHoundWorkerInformation information, TrakHoundWorkerMetrics metrics)
+        {
+            Update(workerId, information, metrics);
+        }
+
+        public void Update(string workerId, TrakHoundWorkerInformation information, TrakHoundWorkerMetrics metrics)
+        {
+            WorkerId = workerId;
+            Name = !string.IsNullOrEmpty(metrics?.Name) ? metrics.Name : information?.Name ?? workerId;
+            PackageId = information?.PackageId ?? metrics?.PackageId;
+            PackageVersion = information?.PackageVersion ?? metrics?.PackageVersion;
+            Status = metrics?.Status ?? information?.Status ?? TrakHoundWorkerStatusType.Stopped;
+
+            StatusChanged = metrics?.StatusChanged;
+            TotalStartCount = metrics?.TotalStartCount ?? 0;
+            TotalRestartCount = metrics?.TotalRestartCount ?? 0;
+            TotalErrorCount = metrics?.TotalErrorCount ?? 0;
+            TotalWarningLogCount = metrics?.TotalWarningLogCount ?? 0;
+            TotalErrorLogCount = metrics?.TotalErrorLogCount ?? 0;
+            CurrentUptime = metrics?.CurrentUptime ?? 0;
+            TotalUptime = metrics?.TotalUptime ?? 0;
+            Availability = metrics?.Availability ?? 0;
+            FirstStarted = metrics?.FirstStarted;
+            LastError = metrics?.LastError;
+            LastErrorMessage = metrics?.LastErrorMessage;
+            CpuUsage = metrics?.CpuUsage ?? 0;
+            AverageCpuUsage = metrics?.AverageCpuUsage ?? 0;
+            MaxCpuUsage = metrics?.MaxCpuUsage ?? 0;
+            CpuTime = metrics?.CpuTime ?? 0;
+        }
+    }
+
+
+    void IDisposable.Dispose()
+    {
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Worker Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            tableItems = null;
+            _tableItemsById.Clear();
+            recentEvents = null;
+            cpuSamples = null;
+            _cpuHistory = null;
+            _cpuHistoryWorkerId = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+            if (!string.IsNullOrEmpty(WorkerId)) selectedWorkerId = WorkerId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Workers", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                // List every configured Worker
+                workers = await client.Workers.GetInformation();
+
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var metrics = await client.Workers.GetMetrics();
+        var metricsByWorker = metrics?.Where(o => !string.IsNullOrEmpty(o?.WorkerId)).GroupBy(o => o.WorkerId.ToLower()).ToDictionary(o => o.Key, o => o.First()) ?? new Dictionary<string, TrakHoundWorkerMetrics>();
+        var workersById = workers?.Where(o => !string.IsNullOrEmpty(o?.Id)).GroupBy(o => o.Id.ToLower()).ToDictionary(o => o.Key, o => o.First()) ?? new Dictionary<string, TrakHoundWorkerInformation>();
+
+        // Configured Workers, plus Workers that ran but are no longer configured
+        var items = workersById.Keys.Union(metricsByWorker.Keys)
+            .Select(id => GetTableItem(id, workersById.GetValueOrDefault(id)?.Id ?? metricsByWorker.GetValueOrDefault(id)?.WorkerId ?? id, workersById.GetValueOrDefault(id), metricsByWorker.GetValueOrDefault(id)))
+            .OrderBy(o => o.Name)
+            .ToList();
+
+        SetTableItems(items);
+
+        // Select the Worker with the most Errors by default (or if the selected one went away)
+        var selected = items.FirstOrDefault(o => string.Equals(o.WorkerId, selectedWorkerId, StringComparison.OrdinalIgnoreCase));
+        if (selected == null)
+        {
+            selected = items.OrderByDescending(o => o.TotalErrorCount).ThenBy(o => o.Name).FirstOrDefault();
+        }
+        selectedWorkerId = selected?.WorkerId;
+
+        if (selected != null)
+        {
+            var workerMetrics = await client.Workers.GetMetrics(selected.WorkerId);
+            recentEvents = workerMetrics?.RecentEvents?.ToList();
+            await UpdateCpuSamples(client, selected.WorkerId);
+        }
+        else
+        {
+            recentEvents = null;
+            cpuSamples = null;
+            _cpuHistory = null;
+            _cpuHistoryWorkerId = null;
+        }
+    }
+
+    // Loads the whole CPU history once for the selected Worker, then only the samples after the last one
+    private async Task UpdateCpuSamples(ITrakHoundClient client, string workerId)
+    {
+        List<TrakHoundWorkerCpuSample> history;
+
+        if (_cpuHistory == null || _cpuHistoryWorkerId != workerId)
+        {
+            var samples = await client.Workers.GetCpuHistory(workerId);
+            history = samples?.Where(o => o != null).OrderBy(o => o.Timestamp).ToList() ?? new List<TrakHoundWorkerCpuSample>();
+        }
+        else
+        {
+            history = _cpuHistory;
+
+            DateTime? from = history.Count > 0 ? history[history.Count - 1].Timestamp : null;
+            var samples = await client.Workers.GetCpuHistory(workerId, from);
+            if (!samples.IsNullOrEmpty())
+            {
+                // 'from' is exclusive, but the HTTP client sends it as Unix time (which can round down), so skip anything not newer
+                history.AddRange(samples.Where(o => o != null && (from == null || o.Timestamp > from.Value)).OrderBy(o => o.Timestamp));
+            }
+
+            // Keep the same window as the Worker's own history
+            if (history.Count > 0)
+            {
+                var latest = history[history.Count - 1].Timestamp;
+                history.RemoveAll(o => latest - o.Timestamp > TrakHoundWorkerEngine.CpuHistoryDuration);
+            }
+        }
+
+        _cpuHistory = history;
+        _cpuHistoryWorkerId = workerId;
+
+        // A new collection so the chart sees the change (and never reads the list while it's updated)
+        cpuSamples = history.ToArray();
+    }
+
+    // Rows are updated in place (and the list kept while the Workers are the same) so the grid
+    // doesn't replace every row on each update
+    private TableItem GetTableItem(string id, string workerId, TrakHoundWorkerInformation information, TrakHoundWorkerMetrics metrics)
+    {
+        if (_tableItemsById.TryGetValue(id, out var item))
+        {
+            item.Update(workerId, information, metrics);
+            return item;
+        }
+
+        item = new TableItem(workerId, information, metrics);
+        _tableItemsById[id] = item;
+        return item;
+    }
+
+    private void SetTableItems(List<TableItem> items)
+    {
+        if (tableItems != null && tableItems.SequenceEqual(items)) return;
+
+        tableItems = items;
+
+        var current = items.ToHashSet();
+        foreach (var id in _tableItemsById.Where(o => !current.Contains(o.Value)).Select(o => o.Key).ToList()) _tableItemsById.Remove(id);
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        if (args.Data?.WorkerId != selectedWorkerId)
+        {
+            selectedWorkerId = args.Data?.WorkerId;
+            recentEvents = null; // Loaded for the new Worker on the next update
+            cpuSamples = null;
+        }
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        if (args.Data?.WorkerId == selectedWorkerId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private string GetWorkerLink(string workerId)
+    {
+        return $"/_admin/explorer/{explorerService.SelectedInstanceId}/workers/{workerId}";
+    }
+
+    private static string FormatPercent(double value)
+    {
+        return value >= 10 ? $"{value:0}%" : $"{value:0.#}%";
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
+        if (duration.TotalDays >= 1) return $"{(int)duration.TotalDays}d {duration.Hours}h";
+        if (duration.TotalHours >= 1) return $"{(int)duration.TotalHours}h {duration.Minutes:00}m";
+        if (duration.TotalMinutes >= 1) return $"{duration.Minutes}m {duration.Seconds:00}s";
+        if (duration.TotalSeconds >= 10) return $"{duration.TotalSeconds:0} s";
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.#} s";
+        return $"{milliseconds:0} ms";
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+}

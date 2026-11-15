@@ -1,0 +1,136 @@
+@inject JavascriptService javascriptService
+@using System.Text.Json
+@using TrakHound.Blazor.Services
+
+@if (!Parameters.IsNullOrEmpty())
+{
+    <table class="table table-sm parameters-table">
+        <thead>
+            <tr>
+                <th class="key">Key</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            @foreach (var parameter in Parameters.OrderBy(o => o.Key))
+            {
+                var key = parameter.Key;
+                var value = FormatValue(parameter.Value, out var isJson);
+                var isLong = IsLong(value);
+                var expanded = expandedKeys.Contains(key);
+
+                <tr>
+                    <td class="key">
+                        @key
+                        @{
+                            var definition = Definitions?.FirstOrDefault(o => o.Name == key);
+                        }
+                        @if (!string.IsNullOrEmpty(definition?.Description))
+                        {
+                            <span class="key-description">@definition.Description</span>
+                        }
+                    </td>
+                    <td class="value">
+                        <div class="value-container">
+                            <pre class="value-text @(isJson ? "json" : null) @(isLong && !expanded ? "collapsed" : null)">@value</pre>
+                            <div class="value-actions">
+                                <button class="btn btn-link btn-copy" title="@(copiedKey == key ? "Copied" : "Copy the value")" @onclick="() => Copy(key, parameter.Value)"><span class="icon fa-solid fa-sharp @(copiedKey == key ? "fa-check" : "fa-copy")"></span></button>
+                                @if (isLong)
+                                {
+                                    <button class="btn btn-link btn-expand" @onclick="() => ToggleExpanded(key)">@(expanded ? "Show less" : "Show all")</button>
+                                }
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            }
+
+        </tbody>
+    </table>
+}
+else
+{
+    <span class="empty-message">@EmptyMessage</span>
+}
+
+@code {
+
+    private const int maxCollapsedLength = 300;
+    private const int maxCollapsedLines = 6;
+    private const int copiedDisplayDelay = 1500;
+
+    private static readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+
+    private readonly HashSet<string> expandedKeys = new HashSet<string>();
+    private string copiedKey;
+
+
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Parameters { get; set; }
+
+    [Parameter]
+    public string EmptyMessage { get; set; }
+
+    /// <summary>
+    /// The Parameters the Function describes (their Descriptions are shown with the Keys)
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<TrakHound.Functions.TrakHoundFunctionParameterInformation> Definitions { get; set; }
+
+
+    /// <summary>
+    /// Indents JSON objects and arrays. Other values (and JSON that doesn't parse) are shown as they are
+    /// </summary>
+    private static string FormatValue(string value, out bool isJson)
+    {
+        isJson = false;
+        if (string.IsNullOrEmpty(value)) return value;
+
+        var trimmed = value.TrimStart();
+        if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+        {
+            try
+            {
+                var jsonElement = JsonSerializer.Deserialize<JsonElement>(value);
+                isJson = true;
+                return JsonSerializer.Serialize(jsonElement, jsonOptions);
+            }
+            catch { }
+        }
+
+        return value;
+    }
+
+    private static bool IsLong(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        if (value.Length > maxCollapsedLength) return true;
+
+        var lines = 1;
+        foreach (var c in value)
+        {
+            if (c == '\n' && ++lines > maxCollapsedLines) return true;
+        }
+        return false;
+    }
+
+    private void ToggleExpanded(string key)
+    {
+        if (!expandedKeys.Remove(key)) expandedKeys.Add(key);
+    }
+
+    private async Task Copy(string key, string value)
+    {
+        // The original value (not the indented one)
+        await javascriptService.CopyClipboard(value ?? string.Empty);
+
+        copiedKey = key;
+        await InvokeAsync(StateHasChanged);
+
+        await Task.Delay(copiedDisplayDelay);
+        if (copiedKey == key) copiedKey = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

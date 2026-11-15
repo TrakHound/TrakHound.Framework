@@ -1,0 +1,28 @@
+.toolbar-buttons {
+    margin-left: 0;
+}
+
+.item-description a {
+    color: var(--accentLight);
+}
+
+a.chip {
+    text-decoration: none;
+}
+
+    a.chip:hover {
+        border-color: var(--accentLight);
+    }
+
+.callback-url {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    margin-top: 8px;
+    font-size: var(--fontSizeSm);
+}
+
+.callback-label {
+    color: var(--textMild);
+}

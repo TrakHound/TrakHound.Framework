@@ -1,0 +1,35 @@
+.cpu-usage-bar {
+    display: grid;
+    grid-template-columns: 1fr max-content;
+    align-items: center;
+    column-gap: 10px;
+    min-width: 100px;
+}
+
+.cpu-usage-track {
+    height: 8px;
+    border: 1px solid var(--borderColor);
+    border-radius: 4px;
+    background: var(--inputBackground);
+    overflow: hidden;
+}
+
+.cpu-usage-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.4s ease-out;
+}
+
+.cpu-usage-bar.warning .cpu-usage-fill {
+    background: var(--bs-warning, #ffc107);
+}
+
+.cpu-usage-bar.critical .cpu-usage-fill {
+    background: var(--bs-danger, #dc3545);
+}
+
+.cpu-usage-value {
+    min-width: 50px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

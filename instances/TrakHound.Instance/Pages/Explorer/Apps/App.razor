@@ -1,0 +1,559 @@
+﻿@page "/_admin/explorer/{instanceId}/apps/{appId}"
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHoundAppConnectionManager connectionManager
+@inject ExplorerService explorerService
+@inject NavigationManager navigationManager
+@using TrakHound.Apps
+@using TrakHound.Clients
+@using TrakHound.Instance.Apps
+@using TrakHound.Instance.Http
+@using TrakHound.Instance.Pages.Configuration
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="@($"{(!string.IsNullOrEmpty(appInformation?.Name) ? appInformation.Name : appInformation?.Route ?? AppId)} - Apps")" />
+
+@if (appInformation != null)
+{
+    <div class="app-page">
+
+        <div class="header-panel">
+            <div class="header-content">
+                <div class="header-icon-container">
+                    <span class="header-icon fa-solid fa-sharp fa-browsers"></span>
+                </div>
+                <div class="header-description-container">
+                    <span class="header-title">App</span>
+
+                    @if (!string.IsNullOrEmpty(appInformation.Name))
+                    {
+                        <span class="header-id"><span class="header-id-name">@appInformation.Name</span><span class="header-id-route">@appInformation.Route</span></span>
+                    }
+                    else
+                    {
+                        <span class="header-id">@appInformation.Route</span>
+                    }
+
+                    <span class="header-description">@appInformation.Id</span>
+                </div>
+                <div class="header-package-icon-container">
+
+                    <PackageIcon Src="@appInformation.PackageIcon" Class="header-package-icon" />
+
+                </div>
+                <div class="header-package-container">
+                    <span class="header-title">Package</span>
+                    <span class="header-package">@appInformation.PackageId</span>
+                    <span class="header-version">@appInformation.PackageVersion</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar-panel">
+
+            <div class="toolbar-group" role="group" aria-label="Refresh">
+                @if (!loading)
+                {
+                    <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+                }
+                else
+                {
+                    <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+                }
+            </div>
+
+            <div class="toolbar-group" role="group" aria-label="Links">
+                <a class="btn btn-light" href="@GetNavigateLink(appInformation, null)" target="_blank" title="Open the App in a new tab"><span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span>Open</a>
+                <a class="btn btn-light" href="@TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId, appInformation.PackageId)" title="Access Log : the page views of this App (client, page and time on page)"><span class="icon fa-solid fa-sharp fa-file-lines"></span>Access Log</a>
+                @if (IsLocal)
+                {
+                    <a class="btn btn-light" href="@TrakHoundAppConnectionManager.GetLink(explorerService.SelectedInstanceId, appInformation.Id)" title="App Connections : the open pages of this App (client, page, Version), with Identify, Notify, Send Message and Reload"><span class="icon fa-solid fa-sharp fa-plug"></span>Connections</a>
+                    <a class="btn btn-light" href="@ConfigurationCategories.GetLink(TrakHoundAppConfiguration.ConfigurationCategory, appInformation.Id)" title="Edit the App Configuration"><span class="icon fa-solid fa-sharp fa-gear"></span>Configuration</a>
+                }
+            </div>
+
+            @if (IsLocal)
+            {
+                <div class="toolbar-group" role="group" aria-label="Open Pages">
+                    <button class="admin-write btn btn-light" title="Identify : show each open page's connection Code in its lower right corner for @TrakHoundAppIdentifyRequest.DefaultSeconds seconds (the Codes are listed on App Connections)" @onclick="IdentifyClicked"><span class="icon fa-solid fa-sharp fa-location-crosshairs"></span>Identify</button>
+                    <button class="admin-write btn btn-light" title="Notify Users : show a banner on every open page of this App, which reloads on its next page change or when idle (nothing is lost)" @onclick="NotifyClicked"><span class="icon fa-solid fa-sharp fa-bell"></span>Notify Users</button>
+                    <button class="admin-write btn btn-light" title="Send Message : show a Message on every open page of this App until dismissed (pages opened later do not show it)" @onclick="() => messageVisible = true"><span class="icon fa-solid fa-sharp fa-message"></span>Send Message</button>
+                </div>
+            }
+
+            <div class="toolbar-group" role="group" aria-label="Reload">
+                <button class="admin-write btn btn-light @(confirmingPages ? "btn-confirm" : null)" title="@(confirmingPages ? "Click again to reload every open page of this App now" : "Reload Pages : reload every open page of this App now (unsaved changes on those pages are lost)")" @onclick="ReloadPagesClicked"><span class="icon fa-solid fa-sharp @(confirmingPages ? "fa-check" : "fa-arrows-rotate")"></span>@(confirmingPages ? "Confirm" : "Reload Pages")</button>
+                <button class="admin-write btn btn-light @(confirmingConfig ? "btn-confirm" : null)" title="@(confirmingConfig ? "Click again to apply the App Configuration again and recreate the App's Services" : "Reload Configuration : apply the App Configuration again and recreate the App's Services (open pages using them may stop working until they reload)")" @onclick="ReloadConfigurationClicked"><span class="icon fa-solid fa-sharp @(confirmingConfig ? "fa-check" : "fa-sliders")"></span>@(confirmingConfig ? "Confirm" : "Reload Configuration")</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(actionMessage))
+            {
+                <span class="action-message @(actionFailed ? "failed" : actionPrompt ? "prompt" : null)" role="status"><span class="icon fa-solid fa-sharp @(actionFailed ? "fa-circle-exclamation" : actionPrompt ? "fa-circle-question" : "fa-circle-check")"></span>@actionMessage</span>
+            }
+
+        </div>
+
+        <div class="information-panel">
+            <div>
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td class="label">ID</td>
+                            <td class="value">@appInformation.Id</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Package ID</td>
+                            <td class="value">@appInformation.PackageId</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Package Version</td>
+                            <td class="value">@appInformation.PackageVersion</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Package Build Date</td>
+                            <td class="value">@(appInformation.PackageBuildDate > DateTime.MinValue ? appInformation.PackageBuildDate.ToLocalTime().ToString() : "-")</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Package Hash</td>
+                            <td class="value">@appInformation.PackageHash</td>
+                        </tr>
+                        <tr>
+                            <td class="label">TrakHound Version</td>
+                            <td class="value">@appInformation.TrakHoundVersion</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            @if (appInformation.Repository != null)
+            {
+                <div>
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td class="label">Repository</td>
+                                <td class="value"><a href="@appInformation.Repository" target="_blank">@appInformation.Repository</a></td>
+                            </tr>
+                            <tr>
+                                <td class="label">Repository Branch</td>
+                                <td class="value"><a href="@GetRepositoryBranchLink(appInformation)" target="_blank">@appInformation.RepositoryBranch</a></td>
+                            </tr>
+                            <tr>
+                                <td class="label">Repository Directory</td>
+                                <td class="value"><a href="@GetRepositoryDirectoryLink(appInformation)" target="_blank">@appInformation.RepositoryDirectory</a></td>
+                            </tr>
+                            <tr>
+                                <td class="label">Repository Commit</td>
+                                <td class="value"><a href="@GetRepositoryCommitLink(appInformation)" target="_blank">@appInformation.RepositoryCommit</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+        </div>
+
+        @if (!appInformation.Pages.IsNullOrEmpty())
+        {
+            <div class="pages-panel">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th></th>
+                            <th>Route</th>
+                            <th>Description</th>
+                            <th>ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        @foreach (var pageInformation in appInformation.Pages.OrderBy(o => o.Route))
+                        {
+                            var viewLink = GetViewLink(pageInformation);
+                            var navigateLink = GetNavigateLink(appInformation, pageInformation);
+
+                            <tr>
+                                <td class="buttons view"><a href="@viewLink" class="btn btn-sm btn-link"><span class="icon fa-regular fa-sharp fa-circle-info"></span>View</a></td>
+                                <td class="buttons navigate"><a href="@navigateLink" target="_blank" class="admin-write btn btn-sm btn-link"><span class="icon fa-regular fa-sharp fa-link"></span>Navigate</a></td>
+                                <td class="route">@pageInformation.Route</td>
+                                <td class="description">@pageInformation.Description</td>
+                                <td class="id">@pageInformation.Id</td>
+                            </tr>
+                        }
+
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(appInformation.PackageReadMe))
+        {
+            <div class="readme-panel">
+                <MarkdownContent Markdown="@appInformation.PackageReadMe" />
+            </div>
+        }
+
+        <AppMessageDialog Visible="@messageVisible" Description="@GetMessageDescription()" Send="SendMessage" Cancel="() => messageVisible = false" />
+
+    </div>
+}
+else if (loading)
+{
+    <Loading Message="Loading App.." />
+}
+else
+{
+    <div class="not-found-panel">
+        <div class="not-found-container">
+            <span class="icon fa-solid fa-sharp fa-ban"></span>
+            <span class="title">App Not Found</span>
+            <span class="subtitle">@AppId</span>
+        </div>
+    </div>
+}
+
+@code {
+
+    private const string ReloadPagesKey = "pages";
+    private const string ReloadConfigKey = "config";
+    private const int _updateInterval = 5000;
+
+    private TrakHoundAppInformation appInformation;
+    private string previousAppId;
+    private string previewLink;
+    private bool loading;
+
+    private System.Threading.Timer updateTimer;
+    private volatile bool disposed;
+
+    private string confirmKey;
+    private DateTime confirmExpires;
+    private string actionMessage;
+    private bool actionFailed;
+    private bool actionPrompt;
+    private DateTime actionMessageExpires;
+    private bool messageVisible;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string AppId { get; set; }
+
+
+    // Connections and Configurations are only known for this Instance (the Explorer may be showing another Instance)
+    private bool IsLocal => instance != null && explorerService.SelectedInstanceId == instance.Id;
+
+    private bool confirmingPages => confirmKey == ReloadPagesKey;
+
+    private bool confirmingConfig => confirmKey == ReloadConfigKey;
+
+    private string DisplayName => !string.IsNullOrWhiteSpace(appInformation?.Name) ? appInformation.Name : appInformation?.Route ?? AppId;
+
+
+    protected override void OnInitialized()
+    {
+        // Only expires the action messages and confirmations (like the Apps page)
+        updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || AppId != previousAppId)
+        {
+            previousAppId = AppId;
+
+            loading = true;
+            await InvokeAsync(StateHasChanged);
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            previewLink = null;
+            loading = false;
+
+            // Cleared first, so an App that isn't found shows Not Found (not the previous App)
+            appInformation = null;
+
+            var informations = explorerService.GetApps(InstanceId);
+            if (!informations.IsNullOrEmpty())
+            {
+                var server = explorerService.GetServer(InstanceId);
+                if (server != null)
+                {
+                    appInformation = informations.FirstOrDefault(o => o.Id == AppId);
+                    if (appInformation != null)
+                    {
+                        var baseUrl = navigationManager.BaseUri;
+                        previewLink = Url.Combine(baseUrl, appInformation.Route);
+
+                        var breadcrumbItems = new List<BreadcrumbItem>();
+                        breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+                        breadcrumbItems.Add(new BreadcrumbItem("Apps", Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "apps")));
+                        breadcrumbItems.Add(new BreadcrumbItem(appInformation.Route, null));
+                        explorerService.BreadcrumbItems = breadcrumbItems;
+                    }
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        if (disposed || (actionMessage == null && confirmKey == null)) return;
+
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (disposed) return;
+                ExpireMessages();
+                StateHasChanged();
+            });
+        }
+        catch
+        {
+            // The page may have been Disposed while updating
+        }
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private void IdentifyClicked()
+    {
+        var openPages = GetOpenConnections();
+        var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+        if (appProvider != null && appProvider.IdentifyApp(appInformation.Id))
+        {
+            ShowMessage(openPages > 0
+                ? $"Showing the Code of each of the {Plural(openPages, "open page")} of {DisplayName} for {TrakHoundAppIdentifyRequest.DefaultSeconds} seconds (listed on App Connections)"
+                : $"{DisplayName} has no open pages to Identify");
+        }
+        else
+        {
+            ShowMessage($"Could not Identify the pages of {DisplayName}", true);
+        }
+    }
+
+    private void NotifyClicked()
+    {
+        var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+        if (appProvider != null && appProvider.NotifyAppReload(appInformation.Id))
+        {
+            ShowMessage($"Reload requested for {Plural(GetOpenConnections(), "open page")} of {DisplayName}. Each reloads on its next page change or when idle");
+        }
+        else
+        {
+            ShowMessage($"Could not notify the pages of {DisplayName}", true);
+        }
+    }
+
+    private string GetMessageDescription()
+    {
+        if (!messageVisible || appInformation == null) return null;
+
+        var openPages = GetOpenConnections();
+        return openPages > 0
+            ? $"Show a Message on the {Plural(openPages, "open page")} of {DisplayName}."
+            : $"{DisplayName} has no open pages.";
+    }
+
+    private void SendMessage(TrakHoundAppMessageRequest request)
+    {
+        messageVisible = false;
+        if (appInformation == null || request == null) return;
+
+        var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+        if (appProvider != null && appProvider.SendAppMessage(appInformation.Id, request.Message, request.Severity, request.From, request.Seconds))
+        {
+            ShowMessage($"Message sent to {Plural(GetOpenConnections(), "open page")} of {DisplayName}");
+        }
+        else
+        {
+            ShowMessage($"Could not send the Message to the pages of {DisplayName}", true);
+        }
+    }
+
+    private async Task ReloadPagesClicked()
+    {
+        // Reloading loses any unsaved changes on the pages, so it takes a second click to confirm
+        if (!Confirm(ReloadPagesKey))
+        {
+            ShowPrompt($"Click the check mark again to reload the open pages of {DisplayName}{GetActivitySummary()} (unsaved changes on those pages are lost)");
+            return;
+        }
+
+        await RunAction("Reloaded the open pages of", async client => await client.Apps.RefreshApp(appInformation.Id));
+    }
+
+    private async Task ReloadConfigurationClicked()
+    {
+        if (!Confirm(ReloadConfigKey))
+        {
+            ShowPrompt($"Click the check mark again to reload the Configuration of {DisplayName} (its Services are recreated)");
+            return;
+        }
+
+        await RunAction("Reloaded the Configuration of", async client => await client.Apps.ReloadConfiguration(appInformation.Id));
+    }
+
+    private async Task RunAction(string successMessage, Func<ITrakHoundClient, Task<bool>> action)
+    {
+        try
+        {
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId, explorerService.SelectedRouterId);
+            if (client != null && await action(client))
+            {
+                ShowMessage($"{successMessage} {DisplayName}");
+            }
+            else
+            {
+                ShowMessage($"{successMessage.Replace("Reloaded", "Could not reload")} {DisplayName}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error : {DisplayName} : {ex.Message}", true);
+        }
+    }
+
+    /// <summary>
+    /// Returns true on the second click (within 5 seconds) of the same action
+    /// </summary>
+    private bool Confirm(string key)
+    {
+        if (confirmKey == key && DateTime.UtcNow < confirmExpires)
+        {
+            confirmKey = null;
+            return true;
+        }
+
+        confirmKey = key;
+        confirmExpires = DateTime.UtcNow.AddSeconds(5);
+        return false;
+    }
+
+    private void ShowMessage(string message, bool failed = false)
+    {
+        actionMessage = message;
+        actionFailed = failed;
+        actionPrompt = false;
+        actionMessageExpires = DateTime.UtcNow.AddSeconds(8);
+    }
+
+    /// <summary>
+    /// Ask for the confirming click (shown for as long as the confirmation is waiting)
+    /// </summary>
+    private void ShowPrompt(string message)
+    {
+        actionMessage = message;
+        actionFailed = false;
+        actionPrompt = true;
+        actionMessageExpires = confirmExpires;
+    }
+
+    private void ExpireMessages()
+    {
+        var now = DateTime.UtcNow;
+        if (actionMessage != null && now > actionMessageExpires) actionMessage = null;
+        if (confirmKey != null && now > confirmExpires) confirmKey = null;
+    }
+
+    private List<TrakHoundAppConnection> GetConnections()
+    {
+        if (!IsLocal || appInformation == null) return null;
+        return connectionManager.GetConnections()?.Where(o => o.AppId == appInformation.Id).ToList();
+    }
+
+    private int GetOpenConnections() => GetConnections()?.Count ?? 0;
+
+    /// <summary>
+    /// How the App's open pages are being used (ex. " : 3 idle, 1 in use"). Only known for this Instance
+    /// </summary>
+    private string GetActivitySummary()
+    {
+        var connections = GetConnections();
+        if (connections == null) return null;
+
+        var summary = TrakHoundAppConnectionActivity.Summarize(connections, DateTime.UtcNow);
+        return summary != null ? $" : {summary}" : null;
+    }
+
+    private static string Plural(int count, string label) => $"{count:N0} {label}{(count == 1 ? "" : "s")}";
+
+
+    private string GetViewLink(TrakHoundAppPageInformation pageInformation)
+    {
+        if (pageInformation != null)
+        {
+            return Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "apps", AppId, "pages", pageInformation.Id);
+        }
+
+        return null;
+    }
+
+    private string GetNavigateLink(TrakHoundAppInformation app, TrakHoundAppPageInformation pageInformation)
+    {
+        if (app != null)
+        {
+            // The App's root when no Page is given
+            var route = pageInformation != null ? Url.Combine(app.Route, pageInformation.Route) : app.Route?.Trim('/') ?? "";
+
+            // On the selected Instance's server when it is another Instance
+            if (!IsLocal)
+            {
+                var serverUrl = explorerService.GetServerUrl(explorerService.SelectedInstanceId);
+                if (!string.IsNullOrEmpty(serverUrl)) return Url.Combine(serverUrl, route);
+            }
+
+            // On the HTTP Port when the Admin Interface has its own Port
+            return TrakHoundAdminPort.GetHttpLink(navigationManager.BaseUri, route);
+        }
+
+        return null;
+    }
+
+    private static string GetRepositoryBranchLink(TrakHoundAppInformation information)
+    {
+        var baseUrl = information.Repository;
+        var branch = information.RepositoryBranch;
+
+        return Url.Combine(baseUrl, "tree", branch); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryDirectoryLink(TrakHoundAppInformation information)
+    {
+        var baseUrl = information.Repository;
+        var branch = information.RepositoryBranch;
+        var directory = information.RepositoryDirectory;
+
+        return Url.Combine(baseUrl, "tree", branch, directory); // May need to revise this as this might only be valid for GitHub
+    }
+
+    private static string GetRepositoryCommitLink(TrakHoundAppInformation information)
+    {
+        var baseUrl = information.Repository;
+        var commit = information.RepositoryCommit;
+
+        return Url.Combine(baseUrl, "commit", commit); // May need to revise this as this might only be valid for GitHub
+    }
+
+}

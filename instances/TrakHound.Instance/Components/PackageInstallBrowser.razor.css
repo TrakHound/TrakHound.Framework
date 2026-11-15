@@ -1,0 +1,270 @@
+.package-install-browser {
+    height: 100%;
+    overflow: hidden;
+    /* The layout follows the Browser's own width (the Admin sidebars take part of the window) */
+    container: package-browser / inline-size;
+}
+
+.package-install-browser-content {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+}
+
+
+.package-toolbar {
+    grid-row: 1;
+    grid-column-start: 1;
+    grid-column-end: 3;
+    padding: 10px 10px 10px;
+    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.package-toolbar-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+}
+
+.package-toolbar .btn-search {
+    grid-column: 1;
+    margin-right: 20px;
+    height: 100%;
+    width: 135px;
+    /* Sized with the search box beside it, not the shared (small) .btn size */
+    font-size: var(--fontSizeBase);
+    border: 1px solid #ddd;
+    border: 1px solid var(--borderColor);
+    border-radius: 0;
+}
+
+    .package-toolbar .btn-search .icon {
+        margin-right: 8px;
+    }
+
+    .package-toolbar .btn-search:hover {
+        border: 1px solid var(--accent);
+        background: linear-gradient(to bottom, #2d7dd2 0%,#2870bd 100%) !important;
+        color: white;
+    }
+
+    .package-toolbar .btn-search:hover .icon {
+        color: white;
+    }
+
+.package-toolbar ::deep .text-box {
+    grid-column: 2;
+    width: 100%;
+    font-size: 14px;
+    margin: 0;
+}
+
+
+.package-list {
+    grid-row: 2;
+    grid-column: 1;
+    padding-top: 10px;
+    padding-left: 10px;
+    padding-right: 10px;
+    padding-bottom: 100px;
+    border-right: 1px solid #ddd;
+    border-right: 1px solid var(--borderColor);
+    /* PackageInstallItem lays itself out by the list's width */
+    container: package-list / inline-size;
+}
+
+/* PackageInformation pads its own content, so its toolbar runs the full width */
+.package-information {
+    grid-row: 2;
+    grid-column: 2;
+}
+
+.information-back {
+    display: none;
+    padding: 10px 10px 0;
+}
+
+    .information-back .btn .icon {
+        margin-right: 8px;
+    }
+
+
+/* Narrower : the details keep a readable width and the list takes the rest */
+@container package-browser (max-width: 1100px) {
+    .package-install-browser-content {
+        grid-template-columns: minmax(0, 1fr) 340px;
+    }
+}
+
+/* Too narrow for both : one column, and a selected Package's details replace the list */
+@container package-browser (max-width: 760px) {
+    .package-install-browser-content {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .package-toolbar {
+        grid-column-end: 2;
+    }
+
+    .package-toolbar .btn-search {
+        width: auto;
+        margin-right: 10px;
+    }
+
+    .package-list {
+        border-right: none;
+    }
+
+    .load-error {
+        grid-column-end: 2;
+    }
+
+    .package-information {
+        display: none;
+        grid-column: 1;
+    }
+
+    .has-selection .package-list {
+        display: none;
+    }
+
+    .has-selection .package-information {
+        display: block;
+    }
+
+    .information-back {
+        display: block;
+    }
+}
+
+
+/* Failed Install */
+
+.install-error {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--logErrorBorder);
+    background-color: var(--logErrorBackground);
+    font-size: var(--fontSizeSm);
+}
+
+    .install-error .icon {
+        color: var(--colorRed);
+    }
+
+    .install-error .install-error-message {
+        overflow-wrap: anywhere;
+    }
+
+
+.not-found {
+    height: 100%;
+    display: grid;
+    grid-template-rows: 1fr max-content 1fr;
+    grid-template-columns: 1fr max-content 1fr;
+}
+
+.not-found-container {
+    grid-row: 2;
+    grid-column: 2;
+    text-align: center;
+}
+
+.not-found .icon {
+    display: block;
+    font-size: 48px;
+    margin-bottom: 15px;
+    color: var(--textLight);
+}
+
+.not-found .label {
+    display: block;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--textMild);
+}
+
+
+/* Unreachable Source */
+
+.load-error {
+    grid-row: 2;
+    grid-column-start: 1;
+    grid-column-end: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .load-error .load-error-icon {
+        margin-bottom: 6px;
+        font-size: 40px;
+        color: var(--textLight);
+    }
+
+    .load-error .load-error-title {
+        font-size: var(--fontSizeMd, 15px);
+        font-weight: bold;
+        color: var(--textDark);
+        overflow-wrap: anywhere;
+    }
+
+    .load-error .load-error-description {
+        max-width: 480px;
+        font-size: var(--fontSizeSm);
+        overflow-wrap: anywhere;
+    }
+
+    .load-error .btn {
+        margin-top: 8px;
+    }
+
+        .load-error .btn .icon {
+            margin-right: 6px;
+        }
+
+
+/* Details placeholder */
+
+.information-placeholder .sublabel {
+    display: block;
+    max-width: 420px;
+    margin-top: 4px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+.information-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 240px;
+    padding: 30px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .information-placeholder .icon {
+        margin-bottom: 12px;
+        font-size: 34px;
+        color: var(--textLight);
+    }
+
+    .information-placeholder .label {
+        font-weight: bold;
+        color: var(--textDark);
+    }

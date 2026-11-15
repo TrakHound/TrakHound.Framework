@@ -1,0 +1,192 @@
+.boot-details {
+    font-size: var(--fontSizeSm);
+    max-width: 1100px;
+}
+
+.problem {
+    color: var(--colorRed);
+}
+
+.warning {
+    color: var(--colorOrange);
+}
+
+.muted {
+    color: var(--textLight);
+}
+
+.ok {
+    color: var(--colorGreen);
+}
+
+.boot-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 20px;
+    color: var(--textDark);
+}
+
+    .boot-facts .label {
+        margin-right: 6px;
+        color: var(--textLight);
+    }
+
+    .boot-facts .boot-download {
+        margin-left: auto;
+    }
+
+.boot-reason {
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+}
+
+.boot-exception {
+    margin-top: 6px;
+}
+
+    .boot-exception summary,
+    .boot-log summary {
+        cursor: pointer;
+        color: var(--textMild);
+    }
+
+    .boot-exception pre {
+        margin: 6px 0 0;
+        padding: 8px 10px;
+        max-height: 300px;
+        overflow: auto;
+        font-family: var(--fontMono);
+        font-size: var(--fontSizeXs);
+        background: var(--logBackground);
+        border: 1px solid var(--logBorder);
+        color: var(--logText);
+        white-space: pre-wrap;
+    }
+
+.boot-section-title {
+    margin: 14px 0 6px;
+    font-size: var(--fontSizeXs);
+    font-weight: bold;
+    color: var(--textMild);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+    .boot-section-title .section-detail {
+        margin-left: 6px;
+        font-weight: normal;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+/* Steps */
+.step-list {
+    display: grid;
+    grid-template-columns: minmax(160px, max-content) minmax(120px, 1fr) 70px 40px;
+    column-gap: 12px;
+    row-gap: 3px;
+    align-items: center;
+}
+
+.step {
+    display: contents;
+}
+
+.step-name {
+    white-space: nowrap;
+}
+
+.step.failed .step-name {
+    color: var(--colorRed);
+    font-weight: bold;
+}
+
+.step-bar {
+    display: block;
+    height: 8px;
+    background: var(--borderColorLight);
+    position: relative;
+}
+
+.step-bar-value {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--accentLight);
+}
+
+.step.failed .step-bar-value {
+    background: var(--colorRed);
+}
+
+.step-duration,
+.step-percent {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.step-percent {
+    color: var(--textLight);
+}
+
+.step-error {
+    grid-column: 1 / -1;
+    margin: 0 0 4px 12px;
+    overflow-wrap: anywhere;
+}
+
+/* Log */
+.boot-log {
+    margin-top: 8px;
+}
+
+.log-entries {
+    margin-top: 6px;
+    border: 1px solid var(--logBorder);
+    background: var(--logBackground);
+    max-height: 300px;
+    overflow: auto;
+}
+
+.log-entry {
+    display: flex;
+    gap: 10px;
+    padding: 3px 8px;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeXs);
+    color: var(--logText);
+    border-bottom: 1px solid var(--logBorder);
+}
+
+    .log-entry:last-child {
+        border-bottom: none;
+    }
+
+    .log-entry.error {
+        background: var(--logErrorBackground);
+    }
+
+    .log-entry.warning {
+        background: var(--logWarningBackground);
+        color: var(--logText);
+    }
+
+.log-time,
+.log-level {
+    white-space: nowrap;
+}
+
+.log-level {
+    width: 60px;
+}
+
+.log-logger {
+    white-space: nowrap;
+    color: var(--textMild);
+}
+
+.log-message {
+    overflow-wrap: anywhere;
+}

@@ -1,0 +1,611 @@
+﻿/* Run and the Status across the top, then the Result beside the Input (stacked on a narrow window, see the bottom of this file) */
+.run-panel {
+    display: grid;
+    /* --input-width is set by dragging the Input's edge. It can't leave the Result less than 400px (when the page is narrowed after) */
+    grid-template-columns: minmax(0, 1fr) min(var(--input-width, clamp(420px, 38%, 600px)), max(300px, calc(100% - 400px)));
+    grid-template-rows: max-content minmax(0, 1fr);
+    height: 100%;
+    width: 100%;
+    padding-top: 10px;
+}
+
+
+/* Run (or Cancel) and the Status */
+.run-toolbar {
+    grid-row: 1;
+    grid-column: 1 / 3;
+    display: flex;
+    align-items: stretch;
+    /* A fixed height, so the bar doesn't change size when a Run starts, shows its facts or a message */
+    height: 44px;
+    margin-bottom: 12px;
+}
+
+    .run-toolbar .btn-run {
+        flex: 0 0 125px;
+        font-size: 0.9375rem;
+        border-radius: 0;
+        /* Run keeps its own size, not the shared .btn size */
+        display: inline-block;
+        height: auto;
+        padding: .375rem .75rem;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+        .run-toolbar .btn-run .icon {
+            margin-right: 7px;
+            font-size: inherit;
+            line-height: inherit;
+        }
+
+        .run-toolbar .btn-run:focus {
+            box-shadow: none;
+        }
+
+        .run-toolbar .btn-run.btn-loading .icon {
+            animation: spin 0.65s linear infinite;
+        }
+
+    .run-toolbar .btn-cancel .icon {
+        color: var(--colorRed);
+    }
+
+    .run-toolbar .btn-cancel:disabled {
+        opacity: 1;
+        color: var(--textMild);
+    }
+
+
+/* Input (styled like the Api Run tab's Request Parameters sidebar) */
+.input-pane {
+    grid-row: 2;
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 0 20px 15px;
+    border-left: 1px solid var(--borderColorLight);
+    position: relative;
+}
+
+    /* Centered on the Input's left border */
+    .input-pane > .resize-handle {
+        left: -5px;
+    }
+
+    .input-pane.collapsed > .resize-handle {
+        display: none;
+    }
+
+    .input-pane > .section-header {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 28px;
+        margin-bottom: 6px;
+    }
+
+        .input-pane > .section-header .section-label {
+            margin-bottom: 0;
+        }
+
+.section-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-tool {
+    padding: 0;
+    font-size: var(--fontSizeSm);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+    .btn-tool .icon {
+        margin-right: 5px;
+    }
+
+.btn-collapse {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+    .btn-collapse:hover {
+        color: var(--accentLight);
+    }
+
+    .btn-collapse .icon {
+        margin: 0;
+    }
+
+.input-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Collapsed : a strip with the Expand button and the label running down it */
+.run-panel.input-collapsed {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.input-pane.collapsed {
+    width: 34px;
+    padding: 0;
+    align-items: center;
+}
+
+    .input-pane.collapsed > .section-header {
+        flex-direction: column;
+        gap: 12px;
+        margin: 0;
+    }
+
+    .input-pane.collapsed .section-label {
+        writing-mode: vertical-rl;
+        cursor: pointer;
+    }
+
+        .input-pane.collapsed .section-label:hover {
+            color: var(--accentLight);
+        }
+
+/* The Job, on one line above the Parameters */
+.job-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+    .job-section .job-label {
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+    .job-section ::deep .rz-dropdown {
+        flex: 1 1 auto;
+    }
+
+.input-section {
+    margin-bottom: 20px;
+}
+
+    .input-section ::deep .rz-dropdown {
+        width: 100%;
+        font-size: var(--fontSizeSm);
+    }
+
+.section-label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: var(--fontSizeXs, 0.75rem);
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--textLight);
+}
+
+.section-detail {
+    font-weight: normal;
+    text-transform: none;
+}
+
+.input-note,
+.job-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    line-height: 1.45;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+}
+
+    .input-note .icon,
+    .job-note .icon {
+        margin-top: 2px;
+    }
+
+.input-note {
+    border-left: 3px solid var(--colorGreen);
+}
+
+    .input-note .icon {
+        color: var(--colorGreen);
+    }
+
+    .input-note.warning {
+        border-left-color: var(--colorOrange);
+    }
+
+        .input-note.warning .icon {
+            color: var(--colorOrange);
+        }
+
+.job-note {
+    border-left: 3px solid var(--accent);
+}
+
+    .job-note .icon {
+        color: var(--accent);
+    }
+
+/* Recent Runs (started from this page) */
+.recent-runs {
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+}
+
+.recent-run {
+    display: grid;
+    grid-template-columns: max-content max-content minmax(0, 1fr) max-content max-content;
+    align-items: center;
+    column-gap: 10px;
+    padding: 7px 10px;
+    font-size: var(--fontSizeMd);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .recent-run:last-child {
+        border-bottom: none;
+    }
+
+    .recent-run .btn-link {
+        padding: 0 2px;
+        font-size: var(--fontSizeSm);
+        text-decoration: none;
+    }
+
+.recent-status {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--textLight);
+}
+
+.recent-run.completed .recent-status {
+    background: var(--accent);
+}
+
+.recent-run.stopped .recent-status,
+.recent-run.error .recent-status {
+    background: var(--colorRed);
+}
+
+.recent-time {
+    color: var(--textMild);
+}
+
+.recent-description {
+    color: var(--textDark);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Result */
+.result-pane {
+    grid-row: 2;
+    grid-column: 1;
+    position: relative;
+    overflow: hidden;
+    padding-right: 20px;
+}
+
+/* The Level filter and counts, over the right end of the tab row */
+.tab-tools {
+    position: absolute;
+    top: 0;
+    right: 20px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 42px; /* The Radzen tab row */
+}
+
+    .tab-tools .log-count {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+        white-space: nowrap;
+    }
+
+    .tab-tools ::deep .rz-dropdown {
+        width: 130px;
+    }
+
+
+/* Status (beside Run) */
+.request-panel {
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+    font-size: var(--fontSizeMd);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColor);
+    flex: 1 1 auto;
+    min-width: 0;
+    /* Sized by the page (not the window), so the facts below drop out when the bar itself is narrow */
+    container-type: inline-size;
+}
+
+.request-status-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 18px;
+    min-width: 150px;
+    flex: 0 0 auto;
+    border-right: 1px solid var(--borderColor);
+}
+
+.request-status-icon {
+    color: var(--textLight);
+}
+
+    .request-status-icon.spinning {
+        animation: spin 0.65s linear infinite;
+    }
+
+.request-status {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.request-panel.completed .request-status-icon {
+    color: var(--accent);
+}
+
+.request-panel.started .request-status-icon,
+.request-panel.running .request-status-icon,
+.request-panel.started .request-status,
+.request-panel.running .request-status {
+    color: var(--colorGreen);
+}
+
+.request-panel.wait .request-status-icon,
+.request-panel.wait .request-status {
+    color: var(--colorOrange);
+}
+
+.request-panel.stopped .request-status-icon,
+.request-panel.error .request-status-icon,
+.request-panel.stopped .request-status,
+.request-panel.error .request-status {
+    color: var(--colorRed);
+}
+
+/* Label and value on one line, so a fact is no taller than the Status */
+.request-fact {
+    display: flex;
+    align-items: baseline;
+    align-self: center;
+    gap: 8px;
+    padding: 0 16px;
+    border-right: 1px solid var(--borderColor);
+    flex: 0 0 auto;
+    line-height: 44px;
+}
+
+    /* The Duration's width changes as it counts, so it keeps room for it (or the facts after it would shift) */
+    .request-fact-duration .request-fact-value {
+        min-width: 70px;
+    }
+
+/* A narrow bar keeps its one line by leaving out Started and CPU (they're in the Run) */
+@container (max-width: 760px) {
+    .request-fact-detail {
+        display: none;
+    }
+}
+
+.request-fact-label {
+    font-size: var(--fontSizeXs, 0.75rem);
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--textLight);
+}
+
+.request-fact-value {
+    font-size: var(--fontSizeMd);
+    color: var(--textDark);
+    white-space: nowrap;
+}
+
+#request-duration,
+.request-duration {
+    font-weight: bold;
+}
+
+.request-message-container {
+    display: flex;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 18px;
+    overflow: hidden;
+}
+
+/* One line (the full message is in its title and the Run's Logs) */
+.request-message {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--fontSizeMd);
+    color: var(--textDark);
+}
+
+.request-panel.error .request-message {
+    color: var(--colorRed);
+}
+
+.request-id-container {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0 18px;
+    white-space: nowrap;
+}
+
+.request-id {
+    font-size: var(--fontSizeMd);
+    text-decoration: none;
+}
+
+    .request-id .icon {
+        margin-left: 6px;
+    }
+
+.request-not-recorded {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+/* The tab panels fill the Result, so each tab (ex. the Log) scrolls on its own */
+.result-pane ::deep .rz-tabview {
+    height: 100%;
+    overflow: hidden;
+}
+
+.result-pane ::deep .rz-tabview-panels {
+    height: 100%;
+    overflow: hidden;
+}
+
+.result-pane ::deep .rz-tabview-panel {
+    height: 100%;
+    overflow: hidden;
+    padding: 0;
+}
+
+
+/* Logs (the rows are styled by RunLog) */
+.response-log {
+    height: 100%;
+    width: 100%;
+    overflow-y: auto;
+    background: var(--logBackground);
+    padding-bottom: 50px;
+}
+
+
+/* Output */
+.output-parameters {
+    height: 100%;
+    overflow-y: auto;
+    padding-top: 10px;
+}
+
+.output-information {
+    padding: 0 20px 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.empty-message {
+    display: block;
+    padding: 10px 15px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+
+/* Save as Job */
+.run-panel ::deep .modal .modal-body {
+    padding: 20px 40px;
+}
+
+.configuration-panel .form-field {
+    display: block;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+    .configuration-panel .form-field:last-child {
+        margin-bottom: 0;
+    }
+
+    .configuration-panel .form-field > label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+    .configuration-panel .form-field > ::deep .rz-textbox {
+        display: block;
+        width: 100%;
+        font-size: var(--fontSizeBase);
+    }
+
+.configuration-panel .instructions {
+    display: block;
+    margin-top: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+
+/* Stacked on a narrow window (the Explorer tree takes part of the width) : the Input above the Result */
+@media (max-width: 1100px) {
+    .run-panel {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: max-content max-content minmax(0, 1fr);
+    }
+
+    .run-panel.input-collapsed {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .input-pane {
+        grid-row: 2;
+        grid-column: 1;
+        max-height: 45vh;
+        padding: 0 0 12px;
+        border-left: none;
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+        /* Stacked, the Input is as wide as the page */
+        .input-pane > .resize-handle {
+            display: none;
+        }
+
+        .input-pane.collapsed {
+            width: auto;
+            align-items: stretch;
+        }
+
+            .input-pane.collapsed > .section-header {
+                flex-direction: row;
+                justify-content: flex-start;
+            }
+
+            .input-pane.collapsed .section-label {
+                writing-mode: horizontal-tb;
+            }
+
+    .result-pane {
+        grid-row: 3;
+        grid-column: 1;
+        padding-right: 0;
+        padding-top: 5px;
+    }
+}

@@ -1,0 +1,309 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/health"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject ITrakHoundInstance localInstance
+@using TrakHound.Clients
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="Health - Diagnostics" />
+
+<div class="health-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-heart-pulse"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Health</span>
+                <span class="header-description">The overall Health of the Instance and each Health Check · evaluated every @(TrakHound.Instance.Health.TrakHoundHealthMonitor.EvaluationInterval.TotalSeconds) seconds</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading && !checking)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+            @if (IsLocal)
+            {
+                <button class="btn btn-light" @onclick="CheckNowClicked" title="Evaluate all Health Checks now"><span class="icon fa-solid fa-sharp fa-stethoscope"></span>Check Now</button>
+            }
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>@(checking ? "Checking.." : "Loading..")</button>
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (health != null)
+            {
+                <div class="overall-panel status-@health.Status.ToString().ToLower()">
+                    <span class="overall-icon @GetStatusIcon(health.Status)"></span>
+                    <div class="overall-text">
+                        <span class="overall-status">@GetStatusText(health.Status)</span>
+                        <span class="overall-detail">
+                            @if (health.StatusChanged != null)
+                            {
+                                <span>Since @FormatTimestamp(health.StatusChanged)</span>
+                                <span class="separator">·</span>
+                            }
+                            <span>Checked @FormatTimestamp(health.Checked)</span>
+                            <span class="separator">·</span>
+                            <a href="_health" target="_blank" title="The public Health endpoint (200 unless Unhealthy)">/_health</a>
+                            <span class="separator">·</span>
+                            <a href="_admin/configuration/settings?section=health" title="Mark items as Critical or Ignored">Settings</a>
+                        </span>
+                    </div>
+                </div>
+
+                @if (!health.Checks.IsNullOrEmpty())
+                {
+                    <div class="checks-panel">
+                        @foreach (var check in health.Checks.OrderByDescending(o => o.Status == TrakHoundHealthStatus.Unknown || o.Ignored ? 0 : (int)o.Status))
+                        {
+                            <div class="check status-@check.Status.ToString().ToLower() @(check.Ignored ? "ignored" : null)">
+                                <div class="check-header">
+                                    <span class="check-icon @GetStatusIcon(check.Status)"></span>
+                                    <span class="check-title" title="@check.Id">
+                                        @check.Title
+                                        @if (check.Ignored) { <span class="badge ignored">Ignored</span> }
+                                        @if (check.Critical) { <span class="badge critical">Critical</span> }
+                                    </span>
+                                    <span class="check-status">@check.Status</span>
+                                    <span class="check-description" title="@check.Description">@check.Description</span>
+                                    @if (check.Link != null)
+                                    {
+                                        <a class="check-link" href="@GetLink(check.Link)">View<span class="icon fa-solid fa-sharp fa-chevron-right"></span></a>
+                                    }
+                                </div>
+
+                                @if (!check.Items.IsNullOrEmpty())
+                                {
+                                    <div class="check-items">
+                                        @foreach (var item in check.Items)
+                                        {
+                                            <div class="check-item status-@item.Status.ToString().ToLower() @(item.Ignored ? "ignored" : null)" title="@item.Key">
+                                                <span class="item-dot"></span>
+                                                @if (item.Link != null)
+                                                {
+                                                    <a class="item-name" href="@GetLink(item.Link)">@item.Name</a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="item-name">@item.Name</span>
+                                                }
+                                                <span class="item-description">
+                                                    @if (item.Ignored) { <span class="badge ignored">Ignored</span> }
+                                                    @if (item.Critical) { <span class="badge critical">Critical</span> }
+                                                    @item.Description
+                                                </span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                @if (check.StatusChanged != null && check.Status != TrakHoundHealthStatus.Healthy)
+                                {
+                                    <div class="check-since">@check.Status since @FormatTimestamp(check.StatusChanged)</div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-panel">
+                        <span class="empty-description">The Health Checks have not been evaluated yet</span>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-heart-pulse"></span>
+                    <span class="empty-title">Health Not Available</span>
+                    <span class="empty-description">The Health of this Instance could not be read (the System API may be disabled)</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 5000;
+
+    private TrakHoundInstanceHealth health;
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private bool checking;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    // The Health can be evaluated on demand for this Instance (others are read through their Client)
+    private bool IsLocal => localInstance != null && explorerService.SelectedInstanceId == localInstance.Id;
+
+
+    void IDisposable.Dispose()
+    {
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Health..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            health = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Health", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                await UpdateHealth(client);
+
+                // Poll for the latest evaluation
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateHealth(ITrakHoundClient client)
+    {
+        try
+        {
+            health = client.Instances != null ? await client.Instances.GetHealth() : null;
+        }
+        catch
+        {
+            health = null;
+        }
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateHealth(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private async Task CheckNowClicked()
+    {
+        if (!IsLocal || localInstance.Health == null) return;
+
+        checking = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            health = await localInstance.Health.Evaluate();
+        }
+        catch { }
+        finally
+        {
+            checking = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+    // Check Links are relative to the Instance in the Explorer, unless they are another Admin page
+    private string GetLink(string link)
+    {
+        if (link.StartsWith("_admin/")) return link;
+        return string.IsNullOrEmpty(link) ? $"_admin/explorer/{explorerService.SelectedInstanceId}" : $"_admin/explorer/{explorerService.SelectedInstanceId}/{link}";
+    }
+
+    public static string GetStatusIcon(TrakHoundHealthStatus status)
+    {
+        switch (status)
+        {
+            case TrakHoundHealthStatus.Healthy: return "fa-solid fa-sharp fa-circle-check";
+            case TrakHoundHealthStatus.Degraded: return "fa-solid fa-sharp fa-triangle-exclamation";
+            case TrakHoundHealthStatus.Unhealthy: return "fa-solid fa-sharp fa-circle-xmark";
+            default: return "fa-solid fa-sharp fa-circle-question";
+        }
+    }
+
+    private static string GetStatusText(TrakHoundHealthStatus status)
+    {
+        switch (status)
+        {
+            case TrakHoundHealthStatus.Healthy: return "Healthy";
+            case TrakHoundHealthStatus.Degraded: return "Degraded";
+            case TrakHoundHealthStatus.Unhealthy: return "Unhealthy";
+            default: return "Unknown";
+        }
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+}

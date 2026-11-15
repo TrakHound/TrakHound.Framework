@@ -1,0 +1,208 @@
+@inject DeploymentsService deploymentsService
+@using TrakHound.Deployments
+@using TrakHound.Instance.Pages.Packages
+
+<div class="backups-panel">
+    <div class="backups-content">
+
+        <p class="backups-description muted">
+            A backup is created before a deployment is installed (when "Back up first" is selected). Restoring it returns the backed up configuration
+            profiles, package versions, volume files and package variables to how they were before that install, and removes the package versions and files the deployment added.
+            <br />Backups are kept in <code>@deploymentsService.BackupPath</code>
+        </p>
+
+        @if (operation != null)
+        {
+            <div class="operation-card @(operation.Running ? "running" : operation.Result?.Success == true && operation.Result.Restarted ? "success" : "error")">
+                <div class="operation-header">
+                    <span class="operation-icon fa-solid fa-sharp @(operation.Running ? "fa-loader spin" : operation.Result?.Success == true && operation.Result.Restarted ? "fa-circle-check" : "fa-circle-exclamation")"></span>
+                    <span class="operation-title">@operation.Title</span>
+                </div>
+                <ol class="operation-steps">
+                    @foreach (var step in operation.Steps)
+                    {
+                        <li>@step</li>
+                    }
+                </ol>
+                @if (operation.Result != null)
+                {
+                    @foreach (var error in operation.Result.Errors)
+                    {
+                        <div class="operation-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@error</div>
+                    }
+                    <button class="btn btn-light btn-done" @onclick="() => operation = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Done</button>
+                }
+            </div>
+        }
+
+        @if (backups.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-regular fa-sharp fa-clock-rotate-left"></span>
+                <span class="empty-title">No backups</span>
+                <span class="empty-description">Backups appear here after a deployment is installed with "Back up first" selected.</span>
+            </div>
+        }
+        else
+        {
+            <table class="backups-table">
+                <thead>
+                    <tr>
+                        <th>Created</th>
+                        <th>Installed After</th>
+                        <th>Restores</th>
+                        <th>Contents</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var backup in backups)
+                    {
+                        <tr>
+                            <td>@backup.Created.ToLocalTime().ToString("g")</td>
+                            <td>@(backup.InstalledDeployment != null ? $"{backup.InstalledDeployment.ProfileId} v{backup.InstalledDeployment.Version}" : "–")</td>
+                            <td>@(backup.PreviousDeployment != null ? $"{backup.PreviousDeployment.ProfileId} v{backup.PreviousDeployment.Version}" : "Configuration before the install")</td>
+                            <td>
+                                Profiles : @string.Join(", ", backup.Profiles)
+                                <span class="muted"> · @backup.Packages.Count package versions · removes @backup.AddedPackages.Count added@(backup.VolumeFiles.Count + backup.AddedVolumeFiles.Count > 0 ? $" · {backup.VolumeFiles.Count + backup.AddedVolumeFiles.Count} volume files" : "")@(backup.Variables.Count + backup.AddedVariables.Count > 0 ? $" · {backup.Variables.Count + backup.AddedVariables.Count} variable collections" : "")</span>
+                            </td>
+                            <td class="col-actions">
+                                <button class="admin-write btn btn-sm btn-command" @onclick="() => restoreBackup = backup" disabled="@(deploymentsService.IsBusy || operation?.Running == true)"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Restore</button>
+                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => deleteBackup = backup" disabled="@(operation?.Running == true)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+    </div>
+
+    @* Restore *@
+    <Modal Class="packages-modal" Visible="@(restoreBackup != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-clock-rotate-left"></span>
+            <span class="modal-header-title">Restore Backup from @restoreBackup?.Created.ToLocalTime().ToString("g")?</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (restoreBackup != null)
+            {
+                <p class="modal-description">Restoring will:</p>
+                <ul class="confirm-list">
+                    <li><strong>Stop this Instance</strong> and start it again afterwards</li>
+                    <li>Replace the configuration profiles <strong>@string.Join(", ", restoreBackup.Profiles)</strong> with the backed up copies (changes made since are lost)</li>
+                    <li>Restore <strong>@restoreBackup.Packages.Count</strong> package versions and remove <strong>@restoreBackup.AddedPackages.Count</strong> added by @(restoreBackup.InstalledDeployment != null ? $"{restoreBackup.InstalledDeployment.ProfileId} v{restoreBackup.InstalledDeployment.Version}" : "the deployment")</li>
+                    @if (restoreBackup.VolumeFiles.Count + restoreBackup.AddedVolumeFiles.Count + restoreBackup.Variables.Count + restoreBackup.AddedVariables.Count > 0)
+                    {
+                        <li>Restore <strong>@restoreBackup.VolumeFiles.Count</strong> volume files and <strong>@restoreBackup.Variables.Count</strong> package variable collections, and remove <strong>@(restoreBackup.AddedVolumeFiles.Count + restoreBackup.AddedVariables.Count)</strong> files the deployment added</li>
+                    }
+                </ul>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => restoreBackup = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="RunRestore"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Stop Instance and Restore</button>
+        </FooterContent>
+    </Modal>
+
+    @* Delete *@
+    <Modal Class="packages-modal" Visible="@(deleteBackup != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Delete Backup?</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="modal-description">Permanently delete the backup from @deleteBackup?.Created.ToLocalTime().ToString("g")? It can no longer be restored.</p>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => deleteBackup = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="ConfirmDelete"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete Backup</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private class OperationState
+    {
+        public string Title { get; set; }
+        public bool Running { get; set; }
+        public List<string> Steps { get; } = new List<string>();
+        public DeploymentOperationResult Result { get; set; }
+    }
+
+    private List<TrakHoundDeploymentBackup> backups = new List<TrakHoundDeploymentBackup>();
+    private TrakHoundDeploymentBackup restoreBackup;
+    private TrakHoundDeploymentBackup deleteBackup;
+    private OperationState operation;
+
+
+    [CascadingParameter]
+    public PackagesContext Notifications { get; set; }
+
+    [Parameter]
+    public EventCallback Changed { get; set; }
+
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        backups = deploymentsService.GetBackups().ToList();
+    }
+
+    private async Task RunRestore()
+    {
+        var backup = restoreBackup;
+        restoreBackup = null;
+        if (backup == null) return;
+
+        operation = new OperationState { Title = $"Restoring backup from {backup.Created.ToLocalTime():g}..", Running = true };
+        await InvokeAsync(StateHasChanged);
+
+        var progress = new Progress<string>(message =>
+        {
+            operation.Steps.Add(message);
+            _ = InvokeAsync(StateHasChanged);
+        });
+
+        operation.Result = await deploymentsService.Restore(backup.Path, progress);
+        operation.Running = false;
+
+        if (operation.Result.Success && operation.Result.Restarted)
+        {
+            operation.Title = "Backup restored";
+            Notifications?.Notify(PackageNotificationType.Success, "Backup Restored", "The Instance was restarted");
+        }
+        else
+        {
+            operation.Title = operation.Result.Success ? "Restored, but the Instance did not start" : "The backup was not restored successfully";
+            Notifications?.Notify(PackageNotificationType.Error, "Restore Failed", operation.Result.Errors.FirstOrDefault());
+        }
+
+        await Changed.InvokeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ConfirmDelete()
+    {
+        var backup = deleteBackup;
+        deleteBackup = null;
+        if (backup == null) return;
+
+        try
+        {
+            TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Deployments);
+            Directory.Delete(backup.Path, true);
+            Notifications?.Notify(PackageNotificationType.Success, "Backup Deleted", backup.Created.ToLocalTime().ToString("g"));
+        }
+        catch (Exception ex)
+        {
+            Notifications?.Notify(PackageNotificationType.Error, "Delete Backup Failed", ex.Message);
+        }
+
+        Load();
+    }
+
+}

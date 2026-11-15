@@ -1,0 +1,91 @@
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject ITrakHoundInstance instance
+@using TrakHound.Instances
+
+<div class="settings-health">
+
+    <SettingsSection Title="Critical and Ignored" HelpLink="@TrakHoundWebsite.Docs(TrakHoundWebsite.Topics.Instances, "health-checks")" Description="By default any problem makes the Instance Degraded. Mark the items that matter most as Critical (Unhealthy, /_health returns 503) and the ones that are expected as Ignored (shown but not counted). Applied on the next evaluation." Icon="fa-solid fa-sharp fa-heart-pulse">
+        <SettingsField Label="Critical" Description="One per line : a Check (ex. services) or Check/Item (ex. services/sqlserver-main). * matches any characters.">
+            <RadzenTextArea Value="@Model.HealthCritical" ValueChanged="@(o => { Model.HealthCritical = o; EditContext.Changed(); })" Rows="5" Placeholder="services/sqlserver-main" class="list-input" />
+        </SettingsField>
+        <SettingsField Label="Ignore" Description="One per line : a Check (ex. logs) or Check/Item (ex. workers/TrakHound.Example.Worker). * matches any characters.">
+            <RadzenTextArea Value="@Model.HealthIgnore" ValueChanged="@(o => { Model.HealthIgnore = o; EditContext.Changed(); })" Rows="5" Placeholder="workers/TrakHound.Example.*" class="list-input" />
+        </SettingsField>
+    </SettingsSection>
+
+    @if (!keys.IsNullOrEmpty())
+    {
+        <SettingsSection Title="Current Checks and Items" Description="From the latest Health evaluation. Add one to a list, then Save." Icon="fa-solid fa-sharp fa-list-check">
+            <div class="keys-table">
+                @foreach (var key in keys)
+                {
+                    <div class="key-row @(key.IsItem ? "item" : "check")">
+                        <span class="key-dot status-@key.Status.ToString().ToLower()" title="@key.Status"></span>
+                        <span class="key-text" title="@key.Description">@key.Key</span>
+                        <span class="key-status">@key.Status</span>
+                        <button class="btn btn-sm btn-light" disabled="@Contains(Model.HealthCritical, key.Key)" @onclick="() => Add(true, key.Key)">+ Critical</button>
+                        <button class="btn btn-sm btn-light" disabled="@Contains(Model.HealthIgnore, key.Key)" @onclick="() => Add(false, key.Key)">+ Ignore</button>
+                    </div>
+                }
+            </div>
+        </SettingsSection>
+    }
+
+</div>
+
+@code {
+
+    private record KeyItem(string Key, TrakHoundHealthStatus Status, string Description, bool IsItem);
+
+    private List<KeyItem> keys;
+
+
+    [Parameter]
+    public InstanceSettingsModel Model { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        // The Checks are the running Instance's (not a Workspace's)
+        if (!configurationsService.Target.IsLive) return;
+
+        var health = instance.Health?.GetHealth();
+
+        keys = new List<KeyItem>();
+        if (health?.Checks != null)
+        {
+            foreach (var check in health.Checks.OrderBy(o => o.Title))
+            {
+                keys.Add(new KeyItem(check.Id, check.Status, check.Description, false));
+
+                foreach (var item in check.Items ?? Enumerable.Empty<TrakHoundHealthCheckItem>())
+                {
+                    if (!string.IsNullOrEmpty(item.Key)) keys.Add(new KeyItem(item.Key, item.Status, item.Description, true));
+                }
+            }
+        }
+    }
+
+    private void Add(bool critical, string key)
+    {
+        if (critical) Model.HealthCritical = Append(Model.HealthCritical, key);
+        else Model.HealthIgnore = Append(Model.HealthIgnore, key);
+
+        EditContext.Changed();
+    }
+
+    private static string Append(string list, string key)
+    {
+        if (Contains(list, key)) return list;
+        return string.IsNullOrWhiteSpace(list) ? key : $"{list.TrimEnd()}\n{key}";
+    }
+
+    private static bool Contains(string list, string key)
+    {
+        return !string.IsNullOrEmpty(list) && list.Split('\n').Any(o => string.Equals(o.Trim(), key, StringComparison.OrdinalIgnoreCase));
+    }
+
+}

@@ -1,0 +1,537 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/buffers"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Buffers
+@using TrakHound.Clients
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="Buffers - Diagnostics" />
+
+<div class="buffers-page" style="@GetSeriesStyle()">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-layer-group"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Buffers</span>
+                <span class="header-description">Operation Buffer queue and file buffer metrics · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (!tableItems.IsNullOrEmpty())
+            {
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@tableItems"
+                                    TItem="TableItem"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Name" Title="Buffer" MinWidth="200px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="OperationType" Title="Operation" Width="100px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="QueueItems" Title="Queue" Width="125px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.QueueItems.ToString("N0") / @item.QueueLimit.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="QueueRate" Title="Queue Rate" Width="125px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@FormatRate(item.QueueRate)/s</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="PageCount" Title="Pages" Width="95px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.FileBufferEnabled ? item.PageCount.ToString("N0") : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="FileWriteRate" Title="Write Rate" Width="125px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.FileBufferEnabled ? $"{FormatRate(item.FileWriteRate)}/s" : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="FileReadRate" Title="Read Rate" Width="125px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.FileBufferEnabled ? $"{FormatRate(item.FileReadRate)}/s" : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="State" Title="State" Width="170px">
+                                <Template Context="item">
+                                    <span class="state"><span class="icon @GetStateIcon(item)"></span>@GetStateText(item)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = tableItems.FirstOrDefault(o => o.BufferId == selectedBufferId);
+                if (selected != null)
+                {
+                    var samples = GetSamples(selected.BufferId);
+
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <span class="detail-name">@selected.Name</span>
+                            @if (!string.IsNullOrEmpty(selected.OperationType))
+                            {
+                                <span class="detail-type">@selected.OperationType</span>
+                            }
+                            <span class="detail-state"><span class="icon @GetStateIcon(selected)"></span>@GetStateText(selected)</span>
+                        </div>
+
+                        @* Current values (also the text equivalent of each chart Series) *@
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-1"></span>Queue</span>
+                                <span class="stat-value">@selected.QueueItems.ToString("N0")</span>
+                                <span class="stat-detail">of @selected.QueueLimit.ToString("N0") (@GetQueuePercent(selected))</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label"><span class="swatch series-1"></span>Queue Rate</span>
+                                <span class="stat-value">@FormatRate(selected.QueueRate)<span class="stat-unit">items/s</span></span>
+                                <span class="stat-detail">@selected.QueueTotal.ToString("N0") total</span>
+                            </div>
+                            @if (selected.FileBufferEnabled)
+                            {
+                                <div class="stat-tile">
+                                    <span class="stat-label"><span class="swatch series-2"></span>File Write</span>
+                                    <span class="stat-value">@FormatRate(selected.FileWriteRate)<span class="stat-unit">items/s</span></span>
+                                    <span class="stat-detail">@selected.FileWriteTotal.ToString("N0") total · @FormatBytes(selected.FileBytesWritten)</span>
+                                </div>
+                                <div class="stat-tile">
+                                    <span class="stat-label"><span class="swatch series-3"></span>File Read</span>
+                                    <span class="stat-value">@FormatRate(selected.FileReadRate)<span class="stat-unit">items/s</span></span>
+                                    <span class="stat-detail">@selected.FileReadTotal.ToString("N0") total · @FormatBytes(selected.FileBytesRead)</span>
+                                </div>
+                                <div class="stat-tile">
+                                    <span class="stat-label">Pages</span>
+                                    <span class="stat-value">@selected.PageCount.ToString("N0")</span>
+                                    <span class="stat-detail">@FormatBytes(selected.PageSize) page limit</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="stat-tile">
+                                    <span class="stat-label">File Buffer</span>
+                                    <span class="stat-value">Disabled</span>
+                                    <span class="stat-detail">Items are only held in memory</span>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="chart-grid">
+                            <MetricsChart TItem="BufferSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp" Title="Queue Items"
+                                         Subtitle="@($"items in the working queue · limit {selected.QueueLimit:N0} · last {_windowText}")"
+                                         Samples="@samples"
+                                         Series="@queueSeries"
+                                         Area="true"
+                                         Max="@((object)Math.Max(1, selected.QueueLimit))"
+                                         ValueFormatter="@FormatCount" />
+
+                            <MetricsChart TItem="BufferSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp" Title="Throughput"
+                                         Subtitle="@($"items/s · last {_windowText}")"
+                                         Samples="@samples"
+                                         Series="@(selected.FileBufferEnabled ? throughputSeries : queueRateSeries)"
+                                         ValueFormatter="@FormatRate" />
+
+                            @if (selected.FileBufferEnabled)
+                            {
+                                <MetricsChart TItem="BufferSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp" Title="File Buffer I/O"
+                                             Subtitle="@($"bytes/s · last {_windowText}")"
+                                             Samples="@samples"
+                                             Series="@bytesSeries"
+                                             ValueFormatter="@FormatByteRate" />
+                            }
+                        </div>
+
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-layer-group"></span>
+                    <span class="empty-title">No Buffers</span>
+                    <span class="empty-description">No Operation Buffers are running in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+
+    // Each Series keeps its color across charts (Queue = slot 1, File Write = slot 2, File Read = slot 3)
+
+    private readonly Dictionary<string, Queue<BufferSample>> _history = new Dictionary<string, Queue<BufferSample>>();
+    private readonly object _lock = new object();
+    private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>();
+
+    private IEnumerable<TableItem> tableItems;
+    private string selectedBufferId;
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    private MetricsChartSeries[] queueSeries;
+    private MetricsChartSeries[] queueRateSeries;
+    private MetricsChartSeries[] throughputSeries;
+    private MetricsChartSeries[] bytesSeries;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    public class TableItem
+    {
+        public string BufferId { get; set; }
+        public string Name { get; set; }
+        public string OperationType { get; set; }
+        public bool QueueActive { get; set; }
+        public int QueueItems { get; set; }
+        public int QueueLimit { get; set; }
+        public long QueueTotal { get; set; }
+        public double QueueRate { get; set; }
+        public bool FileBufferEnabled { get; set; }
+        public bool FileReadActive { get; set; }
+        public bool FileWriteActive { get; set; }
+        public int PageCount { get; set; }
+        public long PageSize { get; set; }
+        public double FileWriteRate { get; set; }
+        public double FileReadRate { get; set; }
+        public long FileWriteTotal { get; set; }
+        public long FileReadTotal { get; set; }
+        public long FileBytesWritten { get; set; }
+        public long FileBytesRead { get; set; }
+
+        public string State => GetStateText(this);
+
+        // Copies the values (Metrics read in-process are live objects that keep changing)
+        public TableItem(TrakHoundBufferMetrics metrics)
+        {
+            BufferId = metrics.BufferId;
+            Update(metrics);
+        }
+
+        public void Update(TrakHoundBufferMetrics metrics)
+        {
+            Name = !string.IsNullOrEmpty(metrics.Name) ? metrics.Name : metrics.BufferId;
+            OperationType = metrics.OperationType;
+
+            var queue = metrics.Queue;
+            QueueActive = queue?.IsActive ?? false;
+            QueueItems = queue?.ItemCount ?? 0;
+            QueueLimit = queue?.ItemLimit ?? 0;
+            QueueTotal = queue?.TotalItemCount ?? 0;
+            QueueRate = queue?.ItemRate ?? 0;
+
+            var fileBuffer = metrics.FileBuffer;
+            FileBufferEnabled = fileBuffer?.IsEnabled ?? false;
+            FileReadActive = fileBuffer?.IsReadActive ?? false;
+            FileWriteActive = fileBuffer?.IsWriteActive ?? false;
+            PageCount = fileBuffer?.PageCount ?? 0;
+            PageSize = fileBuffer?.PageSize ?? 0;
+            FileWriteRate = fileBuffer?.ItemWriteRate ?? 0;
+            FileReadRate = fileBuffer?.ItemReadRate ?? 0;
+            FileWriteTotal = fileBuffer?.TotalWriteCount ?? 0;
+            FileReadTotal = fileBuffer?.TotalReadCount ?? 0;
+            FileBytesWritten = fileBuffer?.TotalBytesWritten ?? 0;
+            FileBytesRead = fileBuffer?.TotalBytesRead ?? 0;
+        }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Buffers..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            lock (_lock) _history.Clear();
+            tableItems = null;
+            _tableItemsById.Clear();
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Buffers", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                await UpdateMetrics(client);
+
+                // Poll for Metrics (the Buffers calculate their rates once per second)
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var metrics = await client.Buffers.GetMetrics();
+        var now = DateTime.UtcNow;
+        var items = new List<TableItem>();
+
+        lock (_lock)
+        {
+            var bufferIds = new HashSet<string>();
+
+            if (!metrics.IsNullOrEmpty())
+            {
+                foreach (var bufferMetrics in metrics.Where(o => !string.IsNullOrEmpty(o?.BufferId)))
+                {
+                    bufferIds.Add(bufferMetrics.BufferId);
+                    items.Add(GetTableItem(bufferMetrics));
+
+                    if (!_history.TryGetValue(bufferMetrics.BufferId, out var samples))
+                    {
+                        samples = new Queue<BufferSample>();
+                        _history.Add(bufferMetrics.BufferId, samples);
+                    }
+
+                    samples.Enqueue(BufferSample.Create(bufferMetrics, now));
+                    while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
+                }
+            }
+
+            // Drop history for Buffers that no longer exist
+            foreach (var bufferId in _history.Keys.Where(o => !bufferIds.Contains(o)).ToList())
+            {
+                _history.Remove(bufferId);
+            }
+        }
+
+        SetTableItems(items);
+
+        // Select the first Buffer by default (or if the selected one went away)
+        if (selectedBufferId == null || !items.Any(o => o.BufferId == selectedBufferId))
+        {
+            selectedBufferId = items.FirstOrDefault()?.BufferId;
+        }
+    }
+
+    // Rows are updated in place (and the list kept while the Buffers are the same) so the grid
+    // doesn't replace every row on each update
+    private TableItem GetTableItem(TrakHoundBufferMetrics metrics)
+    {
+        if (_tableItemsById.TryGetValue(metrics.BufferId, out var item))
+        {
+            item.Update(metrics);
+            return item;
+        }
+
+        item = new TableItem(metrics);
+        _tableItemsById[metrics.BufferId] = item;
+        return item;
+    }
+
+    private void SetTableItems(List<TableItem> items)
+    {
+        if (tableItems != null && tableItems.SequenceEqual(items)) return;
+
+        tableItems = items;
+
+        var ids = items.Select(o => o.BufferId).ToHashSet();
+        foreach (var id in _tableItemsById.Keys.Where(o => !ids.Contains(o)).ToList()) _tableItemsById.Remove(id);
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private IEnumerable<BufferSample> GetSamples(string bufferId)
+    {
+        lock (_lock)
+        {
+            return _history.TryGetValue(bufferId, out var samples) ? samples.ToArray() : Array.Empty<BufferSample>();
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        selectedBufferId = args.Data?.BufferId;
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        if (args.Data?.BufferId == selectedBufferId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private static double GetSampleValue(BufferSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(BufferSample sample) => sample.Timestamp;
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        queueSeries = new[] { new MetricsChartSeries("Queue Items", nameof(BufferSample.QueueItems), colors[0]) };
+        queueRateSeries = new[] { new MetricsChartSeries("Queue", nameof(BufferSample.QueueRate), colors[0]) };
+        throughputSeries = new[]
+        {
+            new MetricsChartSeries("Queue", nameof(BufferSample.QueueRate), colors[0]),
+            new MetricsChartSeries("File Write", nameof(BufferSample.FileWriteRate), colors[1]),
+            new MetricsChartSeries("File Read", nameof(BufferSample.FileReadRate), colors[2])
+        };
+        bytesSeries = new[]
+        {
+            new MetricsChartSeries("File Write", nameof(BufferSample.FileByteWriteRate), colors[1]),
+            new MetricsChartSeries("File Read", nameof(BufferSample.FileByteReadRate), colors[2])
+        };
+    }
+
+    private string GetSeriesStyle() => MetricsChartColors.GetStyle(IsDark);
+
+
+    private static string GetStateText(TableItem item)
+    {
+        if (item.FileReadActive) return "Reading from File Buffer";
+        if (item.FileWriteActive) return "Writing to File Buffer";
+        if (item.QueueActive) return "Processing";
+        return "Idle";
+    }
+
+    private static string GetStateIcon(TableItem item)
+    {
+        if (item.FileReadActive) return "fa-solid fa-sharp fa-file-arrow-up";
+        if (item.FileWriteActive) return "fa-solid fa-sharp fa-file-arrow-down";
+        if (item.QueueActive) return "fa-solid fa-sharp fa-play";
+        return "fa-regular fa-sharp fa-circle-pause";
+    }
+
+    private static string GetQueuePercent(TableItem item)
+    {
+        if (item.QueueLimit < 1) return "0%";
+        return $"{(double)item.QueueItems / item.QueueLimit:0.#%}";
+    }
+
+    private static string FormatCount(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        return value.ToString("0");
+    }
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatBytes(double value)
+    {
+        if (value >= 1024 * 1024 * 1024) return $"{value / (1024 * 1024 * 1024):0.#} GB";
+        if (value >= 1024 * 1024) return $"{value / (1024 * 1024):0.#} MB";
+        if (value >= 1024) return $"{value / 1024:0.#} KB";
+        return value >= 10 ? $"{value:0} B" : $"{value:0.#} B";
+    }
+
+    private static string FormatByteRate(double value) => $"{FormatBytes(value)}/s";
+
+}

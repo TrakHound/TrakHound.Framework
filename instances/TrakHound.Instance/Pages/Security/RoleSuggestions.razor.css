@@ -1,0 +1,52 @@
+.role-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+    .role-suggestions .hint {
+        margin-right: 4px;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px;
+    font-size: var(--fontSizeSm);
+    line-height: 18px;
+    white-space: nowrap;
+    color: var(--textDark);
+    background: var(--panelItemBackgroundLight);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+    .role-chip:hover:not(:disabled) {
+        border-color: var(--accentLight);
+    }
+
+    .role-chip.selected {
+        color: #fff;
+        background: var(--accent);
+        border-color: var(--accent);
+    }
+
+    .role-chip:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .role-chip .icon {
+        font-size: 10px;
+        color: var(--accentLight);
+    }
+
+    .role-chip.selected .icon {
+        color: #fff;
+    }

@@ -1,0 +1,39 @@
+@* Displays CPU Usage (percent of total machine capacity, 0 - 100) as a Progress Bar *@
+
+<div class="cpu-usage-bar @GetLevelClass()" title="@($"CPU Usage : {Value:0.00}%")">
+    <div class="cpu-usage-track" role="progressbar" aria-label="CPU Usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Value.ToString("0.00")">
+        <div class="cpu-usage-fill" style="width: @GetWidth()"></div>
+    </div>
+    @if (ShowValue)
+    {
+        <span class="cpu-usage-value">@Value.ToString("0.00")%</span>
+    }
+</div>
+
+@code {
+
+    private const double _warningThreshold = 50;
+    private const double _criticalThreshold = 80;
+
+
+    [Parameter]
+    public double Value { get; set; }
+
+    [Parameter]
+    public bool ShowValue { get; set; } = true;
+
+
+    private string GetWidth()
+    {
+        var value = Math.Clamp(Value, 0, 100);
+        return $"{value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}%";
+    }
+
+    private string GetLevelClass()
+    {
+        if (Value >= _criticalThreshold) return "critical";
+        if (Value >= _warningThreshold) return "warning";
+        return "normal";
+    }
+
+}

@@ -1,0 +1,26 @@
+﻿.toolbar {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    background: var(--panelBackgroundDark);
+    border-bottom: 1px solid var(--borderColorDark);
+    padding: 4px;
+}
+
+.toolbar-buttons {
+    grid-column: 1;
+    padding: 6px 5px;
+}
+
+.toolbar-filter {
+    grid-column: 2;
+    padding: 5px 5px;
+}
+
+        .toolbar-filter ::deep .text-box.small input {
+            height: 34px !important;
+            font-size: var(--fontSizeSm) !important;
+        }
+
+        .toolbar-filter ::deep .text-box.small input::placeholder {
+            font-size: var(--fontSizeBase) !important;
+        }

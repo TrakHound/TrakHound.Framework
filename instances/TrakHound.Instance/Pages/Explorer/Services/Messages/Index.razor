@@ -1,0 +1,144 @@
+@page "/_admin/explorer/{instanceId}/services/messages"
+@inject ExplorerService explorerService
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="Messages - Services" />
+
+<div class="message-services-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-envelope"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Messages</span>
+                <span class="header-description">Services that Publish and Subscribe to Messages (ex. MQTT)@(GetCountText())</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (services.Count > 0)
+            {
+                <div class="table-panel">
+                    <RadzenDataGrid Data="@services" TItem="TrakHoundServiceInformation" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" CssClass="buttons view-cell" Width="75px" Sortable="false">
+                                <Template Context="item">
+                                    <a href="@GetServiceLink(item)" class="btn btn-sm btn-link"><span class="icon fa-regular fa-sharp fa-circle-info"></span>View</a>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="Name" Title="Name" MinWidth="180px">
+                                <Template Context="item">
+                                    <a href="@GetServiceLink(item)" class="item-link">@(!string.IsNullOrEmpty(item.Name) ? item.Name : item.ConfigurationId)</a>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="Description" Title="Description" MinWidth="120px" />
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="PackageId" Title="Package" Width="260px" />
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="PackageVersion" Title="Version" Width="90px" />
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="ConfigurationId" Title="Configuration ID" Width="300px">
+                                <Template Context="item">
+                                    <span class="configuration-id">@item.ConfigurationId</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-envelope"></span>
+                    <span class="empty-title">No Message Services</span>
+                    <span class="empty-description">No Services that support Messages are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Services.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private List<TrakHoundServiceInformation> services = new List<TrakHoundServiceInformation>();
+    private string previousInstanceId;
+    private bool loading = true;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (InstanceId != previousInstanceId)
+        {
+            previousInstanceId = InstanceId;
+            await Load();
+        }
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        await explorerService.LoadInstance(InstanceId, forceReload);
+
+        // Set Explorer Breadcrumbs
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+        breadcrumbItems.Add(new BreadcrumbItem("Messages", null));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+
+        services = explorerService.GetServices(InstanceId)?
+            .Where(o => o.Routes != null && o.Routes.Contains("Messages"))
+            .OrderBy(o => o.Name)
+            .ToList() ?? new List<TrakHoundServiceInformation>();
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private string GetCountText()
+    {
+        if (loading || services.Count < 1) return null;
+        return services.Count == 1 ? " · 1 Service" : $" · {services.Count:N0} Services";
+    }
+
+    private string GetServiceLink(TrakHoundServiceInformation service)
+    {
+        return Url.Combine("_admin/explorer", InstanceId, "services", "messages", service.ConfigurationId);
+    }
+
+}

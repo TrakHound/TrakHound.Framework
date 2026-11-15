@@ -1,0 +1,46 @@
+@* Displays the time elapsed since a timestamp and refreshes itself every second (without re-rendering its parent) *@
+@implements IDisposable
+
+<span>@((DateTime.UtcNow - Since).ToFormattedString())</span>
+
+@code {
+
+    private static readonly TimeSpan _refreshInterval = TimeSpan.FromSeconds(1);
+
+    private System.Threading.Timer refreshTimer;
+    private bool disposed;
+
+
+    /// <summary>
+    /// The timestamp (UTC) to measure from
+    /// </summary>
+    [Parameter]
+    public DateTime Since { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        refreshTimer = new System.Threading.Timer(Refresh, null, _refreshInterval, _refreshInterval);
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        refreshTimer?.Dispose();
+    }
+
+    private async void Refresh(object state)
+    {
+        if (disposed) return;
+
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // The component or circuit may have been disposed
+        }
+    }
+
+}

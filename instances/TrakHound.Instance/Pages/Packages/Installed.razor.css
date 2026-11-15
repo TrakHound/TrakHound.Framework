@@ -1,0 +1,326 @@
+.installed-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.table-panel {
+    height: 100%;
+    overflow: auto;
+}
+
+.spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+/* Packages Table */
+
+.packages-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fontSizeBase);
+}
+
+    .packages-table > thead > tr > th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 9px 12px;
+        font-size: var(--fontSizeSm);
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--textMild);
+        background: var(--panelBackground);
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+    .packages-table > tbody > tr > td {
+        padding: 10px 12px;
+        vertical-align: middle;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    /* Lines up with the toolbar */
+    .packages-table > thead > tr > th:first-child,
+    .packages-table > tbody > tr > td:first-child {
+        padding-left: 20px;
+    }
+
+.package-row {
+    cursor: pointer;
+}
+
+    .package-row:hover,
+    .package-row.expanded {
+        background: var(--panelItemBackground);
+    }
+
+.col-expand {
+    width: 34px;
+    padding-right: 0 !important;
+    font-size: 10px;
+    color: var(--textMild) !important;
+}
+
+/* The chevron stays beside the Package ID (the first line), not the middle of a tall row */
+.packages-table > tbody > tr > td.col-expand {
+    vertical-align: top;
+    line-height: calc(var(--fontSizeBase) * 1.5);
+}
+
+.col-package {
+    min-width: 240px;
+}
+
+.package-identity {
+    display: flex;
+    align-items: flex-start; /* The icon stays beside the Package ID, however many lines follow it */
+    gap: 12px;
+}
+
+.package-icon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 24px;
+    color: var(--textLight);
+}
+
+    .package-icon ::deep img {
+        max-width: 32px;
+        max-height: 32px;
+    }
+
+.package-text {
+    min-width: 0;
+}
+
+.package-id {
+    display: block;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.unmet-dependencies {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .unmet-dependencies .icon {
+        margin-right: 5px;
+        color: var(--bs-warning, #ffc107);
+    }
+
+.verification {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 0 6px;
+    font-size: var(--fontSizeSm);
+    border: 1px solid currentColor;
+    border-radius: 3px;
+}
+
+    .verification.verified {
+        color: var(--bs-success, #198754);
+    }
+
+    .verification.unverified,
+    .verification.not-checked {
+        color: var(--textMild);
+    }
+
+    .verification.problem {
+        color: var(--bs-danger, #dc3545);
+    }
+
+.col-verification .btn {
+    margin-left: 6px;
+}
+
+.sbom-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 0;
+}
+
+.verification-detail,
+.verification-problem {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    overflow-wrap: anywhere;
+}
+
+.verification-detail {
+    color: var(--textMild);
+}
+
+    .verification-detail a {
+        color: var(--accentLight);
+    }
+
+.verification-problem {
+    color: var(--bs-danger, #dc3545);
+}
+
+.package-description {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.col-category {
+    width: 110px;
+}
+
+.col-versions {
+    min-width: 140px;
+}
+
+.col-usage {
+    width: 150px;
+    white-space: nowrap;
+}
+
+.usage {
+    font-size: var(--fontSizeSm);
+}
+
+    .usage.none {
+        color: var(--textMild);
+    }
+
+    .usage.profile {
+        padding: 1px 7px;
+        border: 1px solid var(--borderColor);
+        border-radius: 3px;
+    }
+
+.col-available {
+    width: 170px;
+    white-space: nowrap;
+    cursor: default;
+}
+
+/* The row's buttons are taller than the shared small button, so they're easier to hit */
+.btn-update,
+.col-actions .btn {
+    height: 32px;
+    padding: 0 12px;
+}
+
+.up-to-date {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .up-to-date .icon {
+        margin-right: 5px;
+        color: var(--bs-success, #198754);
+    }
+
+.col-built {
+    width: 160px;
+    white-space: nowrap;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild) !important;
+}
+
+.col-actions {
+    width: 190px;
+    text-align: right;
+    white-space: nowrap;
+    cursor: default;
+}
+
+.revert-action {
+    display: inline-block;
+    margin-right: 6px;
+}
+
+.btn-revert:disabled {
+    pointer-events: none; /* So the wrapper's title shows on hover */
+}
+
+/* Details (Versions) */
+
+.details-row > td {
+    padding: 4px 12px 16px !important;
+    background: var(--panelItemBackground);
+}
+
+.versions-table {
+    width: 100%;
+    font-size: var(--fontSizeSm);
+    border-collapse: collapse;
+    background: var(--panelBackground);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 4px;
+}
+
+    .versions-table th {
+        padding: 7px 12px;
+        font-weight: 600;
+        text-align: left;
+        color: var(--textMild);
+        background: transparent;
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .versions-table td {
+        padding: 7px 12px;
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .versions-table tr:last-child td {
+        border-bottom: none;
+    }
+
+.usage-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 1px 12px 1px 0;
+    color: var(--accentLight);
+}
+
+.usage-category {
+    padding: 0 5px;
+    font-size: 10px;
+    color: var(--textMild);
+    border: 1px solid var(--borderColor);
+    border-radius: 3px;
+}
+
+.dependencies {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: var(--fontSizeSm);
+}
+
+@media (max-width: 1100px) {
+    .col-built {
+        display: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .col-usage,
+    .col-category {
+        display: none;
+    }
+}

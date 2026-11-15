@@ -1,0 +1,363 @@
+@page "/_admin/configuration/security-profiles/{ProfileId}"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles)]
+@layout TrakHound.Instance.Pages.Configuration.ConfigurationLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject NavigationManager navigationManager
+@using TrakHound.Instances
+@using TrakHound.Security
+
+<TrakHound.Instance.Pages.Security.SecurityPageStyles>
+    <TrakHoundPageTitle Text="@(profile?.Id ?? "Profile")" />
+    <AreaBreadcrumbs Items="@([new("Security Profiles", "_admin/configuration/security-profiles"), new(profile?.Id ?? ProfileId)])" />
+
+    @if (profile == null)
+    {
+        <div class="empty-state">
+            <span class="empty-icon fa-regular fa-sharp fa-circle-question"></span>
+            <span class="empty-title">Profile "@ProfileId" Not Found</span>
+            <a class="btn btn-light" href="_admin/configuration/security-profiles">Back to Profiles</a>
+        </div>
+    }
+    else
+    {
+        var provider = state.GetProvider(profile.ProviderId);
+
+        <div class="profile-page">
+
+            <div class="page-header">
+                <span class="page-icon fa-solid fa-sharp fa-shield-halved"></span>
+                <div class="page-title">
+                    <span class="title">@profile.Id</span>
+                    @if (!string.IsNullOrEmpty(profile.Description))
+                    {
+                        <span class="description">@profile.Description</span>
+                    }
+                </div>
+                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removeVisible = true"><span class="icon fa-regular fa-sharp fa-trash-can"></span> Remove Profile</button>
+            </div>
+
+            @* Settings *@
+            <div class="section">
+                <div class="card">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label for="provider">Identity Provider</label>
+                            <select id="provider" class="form-select" @bind="editProviderId">
+                                <option value="">None (Resources are public)</option>
+                                @foreach (var option in state.Providers)
+                                {
+                                    <option value="@option.Id">@option.DisplayName@(option.IsLoaded ? "" : " (not loaded)")</option>
+                                }
+                                @if (!string.IsNullOrEmpty(profile.ProviderId) && provider == null)
+                                {
+                                    <option value="@profile.ProviderId">@profile.ProviderId (not found)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="priority">Priority</label>
+                            <input id="priority" class="form-control" type="number" @bind="editPriority" @bind:event="oninput" />
+                        </div>
+                        <div class="form-field wide">
+                            <label for="description">Description</label>
+                            <input id="description" class="form-control" @bind="editDescription" @bind:event="oninput" placeholder="Optional" />
+                        </div>
+                    </div>
+
+                    <div class="provider-note">
+                        @{
+                            var editProvider = state.GetProvider(editProviderId);
+                        }
+                        @if (string.IsNullOrEmpty(editProviderId))
+                        {
+                            <span class="status warning"><span class="status-dot"></span>Resources covered by this Profile can be accessed without signing in</span>
+                        }
+                        else if (editProvider == null)
+                        {
+                            <span class="status error"><span class="status-dot"></span>The Identity Provider does not exist, so these Resources cannot be accessed</span>
+                        }
+                        else if (!editProvider.IsLoaded)
+                        {
+                            <span class="status error"><span class="status-dot"></span>The Identity Provider is not loaded, so these Resources cannot be accessed</span>
+                        }
+                        else if (editProvider.CanSignIn)
+                        {
+                            <span class="status ok"><span class="status-dot"></span>Browsers are sent to sign in with @editProvider.DisplayName</span>
+                        }
+                        else
+                        {
+                            <span class="status ok"><span class="status-dot"></span>Requests must include credentials for @editProvider.DisplayName (ex. an API Key)</span>
+                        }
+                    </div>
+
+                    <div class="form-actions">
+                        @if (saved)
+                        {
+                            <span class="saved-message"><span class="icon fa-solid fa-sharp fa-check"></span>Saved</span>
+                        }
+                        <button class="btn btn-light" disabled="@(!IsDirty)" @onclick="ResetSettings">Reset</button>
+                        <button class="admin-write btn btn-primary" disabled="@(!IsDirty)" @onclick="SaveSettings"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span>Save</button>
+                    </div>
+                </div>
+            </div>
+
+            @* Assignments *@
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-title">Assignments<span class="section-description">Identities with a matching Role get these Permissions on the Resource</span></span>
+                    <button class="admin-write btn btn-primary" @onclick="() => OpenEditor(null)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Assignment</button>
+                </div>
+
+                <div class="card table-card">
+                    @if (profile.Assignments.IsNullOrEmpty())
+                    {
+                        <div class="empty-state">
+                            <span class="empty-icon fa-solid fa-sharp fa-list-check"></span>
+                            <span class="empty-title">No Assignments</span>
+                            <span class="empty-description">This Profile doesn't protect anything yet. Add an Assignment to choose the Resources it covers and who can access them.</span>
+                            <button class="admin-write btn btn-primary" @onclick="() => OpenEditor(null)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Assignment</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-scroll">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Resource</th>
+                                        <th>Roles</th>
+                                        <th>Permissions</th>
+                                        <th class="col-actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var assignment in profile.Assignments)
+                                    {
+                                        var resource = resources.Describe(assignment.ResourceId);
+                                        <tr>
+                                            <td>
+                                                <div class="resource-label">
+                                                    <span class="resource-icon @resource.Icon"></span>
+                                                    <div>
+                                                        <span class="resource-title">@resource.Title</span>
+                                                        @if (resource.Subtitle != null)
+                                                        {
+                                                            <span class="resource-subtitle">@resource.Subtitle</span>
+                                                        }
+                                                        <code class="resource-id">@assignment.ResourceId</code>
+                                                        @if (!string.IsNullOrEmpty(assignment.Description))
+                                                        {
+                                                            <span class="item-description">@assignment.Description</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="chips">
+                                                    @foreach (var role in assignment.Roles ?? Enumerable.Empty<string>())
+                                                    {
+                                                        if (role == "*")
+                                                        {
+                                                            <span class="chip accent" title="Any Identity from the Identity Provider">Anyone</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="chip">@role</span>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="chips">
+                                                    @foreach (var permission in assignment.Permissions ?? Enumerable.Empty<string>())
+                                                    {
+                                                        if (permission == "*")
+                                                        {
+                                                            <span class="chip accent">Full access</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="chip">@permission</span>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td class="col-actions">
+                                                <button class="admin-write btn btn-sm btn-command" @onclick="() => OpenEditor(assignment)"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</button>
+                                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => removeAssignment = assignment"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <AssignmentEditor Visible="@editorVisible"
+                              Assignment="@editAssignment"
+                              Resources="@resources"
+                              ProviderName="@(state.GetProvider(profile.ProviderId)?.DisplayName ?? "the Identity Provider")"
+                              DeclaredPermissions="@declaredPermissions"
+                              OnSave="SaveAssignment"
+                              OnCancel="() => editorVisible = false" />
+
+            <Modal Class="security-modal" Visible="@(removeAssignment != null)">
+                <HeaderContent>
+                    <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+                    <span class="modal-header-title">Remove Assignment</span>
+                </HeaderContent>
+                <BodyContent>
+                    @if (removeAssignment != null)
+                    {
+                        var resource = resources.Describe(removeAssignment.ResourceId);
+                        <p>Remove the Assignment for <strong>@resource.Title</strong>@(resource.Subtitle != null ? $" ({resource.Subtitle})" : "")?</p>
+                    }
+                </BodyContent>
+                <FooterContent>
+                    <button class="btn btn-secondary" @onclick="() => removeAssignment = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                    <button class="admin-write btn btn-danger" @onclick="RemoveAssignmentConfirmed"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Remove</button>
+                </FooterContent>
+            </Modal>
+
+            <Modal Class="security-modal" Visible="@removeVisible">
+                <HeaderContent>
+                    <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+                    <span class="modal-header-title">Remove Profile</span>
+                </HeaderContent>
+                <BodyContent>
+                    <p>Remove the Profile <strong>@profile.Id</strong> and its @(profile.Assignments?.Count() ?? 0) Assignment(s)?</p>
+                    <p class="muted">Resources that are only covered by this Profile will be accessible without signing in.</p>
+                </BodyContent>
+                <FooterContent>
+                    <button class="btn btn-secondary" @onclick="() => removeVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                    <button class="admin-write btn btn-danger" @onclick="RemoveProfileConfirmed"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Remove</button>
+                </FooterContent>
+            </Modal>
+
+        </div>
+    }
+</TrakHound.Instance.Pages.Security.SecurityPageStyles>
+
+@code {
+
+    [Parameter]
+    public string ProfileId { get; set; }
+
+    private SecurityState state;
+    private SecurityResources resources;
+    private List<string> declaredPermissions;
+    private TrakHoundSecurityProfile profile;
+
+    private string editProviderId;
+    private int editPriority;
+    private string editDescription;
+    private bool saved;
+
+    private bool editorVisible;
+    private TrakHoundIdentityAssignment editAssignment;
+    private TrakHoundIdentityAssignment removeAssignment;
+    private bool removeVisible;
+
+    private bool IsDirty => profile != null &&
+        ((editProviderId ?? "") != (profile.ProviderId ?? "") ||
+         editPriority != profile.Priority ||
+         (editDescription ?? "") != (profile.Description ?? ""));
+
+
+    protected override void OnInitialized()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        resources = new SecurityResources(instance);
+        declaredPermissions = SecurityResources.GetDeclaredPermissions(instance).ToList();
+        Load(true);
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+    }
+
+    private void SecurityChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(false); StateHasChanged(); });
+
+    private void Load(bool resetSettings)
+    {
+        state = SecurityState.Load(instance);
+        profile = instance.SecurityManager.GetProfile(ProfileId);
+
+        if (profile != null && (resetSettings || !IsDirty)) ResetSettings();
+    }
+
+    private void ResetSettings()
+    {
+        editProviderId = profile?.ProviderId;
+        editPriority = profile?.Priority ?? 0;
+        editDescription = profile?.Description;
+    }
+
+    private void SaveSettings()
+    {
+        var updated = CopyProfile();
+        updated.ProviderId = string.IsNullOrEmpty(editProviderId) ? null : editProviderId;
+        updated.Priority = editPriority;
+        updated.Description = string.IsNullOrWhiteSpace(editDescription) ? null : editDescription.Trim();
+
+        instance.SecurityManager.AddProfile(updated);
+        Load(true);
+        saved = true;
+        _ = HideSaved();
+    }
+
+    private async Task HideSaved()
+    {
+        await Task.Delay(2000);
+        saved = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OpenEditor(TrakHoundIdentityAssignment assignment)
+    {
+        editAssignment = assignment;
+        editorVisible = true;
+    }
+
+    private void SaveAssignment(TrakHoundIdentityAssignment assignment)
+    {
+        instance.SecurityManager.AddAssignment(profile.Id, assignment);
+        editorVisible = false;
+        Load(false);
+    }
+
+    private void RemoveAssignmentConfirmed()
+    {
+        if (removeAssignment != null) instance.SecurityManager.RemoveAssignment(removeAssignment.Id);
+        removeAssignment = null;
+        Load(false);
+    }
+
+    private void RemoveProfileConfirmed()
+    {
+        instance.SecurityManager.RemoveProfile(profile.Id);
+        removeVisible = false;
+        navigationManager.NavigateTo("_admin/configuration/security-profiles");
+    }
+
+    // Profiles are replaced (not modified) so that the Security Manager can read them without locking
+    private TrakHoundSecurityProfile CopyProfile()
+    {
+        var copy = new TrakHoundSecurityProfile();
+        copy.Id = profile.Id;
+        copy.Description = profile.Description;
+        copy.ProviderId = profile.ProviderId;
+        copy.Priority = profile.Priority;
+        copy.Assignments = profile.Assignments?.ToList() ?? new List<TrakHoundIdentityAssignment>();
+        return copy;
+    }
+
+}

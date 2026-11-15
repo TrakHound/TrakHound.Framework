@@ -1,0 +1,149 @@
+﻿@page "/_error"
+@layout BlankLayout
+@* Not the Admin Layout : the Error Page is shown to App users (and when the Admin Interface is disabled), so it must not require an Admin sign in *@
+@using Microsoft.AspNetCore.WebUtilities
+@using TrakHound.Instances
+@inject TrakHoundInstanceConfiguration instanceConfiguration
+@inject NavigationManager navigationManager
+
+<TrakHoundPageTitle Text="@pageTitle" />
+
+<div class="error-page">
+    <main class="error-main">
+        <div class="error-panel">
+            <div class="error-header">
+                <div class="logo-container">
+                    <img class="logo-image" src="img/trakhound-logo.svg" alt="" />
+                    <span class="logo-title">TrakHound<span class="logo-subtitle">Instance</span></span>
+                </div>
+                <span class="instance">
+                    <span class="instance-icon fa-solid fa-sharp fa-server" aria-hidden="true"></span>
+                    @if (!string.IsNullOrEmpty(instanceName))
+                    {
+                        <span class="instance-name">@instanceName</span>
+                        <span class="instance-separator" aria-hidden="true">·</span>
+                    }
+                    <span class="instance-host">@host</span>
+                </span>
+            </div>
+
+            <div class="error-body @kind">
+                <div class="status-icon" aria-hidden="true">
+                    <span class="status-icon-glyph @icon"></span>
+                </div>
+
+                @if (statusCode.HasValue)
+                {
+                    <span class="status-code">@statusCode@(reasonPhrase != null ? $" · {reasonPhrase}" : null)</span>
+                }
+                <h1 class="title" tabindex="-1">@title</h1>
+                <p class="description">@description</p>
+
+                @if (statusCode == 404)
+                {
+                    <code class="path" title="@path">@path</code>
+                }
+
+                @if (!string.IsNullOrEmpty(RequestId))
+                {
+                    <div class="request-id">
+                        <span class="request-id-label">Request ID</span>
+                        <code class="request-id-value">@RequestId</code>
+                        <button type="button" class="request-id-copy" title="Copy the Request ID" aria-label="Copy the Request ID" onclick="@copyRequestIdScript">
+                            <span class="fa-solid fa-sharp fa-copy" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                    <p class="request-id-hint">Include the Request ID when reporting this error, so the administrator can find it in the Instance log.</p>
+                }
+
+                @* Plain links and inline handlers (not Blazor events) : an unhandled error's page is rendered statically (no Circuit) *@
+                <div class="buttons">
+                    @if (IsServerError)
+                    {
+                        <button type="button" class="button" onclick="location.reload()"><span class="icon fa-solid fa-sharp fa-rotate-right" aria-hidden="true"></span>Try Again</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="button" onclick="history.back()"><span class="icon fa-solid fa-sharp fa-arrow-left" aria-hidden="true"></span>Go Back</button>
+                    }
+                    <a class="button primary" href="./"><span class="icon fa-solid fa-sharp fa-house" aria-hidden="true"></span>Home</a>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+@code {
+
+    private int? statusCode;
+    private string reasonPhrase;
+    private string pageTitle;
+    private string title;
+    private string description;
+    private string icon;
+    private string kind;
+    private string path;
+    private string host;
+    private string instanceName;
+
+
+    /// <summary>
+    /// The Status Code to show (ex. 404 from a Router's Not Found, or 500 for an unhandled error, see InstanceApp)
+    /// </summary>
+    [Parameter]
+    public int? StatusCode { get; set; }
+
+    /// <summary>
+    /// The ID of the Request that failed (logged with unhandled errors, so the error can be found in the Instance log)
+    /// </summary>
+    [Parameter]
+    public string RequestId { get; set; }
+
+    // Shows a check briefly once copied
+    private const string copyRequestIdScript = "JsFunctions.copyClipboard(this.previousElementSibling.textContent); const icon = this.firstElementChild; icon.classList.replace('fa-copy', 'fa-check'); setTimeout(() => icon.classList.replace('fa-check', 'fa-copy'), 2000);";
+
+    private bool IsServerError => statusCode >= 500;
+
+
+    protected override void OnParametersSet()
+    {
+        statusCode = StatusCode >= 400 ? StatusCode : null;
+        reasonPhrase = statusCode.HasValue ? ReasonPhrases.GetReasonPhrase(statusCode.Value) : null;
+        if (string.IsNullOrEmpty(reasonPhrase)) reasonPhrase = null;
+
+        (title, description, icon) = GetStatusInformation(statusCode);
+        kind = statusCode >= 500 ? "server-error" : statusCode == 404 ? "not-found" : "client-error";
+        pageTitle = statusCode.HasValue ? $"{statusCode} {reasonPhrase ?? "Error"}" : "Error";
+
+        path = GetPath();
+        host = new Uri(navigationManager.BaseUri).Authority;
+        instanceName = !string.IsNullOrEmpty(instanceConfiguration?.Name) ? instanceConfiguration.Name : instanceConfiguration?.InstanceId;
+    }
+
+    private static (string Title, string Description, string Icon) GetStatusInformation(int? statusCode)
+    {
+        switch (statusCode)
+        {
+            case 400: return ("Bad Request", "The request could not be processed. Check the address and try again.", "fa-solid fa-sharp fa-circle-exclamation");
+            case 401: return ("Sign In Required", "You must sign in to view this page.", "fa-solid fa-sharp fa-lock");
+            case 403: return ("Access Denied", "You do not have access to this page.", "fa-solid fa-sharp fa-lock");
+            case 404: return ("Page Not Found", "Could not find the requested page. It may have been moved or removed.", "fa-solid fa-sharp fa-file-circle-question");
+            case 503: return ("Service Unavailable", "The Instance is not available right now. Try again in a moment.", "fa-solid fa-sharp fa-hourglass-half");
+        }
+
+        if (statusCode >= 500) return ("Something Went Wrong", "An unexpected error occurred while processing the request. It has been recorded in the Instance log.", "fa-solid fa-sharp fa-triangle-exclamation");
+        if (statusCode >= 400) return ("Request Failed", "The request could not be completed.", "fa-solid fa-sharp fa-circle-exclamation");
+
+        return ("Something Went Wrong", "An error occurred.", "fa-solid fa-sharp fa-triangle-exclamation");
+    }
+
+    // The page's location (the HttpContext's Path is the Blazor connection's in a Circuit). For a re-executed Request this is the
+    // Path that failed, since the browser's URL is not changed
+    private string GetPath()
+    {
+        var path = "/" + navigationManager.ToBaseRelativePath(navigationManager.Uri);
+        var queryIndex = path.IndexOf('?');
+        return queryIndex > -1 ? path.Substring(0, queryIndex) : path;
+    }
+
+}

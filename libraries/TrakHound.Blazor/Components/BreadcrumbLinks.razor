@@ -1,0 +1,18 @@
+﻿<div class="breadcrumb-links">
+    <CascadingValue Value="this">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Parameter]
+    public string DividerIcon { get; set; }
+
+    [Parameter]
+    public string DividerText { get; set; }
+
+}

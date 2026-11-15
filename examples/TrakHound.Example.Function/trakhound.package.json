@@ -1,0 +1,11 @@
+{
+  "id": "TrakHound.Example.Function",
+  "category": "function",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Example Function that summarizes the recent readings written by TrakHound.Example.Worker",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "examples/TrakHound.Example.Function",
+    ".defaultVolumeId": "trakhound.example"
+  }
+}

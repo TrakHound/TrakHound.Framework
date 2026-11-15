@@ -1,0 +1,143 @@
+.zone-page {
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 60px;
+}
+
+    .zone-page > * {
+        max-width: 1300px;
+    }
+
+.page-header .btn {
+    flex-shrink: 0;
+}
+
+.zone-mode-note,
+.zone-test-result {
+    margin-top: 14px;
+}
+
+    .zone-page .zone-mode-note .status,
+    .zone-page .zone-test-result .status {
+        white-space: normal;
+    }
+
+/* Statuses under a Member or Call are shown on their own line */
+.zone-page .resource-label .status {
+    display: flex;
+    margin-top: 4px;
+    white-space: normal;
+}
+
+/* Add rows (above the Members table and in Allowed Callers) */
+
+.zone-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .zone-add-row .form-select,
+    .zone-add-row .form-control {
+        flex: 1 1 220px;
+        min-width: 0;
+    }
+
+    .zone-add-row .muted {
+        font-size: var(--fontSizeSm);
+    }
+
+    .zone-add-row .btn {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+.zone-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fontSizeBase);
+    font-weight: normal;
+    color: var(--textDark);
+    cursor: pointer;
+}
+
+    .zone-check input {
+        margin: 0;
+    }
+
+.zone-capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.zone-capabilities-label {
+    margin-right: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.zone-empty-text {
+    display: block;
+    padding: 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.zone-chips {
+    padding: 12px;
+}
+
+.zone-permissions {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.chip-remove {
+    margin-left: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+    .chip-remove:hover {
+        opacity: 1;
+    }
+
+.saved-message {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+    font-size: var(--fontSizeSm);
+    color: var(--bs-success, #198754);
+}
+
+.table-scroll {
+    overflow-x: auto;
+}
+
+/* The Activity actions wrap below each other so the Call column keeps its width */
+.zone-page .zone-activity-table td:first-child {
+    min-width: 260px;
+}
+
+.zone-page .zone-activity-table td.col-actions {
+    min-width: 130px;
+    white-space: normal;
+}
+
+    .zone-page .zone-activity-table td.col-actions .btn {
+        width: 100%;
+        margin: 0 0 4px 0;
+    }

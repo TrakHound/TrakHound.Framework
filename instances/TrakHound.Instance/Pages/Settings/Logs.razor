@@ -1,0 +1,219 @@
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject TrakHoundLogHistoryService logHistoryService
+@using TrakHound.Instance.Logging
+@using TrakHound.Instance.Logging.History
+@using TrakHound.Logging
+
+<div class="settings-logs">
+@if (Configuration != null)
+{
+    var compress = Configuration.ArchiveModeType == TrakHoundLogArchiveMode.Compress;
+
+    @if (IsLive && logHistoryService.RequiresRestart(Configuration))
+    {
+        <div class="settings-notice">
+            <span class="icon fa-solid fa-sharp fa-rotate"></span>
+            <span>Storage changes are applied after the Instance is restarted. Currently running : <strong>@logHistoryService.RunningConfiguration.ProviderType</strong> at @logHistoryService.RunningConfiguration.GetDirectory()</span>
+        </div>
+    }
+
+    <SettingsSection Title="Storage" HelpLink="@TrakHoundWebsite.Docs(TrakHoundWebsite.Topics.Instances, "logs")" Description="Where Log History (Explorer > Diagnostics > Logs and the Logs API) is stored" Icon="fa-solid fa-sharp fa-database">
+        <SettingsField Label="Provider" Description="@GetProviderDescription(Configuration.ProviderType)" RequiresRestart="true">
+            <RadzenDropDown TValue="string" Data="@providers" Value="@Configuration.ProviderType.ToString()" ValueChanged="@((string value) => SetValue(() => Configuration.Provider = value))" />
+        </SettingsField>
+        <SettingsField Label="Path" RequiresRestart="true">
+            <DescriptionContent>Relative to the Instance directory, or absolute. Resolves to <span class="path">@Configuration.GetDirectory()</span></DescriptionContent>
+            <ChildContent>
+                <RadzenTextBox Immediate="true" @bind-Value="@Configuration.Path" @bind-Value:after="EditContext.Changed" Placeholder="logs" />
+            </ChildContent>
+        </SettingsField>
+        <SettingsField Label="Minimum Level" Description="The least severe level written to Log History" RequiresRestart="true">
+            <RadzenDropDown TValue="string" Data="@levels" Value="@Configuration.MinimumLogLevel.ToString()" ValueChanged="@((string value) => SetValue(() => Configuration.MinimumLevel = value))" />
+        </SettingsField>
+        <SettingsField Label="Framework Minimum Level" Description="The least severe level written for framework loggers (Microsoft.*, System.*)" RequiresRestart="true">
+            <RadzenDropDown TValue="string" Data="@levels" Value="@Configuration.FrameworkMinimumLogLevel.ToString()" ValueChanged="@((string value) => SetValue(() => Configuration.FrameworkMinimumLevel = value))" />
+        </SettingsField>
+    </SettingsSection>
+
+    <SettingsSection Title="Retention" Description="Applied at each maintenance run using the saved settings (no restart needed)" Icon="fa-solid fa-sharp fa-clock-rotate-left">
+        <SettingsField Label="Retention" Description="Days that logs are kept as active storage. 0 = no limit">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="int" @bind-Value="@Configuration.RetentionDays" @bind-Value:after="EditContext.Changed" Min="0" />
+                <span class="units">days</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Max Size" Description="Maximum size of active storage. The oldest days are removed first (never today). 0 = no limit">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="long" @bind-Value="@Configuration.MaxSizeMB" @bind-Value:after="EditContext.Changed" Min="0" Step="128" />
+                <span class="units">MB</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Archive Mode" Description="@(compress ? "Old logs are compressed into the '_archive' directory and remain queryable." : "Old logs are permanently deleted.")">
+            <RadzenDropDown TValue="string" Data="@archiveModes" Value="@Configuration.ArchiveModeType.ToString()" ValueChanged="@((string value) => SetValue(() => Configuration.ArchiveMode = value))" />
+        </SettingsField>
+        <SettingsField Label="Archive Retention" Description="Days that compressed archives are kept. 0 = no limit" Class="@(compress ? "" : "disabled")">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="int" @bind-Value="@Configuration.ArchiveRetentionDays" @bind-Value:after="EditContext.Changed" Min="0" Disabled="@(!compress)" />
+                <span class="units">days</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Archive Max Size" Description="Maximum size of the archive. The oldest archives are deleted first. 0 = no limit" Class="@(compress ? "" : "disabled")">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="long" @bind-Value="@Configuration.ArchiveMaxSizeMB" @bind-Value:after="EditContext.Changed" Min="0" Step="128" Disabled="@(!compress)" />
+                <span class="units">MB</span>
+            </div>
+        </SettingsField>
+        <SettingsField Label="Maintenance Interval" Description="How often retention and archiving run">
+            <div class="numeric-control">
+                <RadzenNumeric TValue="int" @bind-Value="@Configuration.MaintenanceIntervalMinutes" @bind-Value:after="EditContext.Changed" Min="1" Step="15" />
+                <span class="units">minutes</span>
+            </div>
+        </SettingsField>
+    </SettingsSection>
+
+    @* The running Log History (a Workspace has none) *@
+    @if (IsLive)
+    {
+        <SettingsSection Title="Status" Description="The running Log History" Icon="fa-solid fa-sharp fa-heart-pulse">
+            <HeaderContent>
+                @if (logHistoryService.Store != null)
+                {
+                    @if (!maintenanceRunning)
+                    {
+                        <button class="admin-write btn btn-light btn-sm" @onclick="RunMaintenance" title="Apply Retention and Archiving now using the saved settings"><span class="icon fa-solid fa-sharp fa-broom-wide"></span>Run Maintenance</button>
+                    }
+                    else
+                    {
+                        <button class="admin-write btn btn-light btn-sm disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Running..</button>
+                    }
+                }
+            </HeaderContent>
+            <ChildContent>
+                @if (logHistoryService.Store != null)
+                {
+                    var result = logHistoryService.LastMaintenanceResult;
+
+                    <div class="stat-tiles">
+                        <div class="stat-tile">
+                            <span class="stat-label">Active Size</span>
+                            <span class="stat-value">@(result != null ? FormatSize(result.ActiveSize) : "–")</span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="stat-label">Archive Size</span>
+                            <span class="stat-value">@(result != null ? FormatSize(result.ArchiveSize) : "–")</span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="stat-label">Loggers</span>
+                            <span class="stat-value">@loggerCount.ToString("N0")</span>
+                        </div>
+                    </div>
+
+                    <div class="status-grid">
+                        <span class="status-label">Provider</span>
+                        <span class="status-value">@logHistoryService.RunningConfiguration.ProviderType</span>
+
+                        <span class="status-label">Directory</span>
+                        <span class="status-value path">@logHistoryService.Store.Directory</span>
+
+                        <span class="status-label">Last Maintenance</span>
+                        <span class="status-value">
+                            @if (logHistoryService.LastMaintenanceTime.HasValue)
+                            {
+                                @logHistoryService.LastMaintenanceTime.Value.ToString("g")
+                                @if (result != null)
+                                {
+                                    <span class="muted"> · Archived @result.Archived.ToString("N0") · Deleted @result.Deleted.ToString("N0") · Archives Deleted @result.ArchivesDeleted.ToString("N0")</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="muted">Not run yet (runs 1 minute after startup, or select Run Maintenance)</span>
+                            }
+                        </span>
+
+                        @if (!string.IsNullOrEmpty(logHistoryService.LastMaintenanceError))
+                        {
+                            <span class="status-label">Error</span>
+                            <span class="status-value error">@logHistoryService.LastMaintenanceError</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="settings-notice error">
+                        <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                        <span>Log History is not available. See the Instance log for the error.</span>
+                    </div>
+                }
+            </ChildContent>
+        </SettingsSection>
+    }
+}
+</div>
+
+@code {
+
+    private static readonly string[] providers = Enum.GetNames<TrakHoundLogStorageProvider>();
+    private static readonly string[] levels = Enum.GetNames<TrakHoundLogLevel>();
+    private static readonly string[] archiveModes = Enum.GetNames<TrakHoundLogArchiveMode>();
+
+    private int loggerCount;
+    private bool maintenanceRunning;
+
+
+    [Parameter]
+    public TrakHoundLogConfiguration Configuration { get; set; }
+
+    private bool IsLive => configurationsService.Target.IsLive;
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        loggerCount = logHistoryService.Store?.GetLoggers()?.Length ?? 0;
+    }
+
+
+    private void SetValue(Action set)
+    {
+        set();
+        EditContext?.Changed();
+    }
+
+    private async Task RunMaintenance()
+    {
+        maintenanceRunning = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await logHistoryService.RunMaintenance();
+            loggerCount = logHistoryService.Store?.GetLoggers()?.Length ?? 0;
+        }
+        finally
+        {
+            maintenanceRunning = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string GetProviderDescription(TrakHoundLogStorageProvider provider)
+    {
+        switch (provider)
+        {
+            case TrakHoundLogStorageProvider.Sqlite: return "A single indexed SQLite database (logs.db) with full-text search. Best for large or frequently searched logs.";
+            default: return "JSON Lines files, one per Logger per UTC day. Readable with any text editor.";
+        }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes >= 1073741824) return $"{bytes / 1073741824.0:0.00} GB";
+        if (bytes >= 1048576) return $"{bytes / 1048576.0:0.0} MB";
+        if (bytes >= 1024) return $"{bytes / 1024.0:0.0} KB";
+        return $"{bytes} B";
+    }
+
+}

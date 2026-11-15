@@ -1,0 +1,165 @@
+.information-panel {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    padding-top: 15px;
+}
+
+.header-panel {
+    grid-row: 1;
+    padding: 0px 10px 15px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .header-panel .icon {
+        font-size: var(--fontSizeLg);
+        color: var(--textLight);
+        margin-right: 5px;
+    }
+
+    .header-panel .title {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        margin-right: 10px;
+    }
+
+    .header-panel .subtitle {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    grid-row: 2;
+    padding: 10px 0px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+    .toolbar-panel .btn-refresh {
+        margin-left: 10px;
+    }
+
+.table-panel {
+    grid-row: 3;
+    padding: 0 0 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .table-panel ::deep .buttons .rz-cell-data {
+        height: 22px;
+    }
+
+    .table-panel .job-name {
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .table-panel .job-id {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textLight);
+    }
+
+    .table-panel .job-parameters .icon {
+        margin-right: 6px;
+        color: var(--textMild);
+    }
+
+    .table-panel .muted {
+        color: var(--textLight);
+    }
+
+.empty-panel {
+    padding: 20px 10px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.loading-panel {
+    grid-row: 3;
+}
+
+/* Modals */
+.information-panel ::deep .modal .modal-body {
+    padding: 20px 40px;
+    height: 100%;
+    overflow: auto;
+}
+
+.configuration-panel .form-field {
+    display: block;
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+    .configuration-panel .form-field:last-child {
+        margin-bottom: 0;
+    }
+
+    .configuration-panel .form-field > label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+    .configuration-panel .form-field > ::deep .rz-textbox {
+        display: block;
+        width: 100%;
+        font-size: var(--fontSizeBase);
+    }
+
+.configuration-panel .job-id-value {
+    display: block;
+    font-family: monospace;
+    color: var(--textDark);
+}
+
+.configuration-panel .instructions {
+    display: block;
+    margin-top: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+/* Delete Modal */
+.delete-modal-message {
+    display: block;
+    margin-bottom: 15px;
+    font-size: var(--fontSizeBase);
+    color: var(--textDark);
+}
+
+.delete-modal-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 15px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--colorRed);
+    border-radius: 3px;
+}
+
+    .delete-modal-items .delete-item-name {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+        overflow-wrap: anywhere;
+    }
+
+    .delete-modal-items .delete-item-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+    }
+
+    .delete-modal-items .delete-item-id {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }

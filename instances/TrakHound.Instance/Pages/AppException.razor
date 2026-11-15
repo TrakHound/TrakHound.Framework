@@ -1,0 +1,93 @@
+﻿@inherits TrakHoundComponentBase
+@implements IDisposable
+@layout BlankLayout
+@inject IWebHostEnvironment environment
+
+<div id="app-exception-panel" class="app-exception-page">
+    <div class="app-exception-panel">
+        <div class="app-exception-container">
+            <div class="app-exception-header-container">
+                <div class="app-exception-header-logo-container">
+                    <span class="trakhound-logo app-exception-header-logo" aria-hidden="true"></span>
+                </div>
+                <div class="app-exception-header-title-container">
+                    <span class="app-exception-header-title">TrakHound</span>
+                </div>
+                <div class="app-exception-header-instance-container">
+                    <span class="app-exception-header-instance-id"></span>
+                    <span class="app-exception-header-instance-url"></span>
+                </div>
+            </div>
+            <div class="app-exception-icon-container">
+                <span class="app-exception-icon fa-regular fa-sharp fa-circle-xmark"></span>
+            </div>
+            <div class="app-exception-information-container">
+                <h1 class="app-exception-panel-title">Application Exception Error</h1>
+                <h1 class="app-exception-panel-timestamp">@timestamp.ToString("ddd M/d/yy h:mm:ss tt")</h1>
+                <p class="app-exception-panel-description">@Exception?.Message</p>
+
+                @if (!string.IsNullOrEmpty(requestId))
+                {
+                    <div class="app-exception-request-id">
+                        <span class="app-exception-request-id-label">Request ID</span>
+                        <code class="app-exception-request-id-value">@requestId</code>
+                    </div>
+                    <p class="app-exception-request-id-hint">Include the Request ID when reporting this error, so the administrator can find it in the Instance log.</p>
+                }
+            </div>
+            @* The Stack Trace shows the App's code, so it is only shown in Development (it is always in the Instance log) *@
+            @if (showDetails)
+            {
+                <div class="app-exception-details">
+                    <pre>@TrakHound.Logging.TrakHoundLogger.GetExceptionStackTrace(Exception)</pre>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private System.Timers.Timer _refreshTimer;
+    private Exception _shownException;
+    private DateTime timestamp;
+    private string requestId;
+    private bool showDetails;
+
+
+    [Parameter]
+    public Exception Exception { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // When the Exception occurred (not each render)
+        if (!ReferenceEquals(Exception, _shownException))
+        {
+            _shownException = Exception;
+            timestamp = DateTime.Now;
+            requestId = TrakHound.Instance.Apps.TrakHoundErrorBoundaryLogger.GetRequestId(Exception);
+        }
+
+        showDetails = environment.IsDevelopment();
+    }
+
+    protected override void OnInitialized()
+    {
+        _refreshTimer = new System.Timers.Timer();
+        _refreshTimer.Interval = 30000; // 30 Seconds
+        _refreshTimer.Elapsed += RefreshTimerElapsed;
+        _refreshTimer.Start();
+    }
+
+    void IDisposable.Dispose()
+    {
+        if (_refreshTimer != null) _refreshTimer.Dispose();
+    }
+
+    private async void RefreshTimerElapsed(object sender, System.Timers.ElapsedEventArgs args)
+    {
+        await Refresh();
+    }
+
+}

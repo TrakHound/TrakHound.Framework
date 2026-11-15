@@ -1,0 +1,623 @@
+/* Shared by the Security pages and the Access pages in Configuration (Security Profiles, Zones, Zone Map) */
+
+.security-page-styles {
+    display: contents;
+}
+
+/* ----- Shared Page Styles ----- */
+
+.security-page-styles ::deep .page {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.security-page-styles ::deep .page-scroll {
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 60px;
+}
+
+.security-page-styles ::deep .spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+.security-page-styles ::deep .muted {
+    color: var(--textMild);
+}
+
+/* Page Header */
+
+.security-page-styles ::deep .page-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px 25px 6px;
+}
+
+    .security-page-styles ::deep .page-header .page-icon {
+        width: 26px;
+        margin-top: 2px;
+        font-size: 20px;
+        text-align: center;
+        color: var(--accentLight);
+    }
+
+    .security-page-styles ::deep .page-header .page-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+        .security-page-styles ::deep .page-header .page-title .title {
+            display: block;
+            font-size: var(--fontSizeMd, 15px);
+            font-weight: bold;
+            color: var(--textDark);
+            overflow-wrap: anywhere;
+        }
+
+        .security-page-styles ::deep .page-header .page-title .description {
+            display: block;
+            font-size: var(--fontSizeSm);
+            color: var(--textMild);
+        }
+
+/* Toolbar */
+
+.security-page-styles ::deep .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 15px;
+    padding: 12px 25px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.security-page-styles ::deep .toolbar-search {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+    max-width: 420px;
+}
+
+    .security-page-styles ::deep .toolbar-search .search-icon {
+        position: absolute;
+        left: 11px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        color: var(--textMild);
+        pointer-events: none;
+    }
+
+    /* As tall as the toolbar's buttons and compact dropdowns (.dropdown-sm) */
+    .security-page-styles ::deep .toolbar-search input {
+        height: 30px;
+        padding-left: 32px;
+        font-size: var(--fontSizeBase);
+        color: var(--inputText);
+        background: var(--inputBackground);
+        border: 1px solid var(--inputBorder);
+        border-radius: 3px;
+    }
+
+.security-page-styles ::deep .toolbar-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.security-page-styles ::deep .toolbar-buttons .btn,
+.security-page-styles ::deep .section-header .btn,
+.security-page-styles ::deep .empty-state .btn,
+.security-page-styles ::deep .form-actions .btn {
+    white-space: nowrap;
+}
+
+/* Table */
+
+.security-page-styles ::deep .table-container {
+    height: 100%;
+    overflow: auto;
+}
+
+.security-page-styles ::deep .data-table {
+    width: 100%;
+    min-width: 560px;
+    border-collapse: collapse;
+    font-size: var(--fontSizeBase);
+}
+
+    .security-page-styles ::deep .data-table > thead > tr > th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        padding: 9px 12px;
+        font-size: var(--fontSizeSm);
+        font-weight: 600;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--textMild);
+        background: var(--panelBackground);
+        border-bottom: 1px solid var(--borderColor);
+    }
+
+    .security-page-styles ::deep .data-table > tbody > tr > td {
+        padding: 10px 12px;
+        vertical-align: middle;
+        color: var(--textDark);
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+    .security-page-styles ::deep .data-table > tbody > tr:hover {
+        background: var(--panelItemBackground);
+    }
+
+    .security-page-styles ::deep .data-table > thead > tr > th:first-child,
+    .security-page-styles ::deep .data-table > tbody > tr > td:first-child {
+        padding-left: 25px;
+    }
+
+    .security-page-styles ::deep .data-table .col-actions {
+        width: 1%;
+        text-align: right;
+        white-space: nowrap;
+    }
+
+        .security-page-styles ::deep .data-table .col-actions .btn {
+            margin-left: 4px;
+        }
+
+    .security-page-styles ::deep .data-table .col-narrow {
+        width: 1%;
+        white-space: nowrap;
+    }
+
+.security-page-styles ::deep .item-name {
+    display: block;
+    font-weight: 600;
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+.security-page-styles ::deep .item-description {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+.security-page-styles ::deep code.resource-id {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+/* Resource label (Icon + Title + Subtitle) */
+
+.security-page-styles ::deep .resource-label {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    column-gap: 8px;
+    align-items: start;
+}
+
+    .security-page-styles ::deep .resource-label .resource-icon {
+        margin-top: 3px;
+        text-align: center;
+        color: var(--accentLight);
+    }
+
+    .security-page-styles ::deep .resource-label .resource-title {
+        display: block;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    .security-page-styles ::deep .resource-label .resource-subtitle {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+        overflow-wrap: anywhere;
+    }
+
+    .security-page-styles ::deep .resource-label code {
+        grid-column: 2;
+    }
+
+/* Chips and Status */
+
+.security-page-styles ::deep .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.security-page-styles ::deep .chips .muted {
+    font-size: var(--fontSizeSm);
+}
+
+.security-page-styles ::deep .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px;
+    font-size: var(--fontSizeSm);
+    line-height: 18px;
+    white-space: nowrap;
+    color: var(--textDark);
+    background: var(--panelItemBackgroundLight);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 10px;
+}
+
+    .security-page-styles ::deep .chip.accent {
+        border-color: var(--accentLight);
+    }
+
+    .security-page-styles ::deep .chip.success {
+        border-color: var(--bs-success, #198754);
+    }
+
+        .security-page-styles ::deep .chip.success .icon {
+            color: var(--bs-success, #198754);
+        }
+
+    .security-page-styles ::deep .chip.warning {
+        border-color: var(--bs-warning, #ffc107);
+    }
+
+        .security-page-styles ::deep .chip.warning .icon {
+            color: var(--bs-warning, #ffc107);
+        }
+
+    .security-page-styles ::deep .chip.danger {
+        border-color: var(--bs-danger, #dc3545);
+    }
+
+        .security-page-styles ::deep .chip.danger .icon {
+            color: var(--bs-danger, #dc3545);
+        }
+
+.security-page-styles ::deep .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fontSizeSm);
+    white-space: nowrap;
+}
+
+    .security-page-styles ::deep .status .status-dot {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--textLight);
+    }
+
+    .security-page-styles ::deep .status.ok .status-dot {
+        background: var(--bs-success, #198754);
+    }
+
+    .security-page-styles ::deep .status.warning .status-dot {
+        background: var(--bs-warning, #ffc107);
+    }
+
+    .security-page-styles ::deep .status.error .status-dot {
+        background: var(--bs-danger, #dc3545);
+    }
+
+/* Sections and Cards */
+
+.security-page-styles ::deep .section {
+    padding: 18px 25px 0;
+}
+
+/* A callout above a table (Sections have no bottom padding, so it would sit on the table header) */
+.security-page-styles ::deep .section.callout-section {
+    padding-bottom: 18px;
+}
+
+.security-page-styles ::deep .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+    .security-page-styles ::deep .section-header .section-title {
+        flex: 1;
+        font-size: var(--fontSizeMd, 15px);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .security-page-styles ::deep .section-header .section-description {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: normal;
+        color: var(--textMild);
+    }
+
+.security-page-styles ::deep .card {
+    padding: 18px 20px;
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 6px;
+}
+
+.security-page-styles ::deep .section .data-table > thead > tr > th:first-child,
+.security-page-styles ::deep .section .data-table > tbody > tr > td:first-child {
+    padding-left: 12px;
+}
+
+.security-page-styles ::deep .section .table-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+    /* A table in a card shows the card behind its header (it doesn't scroll there, so it isn't sticky),
+       and its outer columns line up with the content of the other cards (20px in) */
+    .security-page-styles ::deep .section .table-card .data-table > thead > tr > th {
+        position: static;
+        background: transparent;
+    }
+
+    .security-page-styles ::deep .section .table-card .data-table > thead > tr > th:first-child,
+    .security-page-styles ::deep .section .table-card .data-table > tbody > tr > td:first-child {
+        padding-left: 20px;
+    }
+
+    .security-page-styles ::deep .section .table-card .data-table > thead > tr > th:last-child,
+    .security-page-styles ::deep .section .table-card .data-table > tbody > tr > td:last-child {
+        padding-right: 20px;
+    }
+
+    /* The last row's border would double the card's */
+    .security-page-styles ::deep .section .table-card .data-table > tbody > tr:last-child > td {
+        border-bottom: none;
+    }
+
+/* Callouts */
+
+.security-page-styles ::deep .callout {
+    display: flex;
+    gap: 12px;
+    padding: 12px 15px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--accentLight);
+    border-radius: 4px;
+}
+
+    .security-page-styles ::deep .callout .icon {
+        margin-top: 2px;
+        color: var(--accentLight);
+    }
+
+    .security-page-styles ::deep .callout.warning {
+        border-left-color: var(--bs-warning, #ffc107);
+    }
+
+        .security-page-styles ::deep .callout.warning .icon {
+            color: var(--bs-warning, #ffc107);
+        }
+
+    .security-page-styles ::deep .callout.danger {
+        border-left-color: var(--bs-danger, #dc3545);
+    }
+
+        .security-page-styles ::deep .callout.danger .icon {
+            color: var(--bs-danger, #dc3545);
+        }
+
+    .security-page-styles ::deep .callout.success {
+        border-left-color: var(--bs-success, #198754);
+    }
+
+        .security-page-styles ::deep .callout.success .icon {
+            color: var(--bs-success, #198754);
+        }
+
+    .security-page-styles ::deep .callout code {
+        color: var(--textDark);
+    }
+
+/* Forms */
+
+.security-page-styles ::deep .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px 20px;
+}
+
+.security-page-styles ::deep .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+    .security-page-styles ::deep .form-field.wide {
+        grid-column: 1 / -1;
+    }
+
+    .security-page-styles ::deep .form-field > label {
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .security-page-styles ::deep .form-field .hint {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+    .security-page-styles ::deep .form-field .field-error {
+        font-size: var(--fontSizeSm);
+        color: var(--colorRedLight, #f07171);
+    }
+
+/* The shared .form-select (forms.css) is 38px; here it matches the 34px text fields beside it */
+.security-page-styles ::deep .form-select:not(.dropdown-sm) {
+    height: 34px;
+    line-height: 32px;
+    font-size: var(--fontSizeBase);
+}
+
+.security-page-styles ::deep .form-control {
+    height: 34px;
+    font-size: var(--fontSizeBase);
+    color: var(--inputText);
+    background-color: var(--inputBackground);
+    border: 1px solid var(--inputBorder);
+    border-radius: 3px;
+}
+
+    .security-page-styles ::deep .form-control:focus {
+        color: var(--inputText);
+        background-color: var(--inputBackground);
+        border-color: var(--accentLight);
+        box-shadow: none;
+    }
+
+    .security-page-styles ::deep .form-control[readonly] {
+        color: var(--textMild);
+    }
+
+.security-page-styles ::deep .check-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+}
+
+    .security-page-styles ::deep .check-list label {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: var(--fontSizeBase);
+        color: var(--textDark);
+        cursor: pointer;
+    }
+
+.security-page-styles ::deep .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.security-page-styles ::deep .modal-error {
+    display: flex;
+    gap: 8px;
+    margin-top: 15px;
+    padding: 8px 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+    border: 1px solid var(--bs-danger, #dc3545);
+    border-radius: 4px;
+}
+
+    .security-page-styles ::deep .modal-error .icon {
+        margin-top: 2px;
+        color: var(--bs-danger, #dc3545);
+    }
+
+.security-page-styles ::deep .security-modal {
+    max-width: 680px;
+}
+
+    /* A long dialog (ex. an Admin Role's areas) scrolls inside the dialog, with its header and footer staying in view.
+       "min-height: 0" lets the body's grid row shrink to the space that is left */
+    .security-page-styles ::deep .security-modal .modal-body {
+        padding: 20px 24px;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    /* A table in a dialog scrolls with the rest of the dialog's body, so its header isn't sticky (rows would show above it, in the body's padding) */
+    .security-page-styles ::deep .security-modal .data-table > thead > tr > th {
+        position: static;
+        background: transparent;
+    }
+
+    .security-page-styles ::deep .security-modal .modal-header,
+    .security-page-styles ::deep .security-modal .modal-footer {
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    .security-page-styles ::deep .security-modal p {
+        color: var(--textDark);
+    }
+
+        .security-page-styles ::deep .security-modal p.muted {
+            color: var(--textMild);
+        }
+
+.security-page-styles ::deep .modal-header-icon {
+    margin-right: 10px;
+    color: var(--accentLight);
+}
+
+.security-page-styles ::deep .modal-header-title {
+    font-weight: bold;
+}
+
+/* Empty states */
+
+.security-page-styles ::deep .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 220px;
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+    .security-page-styles ::deep .empty-state .empty-icon {
+        margin-bottom: 6px;
+        font-size: 40px;
+        color: var(--textLight);
+    }
+
+    .security-page-styles ::deep .empty-state .empty-title {
+        font-size: var(--fontSizeMd, 15px);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .security-page-styles ::deep .empty-state .empty-description {
+        max-width: 480px;
+        font-size: var(--fontSizeSm);
+    }
+
+    .security-page-styles ::deep .empty-state .btn {
+        margin-top: 8px;
+    }
+
+@media (max-width: 700px) {
+    .security-page-styles ::deep .page-header,
+    .security-page-styles ::deep .toolbar,
+    .security-page-styles ::deep .section {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+        .security-page-styles ::deep .data-table > thead > tr > th:first-child,
+        .security-page-styles ::deep .data-table > tbody > tr > td:first-child {
+            padding-left: 16px;
+        }
+
+    .security-page-styles ::deep .hide-narrow {
+        display: none;
+    }
+}

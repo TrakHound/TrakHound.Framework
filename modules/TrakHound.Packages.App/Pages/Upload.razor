@@ -1,0 +1,379 @@
+@using System.IO
+@implements IDisposable
+
+<div class="upload-panel">
+
+    @* Toolbar *@
+    <div class="toolbar-panel">
+        <label class="toolbar-field">
+            <span>Upload to</span>
+            <select class="server-select" value="@Context.TargetServerId" @onchange="TargetChanged" disabled="@uploading">
+                @foreach (var server in Context.Servers)
+                {
+                    <option value="@server.Id">@server.DisplayName</option>
+                }
+            </select>
+        </label>
+        <span class="toolbar-description">@target?.Description</span>
+    </div>
+
+    <div class="upload-scroll">
+        <div class="upload-content">
+
+            @* Drop Zone (the file input covers the whole area, so files can be dropped or selected) *@
+            <div class="drop-zone @(dragging ? "dragging" : "") @(reading ? "reading" : "")">
+                <InputFile OnChange="FilesSelected" multiple accept="@TrakHoundPackage.FileExtension" title="" class="drop-input"
+                           @ondragenter="() => dragging = true" @ondragleave="() => dragging = false" @ondrop="() => dragging = false" />
+                <span class="drop-icon fa-solid fa-sharp @(reading ? "fa-loader spin" : "fa-cloud-arrow-up")"></span>
+                <span class="drop-title">@(reading ? "Reading packages.." : "Drop package files here, or click to select")</span>
+                <span class="drop-description">TrakHound package files (@TrakHoundPackage.FileExtension), up to @PackagesAppContext.FormatSize(_maxFileSize) each. If a Version already exists on the Server, you will be asked whether to overwrite it.</span>
+            </div>
+
+            @if (items.Count > 0)
+            {
+                var readyCount = items.Count(IsReady);
+
+                <div class="upload-toolbar">
+                    <span class="upload-summary">@items.Count @(items.Count == 1 ? "file" : "files") · @readyCount ready to upload</span>
+                    <div class="upload-buttons">
+                        <button class="btn btn-light" @onclick="Clear" disabled="@uploading"><span class="icon fa-solid fa-sharp fa-xmark"></span>Clear</button>
+                        @if (!uploading)
+                        {
+                            <button class="btn btn-primary" disabled="@(readyCount == 0 || target == null)" @onclick="UploadAll"><span class="icon fa-solid fa-sharp fa-upload"></span>Upload @readyCount @(readyCount == 1 ? "Package" : "Packages")</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Uploading..</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="upload-list">
+                    @foreach (var item in items)
+                    {
+                        <div class="upload-item @(item.Package == null ? "invalid" : "")">
+                            <span class="upload-icon fa-solid fa-sharp @(item.Package == null ? "fa-circle-exclamation" : "fa-box")"></span>
+
+                            <div class="upload-info">
+                                @if (item.Package != null)
+                                {
+                                    <div class="upload-title">
+                                        <span class="upload-id">@item.Package.Id</span>
+                                        <span class="version-chip">v@(item.Package.Version)</span>
+                                        <span class="category-chip @item.Package.Category?.ToLower()">@item.Package.Category?.ToTitleCase()</span>
+                                    </div>
+                                    <div class="upload-details">
+                                        <span>@item.FileName · @PackagesAppContext.FormatSize(item.Size)</span>
+                                        <span>Built @PackagesAppContext.FormatBuildDate(item.Package)</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="upload-title"><span class="upload-id">@item.FileName</span></div>
+                                    <div class="upload-details"><span>@PackagesAppContext.FormatSize(item.Size)</span></div>
+                                }
+
+                                @if (!string.IsNullOrEmpty(item.Message))
+                                {
+                                    <div class="upload-message @item.Status.ToString().ToLower()">@item.Message</div>
+                                }
+                            </div>
+
+                            @if (item.Package == null)
+                            {
+                                <span class="transfer-state failed"><span class="fa-solid fa-sharp fa-circle-exclamation"></span><span>Invalid</span></span>
+                            }
+                            else if (item.Status == TransferStatus.Pending)
+                            {
+                                @if (item.CheckingTarget)
+                                {
+                                    <span class="transfer-state"><span class="fa-solid fa-sharp fa-loader spin"></span><span>Checking..</span></span>
+                                }
+                                else if (item.ExistsOnTarget == true)
+                                {
+                                    <span class="transfer-state exists" title="This Version already exists on @target?.DisplayName. You will be asked whether to overwrite it."><span class="fa-solid fa-sharp fa-triangle-exclamation"></span><span>Exists on Server</span></span>
+                                }
+                                else if (item.ExistsOnTarget == false)
+                                {
+                                    <span class="transfer-state"><span class="fa-solid fa-sharp fa-sparkles"></span><span>New</span></span>
+                                }
+                                else
+                                {
+                                    <TransferState Status="item.Status" Text="Ready" />
+                                }
+                            }
+                            else
+                            {
+                                <TransferState Status="item.Status" Text="@(item.Status == TransferStatus.Completed ? "Uploaded" : null)" />
+                            }
+
+                            <button class="btn btn-link btn-remove-item" title="Remove from the list" @onclick="() => items.Remove(item)" disabled="@uploading"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                        </div>
+                    }
+                </div>
+            }
+
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private const long _maxFileSize = 512L * 1024 * 1024;
+    private const int _maxFiles = 50;
+
+    private class UploadItem
+    {
+        public string FileName { get; set; }
+        public long Size { get; set; }
+        public byte[] Bytes { get; set; }
+        public TrakHoundPackage Package { get; set; }
+        public TransferStatus Status { get; set; }
+        public string Message { get; set; }
+
+        /// <summary>
+        /// The Version already exists on the Target Server (null if not checked)
+        /// </summary>
+        public bool? ExistsOnTarget { get; set; }
+        public bool CheckingTarget { get; set; }
+    }
+
+
+    private readonly List<UploadItem> items = new List<UploadItem>();
+    private PackageServer target;
+    private TrakHoundPackageClient targetClient;
+    private int targetVersion;
+    private bool dragging;
+    private bool reading;
+    private bool uploading;
+    private bool disposed;
+
+
+    [CascadingParameter]
+    public PackagesAppContext Context { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        if (Context.GetServer(Context.TargetServerId) == null) Context.TargetServerId = Context.Servers.FirstOrDefault()?.Id;
+        SetTarget();
+    }
+
+    public void Dispose()
+    {
+        disposed = true;
+    }
+
+    private async Task Refresh()
+    {
+        if (!disposed) await InvokeAsync(StateHasChanged);
+    }
+
+    private static bool IsReady(UploadItem item) => item.Package != null && item.Bytes != null && item.Status != TransferStatus.Completed;
+
+
+    #region "Target"
+
+    private void SetTarget()
+    {
+        target = Context.GetServer(Context.TargetServerId);
+        targetClient = PackagesAppContext.CreateClient(target);
+        targetVersion++;
+    }
+
+    private async Task TargetChanged(ChangeEventArgs args)
+    {
+        Context.TargetServerId = args.Value?.ToString();
+        SetTarget();
+
+        // A different Server : Uploaded / Skipped items can be uploaded again
+        foreach (var item in items.Where(o => o.Package != null))
+        {
+            item.ExistsOnTarget = null;
+            if (item.Status != TransferStatus.Completed && item.Status != TransferStatus.Failed) continue;
+            if (item.Bytes == null) continue;
+
+            item.Status = TransferStatus.Pending;
+            item.Message = null;
+        }
+
+        await CheckTarget(items.Where(IsReady).ToList());
+    }
+
+    /// <summary>
+    /// Check whether the Versions already exist on the Target Server (shown before uploading)
+    /// </summary>
+    private async Task CheckTarget(List<UploadItem> checkItems)
+    {
+        if (targetClient == null || checkItems.Count == 0) return;
+
+        var version = targetVersion;
+        var client = targetClient;
+
+        foreach (var item in checkItems) item.CheckingTarget = true;
+        await Refresh();
+
+        await Task.WhenAll(checkItems.Select(async item =>
+        {
+            TrakHoundPackage existing = null;
+            try { existing = await client.Get(item.Package.Id, item.Package.Version); } catch { }
+
+            // Ignore the result if the Target was changed meanwhile
+            if (version == targetVersion) item.ExistsOnTarget = existing != null;
+            item.CheckingTarget = false;
+        }));
+
+        await Refresh();
+    }
+
+    #endregion
+
+    #region "Files"
+
+    private async Task FilesSelected(InputFileChangeEventArgs args)
+    {
+        dragging = false;
+        reading = true;
+        await Refresh();
+
+        var added = new List<UploadItem>();
+        try
+        {
+            foreach (var file in args.GetMultipleFiles(_maxFiles))
+            {
+                var item = new UploadItem { FileName = file.Name, Size = file.Size };
+
+                if (file.Size > _maxFileSize)
+                {
+                    item.Message = $"The file is larger than {PackagesAppContext.FormatSize(_maxFileSize)}";
+                }
+                else
+                {
+                    try
+                    {
+                        using (var output = new MemoryStream())
+                        using (var input = file.OpenReadStream(_maxFileSize))
+                        {
+                            await input.CopyToAsync(output);
+                            item.Bytes = output.ToArray();
+                        }
+
+                        ReadPackage(item);
+                    }
+                    catch (Exception ex)
+                    {
+                        item.Bytes = null;
+                        item.Message = $"Could not read the file : {ex.Message}";
+                    }
+                }
+
+                // Replace an earlier selection of the same file
+                items.RemoveAll(o => o.FileName == item.FileName);
+                items.Add(item);
+                if (item.Package != null) added.Add(item);
+                await Refresh();
+            }
+
+            if (args.FileCount > _maxFiles)
+            {
+                Context.Notify(PackageNotificationType.Warning, "Too Many Files", $"Only the first {_maxFiles} files were added");
+            }
+        }
+        catch (Exception ex)
+        {
+            Context.Notify(PackageNotificationType.Error, "Error Reading Files", ex.Message);
+        }
+        finally
+        {
+            reading = false;
+            await Refresh();
+        }
+
+        await CheckTarget(added);
+    }
+
+    private static void ReadPackage(UploadItem item)
+    {
+        TrakHoundPackage package = null;
+        try
+        {
+            package = TrakHoundPackage.ReadInformationFromPackage(item.Bytes);
+        }
+        catch { }
+
+        if (package == null || string.IsNullOrEmpty(package.Id) || string.IsNullOrEmpty(package.Version))
+        {
+            item.Message = "Not a valid TrakHound package (package information could not be read)";
+            item.Bytes = null;
+            return;
+        }
+
+        item.Package = package;
+        item.Status = TransferStatus.Pending;
+    }
+
+    private void Clear()
+    {
+        items.Clear();
+    }
+
+    #endregion
+
+    #region "Upload"
+
+    private async Task UploadAll()
+    {
+        if (target == null || uploading) return;
+
+        var uploadTarget = target;
+        var client = targetClient;
+        var batch = new OverwriteBatch();
+        var uploadItems = items.Where(IsReady).ToList();
+
+        uploading = true;
+        await Refresh();
+
+        for (var i = 0; i < uploadItems.Count; i++)
+        {
+            var item = uploadItems[i];
+            item.Message = null;
+
+            var result = await Context.Transfer(
+                uploadTarget,
+                client,
+                item.Package.Id,
+                item.Package.Version,
+                () => Task.FromResult(item.Bytes),
+                batch,
+                incoming: item.Package,
+                hasRemaining: i < uploadItems.Count - 1,
+                onStatus: async status =>
+                {
+                    item.Status = status;
+                    await Refresh();
+                });
+
+            item.Status = result.Status;
+            item.Message = result.Message;
+            if (result.Status == TransferStatus.Completed) item.ExistsOnTarget = true;
+            await Refresh();
+        }
+
+        uploading = false;
+
+        var completed = uploadItems.Count(o => o.Status == TransferStatus.Completed);
+        var skipped = uploadItems.Count(o => o.Status == TransferStatus.Skipped);
+        var failed = uploadItems.Count(o => o.Status == TransferStatus.Failed);
+        var summary = string.Join(" · ", new[] { $"{completed} uploaded", skipped > 0 ? $"{skipped} skipped" : null, failed > 0 ? $"{failed} failed" : null }.Where(o => o != null));
+
+        Context.Notify(failed > 0 ? (completed > 0 ? PackageNotificationType.Warning : PackageNotificationType.Error) : PackageNotificationType.Success, $"Upload to {uploadTarget.DisplayName} Finished", summary);
+
+        // Skipped items stay ready to upload
+        foreach (var item in uploadItems.Where(o => o.Status == TransferStatus.Skipped)) item.Status = TransferStatus.Pending;
+
+        await Refresh();
+    }
+
+    #endregion
+
+}

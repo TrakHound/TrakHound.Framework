@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+		<RuntimeIdentifiers>win-x64;win-x86;osx-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<AssemblyName>TrakHound.Debug.Apps</AssemblyName>
+		<RootNamespace>TrakHound.Debug</RootNamespace>
+		<Configurations>Debug;Release;Package</Configurations>
+		<Description>Contains classes for debugging .NET Apps in the TrakHound Framework</Description>
+		<RunAnalyzersDuringLiveAnalysis>False</RunAnalyzersDuringLiveAnalysis>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
+		<ProjectReference Include="..\..\libraries\TrakHound.Blazor\TrakHound.Blazor.csproj" />
+		<ProjectReference Include="..\..\libraries\TrakHound.Blazor.Hosting\TrakHound.Blazor.Hosting.csproj" />
+		<ProjectReference Include="..\TrakHound.Debug\TrakHound.Debug.csproj" />
+	</ItemGroup>
+
+</Project>

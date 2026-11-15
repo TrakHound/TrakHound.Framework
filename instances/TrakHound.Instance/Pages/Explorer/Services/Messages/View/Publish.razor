@@ -1,0 +1,156 @@
+@rendermode InteractiveServer
+@implements IDisposable
+@inject ClientService clientService
+
+<div class="event-publish-panel">
+    <div class="title-panel">
+        <span class="title">Publish</span>
+    </div>
+
+    <div class="field">
+        <label for="@topicInputId">Topic<span class="required" title="Required">*</span></label>
+        <input id="@topicInputId" type="text" placeholder="ex. plant/line1/temperature" spellcheck="false" @bind="@topic" @bind:event="oninput" disabled="@publishing" />
+    </div>
+
+    <div class="field">
+        <label for="@contentInputId">Content</label>
+        <textarea id="@contentInputId" placeholder="Message Content (Ctrl+Enter to Publish)" spellcheck="false" @bind="@content" @bind:event="oninput" @onkeydown="ContentKeyDown" disabled="@publishing"></textarea>
+    </div>
+
+    <div class="options">
+        <label class="option" title="Quality of Service">
+            QoS
+            <select class="form-select dropdown-sm" @bind="@qos" disabled="@publishing">
+                <option value="0">0 - At most once</option>
+                <option value="1">1 - At least once</option>
+                <option value="2">2 - Exactly once</option>
+            </select>
+        </label>
+        <label class="option" title="The Broker keeps the last Retained Message and sends it to new Subscribers">
+            <input type="checkbox" @bind="@retain" disabled="@publishing" />
+            Retain
+        </label>
+    </div>
+
+    <div class="buttons">
+        @if (!publishing)
+        {
+            <button class="admin-write btn btn-primary btn-publish" disabled="@string.IsNullOrWhiteSpace(topic)" @onclick="PublishClicked"><span class="icon fa-solid fa-sharp fa-paper-plane"></span>Publish</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary btn-publish" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Publishing..</button>
+        }
+
+        @if (!string.IsNullOrEmpty(status))
+        {
+            <span class="publish-status @(statusError ? "error" : "success")">
+                <span class="icon fa-solid fa-sharp @(statusError ? "fa-triangle-exclamation" : "fa-check")"></span>@status
+            </span>
+        }
+    </div>
+</div>
+
+@code {
+
+    private readonly string topicInputId = Guid.NewGuid().ToString();
+    private readonly string contentInputId = Guid.NewGuid().ToString();
+
+    private CancellationTokenSource statusReset;
+    private string topic;
+    private string content;
+    private string status;
+    private string selectedTopic;
+    private int qos;
+    private bool retain;
+    private bool statusError;
+    private bool publishing;
+
+
+    protected override void OnInitialized()
+    {
+        clientService.PathSelected += PathSelected;
+    }
+
+    public void Dispose()
+    {
+        statusReset?.Cancel();
+        clientService.PathSelected -= PathSelected;
+    }
+
+    private async void PathSelected(object sender, string path)
+    {
+        // Follow the selected Topic unless a different Topic was typed
+        if (path != null && (string.IsNullOrEmpty(topic) || topic == selectedTopic))
+        {
+            topic = path;
+        }
+        selectedTopic = path;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ContentKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && (args.CtrlKey || args.MetaKey) && !publishing)
+        {
+            await PublishClicked();
+        }
+    }
+
+    private async Task PublishClicked()
+    {
+        if (string.IsNullOrWhiteSpace(topic))
+        {
+            SetStatus("Topic is required", true);
+            return;
+        }
+
+        if (topic.Contains('#') || topic.Contains('+'))
+        {
+            SetStatus("Wildcards (# and +) can't be used to Publish", true);
+            return;
+        }
+
+        publishing = true;
+        status = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await clientService.Publish(topic.Trim(), content, retain, qos);
+            if (response.Success) SetStatus($"Published{(retain ? " (Retained)" : "")}", false);
+            else SetStatus($"Publish Failed ({response.StatusCode}){(!string.IsNullOrEmpty(response.Message) ? $" : {response.Message}" : "")}", true);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Publish Failed : {ex.Message}", true);
+        }
+        finally
+        {
+            publishing = false;
+        }
+    }
+
+    private async void SetStatus(string value, bool isError)
+    {
+        status = value;
+        statusError = isError;
+
+        // Clear a success status after a few seconds (errors stay until the next Publish)
+        statusReset?.Cancel();
+        if (isError) return;
+
+        statusReset = new CancellationTokenSource();
+        var token = statusReset.Token;
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(4), token);
+            status = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+}

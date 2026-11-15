@@ -1,0 +1,208 @@
+﻿@page "/_admin/explorer/{instanceId}/services"
+@inject ExplorerService explorerService
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="Services" />
+
+<div class="services-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-server"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Services</span>
+                <span class="header-description">Storage and messaging that Apps, Apis, Functions and Workers use@(GetCountText())</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <a href="@GetMetricsLink()" class="btn btn-link btn-metrics"><span class="icon fa-solid fa-sharp fa-chart-simple"></span>Service Metrics</a>
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            <div class="types-panel">
+                @foreach (var type in _types)
+                {
+                    var count = GetTypeCount(type);
+                    <a href="@GetTypeLink(type)" class="type-card @(count < 1 ? "empty" : null)" title="View @type.Title Services">
+                        <span class="type-icon @type.Icon"></span>
+                        <span class="type-text">
+                            <span class="type-title">@type.Title</span>
+                            <span class="type-description">@type.Description</span>
+                        </span>
+                        <span class="type-count">@count.ToString("N0")</span>
+                    </a>
+                }
+            </div>
+
+            @if (services.Count > 0)
+            {
+                <div class="table-panel">
+                    <RadzenDataGrid Data="@services" TItem="TrakHoundServiceInformation" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="Name" Title="Name" MinWidth="180px">
+                                <Template Context="item">
+                                    <span class="service-name">@(!string.IsNullOrEmpty(item.Name) ? item.Name : item.ConfigurationId)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Title="Types" MinWidth="160px" Sortable="false">
+                                <Template Context="item">
+                                    @{
+                                        var serviceTypes = GetServiceTypes(item).ToList();
+                                    }
+                                    @if (serviceTypes.Count > 0)
+                                    {
+                                        <span class="service-types">
+                                            @foreach (var type in serviceTypes)
+                                            {
+                                                <a href="@GetServiceLink(type, item)" class="service-type" title="View in @type.Title"><span class="icon @type.Icon"></span>@type.Title</a>
+                                            }
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="value-null">None</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="Description" Title="Description" MinWidth="120px" />
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="PackageId" Title="Package" Width="260px" />
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="PackageVersion" Title="Version" Width="90px" />
+                            <RadzenDataGridColumn TItem="TrakHoundServiceInformation" Property="ConfigurationId" Title="Configuration ID" Width="300px">
+                                <Template Context="item">
+                                    <span class="configuration-id">@item.ConfigurationId</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-server"></span>
+                    <span class="empty-title">No Services</span>
+                    <span class="empty-description">Install a Service package and add a configuration to see it here</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Services.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private record ServiceType(string Route, string Title, string Path, string Icon, string Description);
+
+    // Same order and paths as the Explorer tree (the Route is what a Service lists in its Routes)
+    private static readonly ServiceType[] _types = new[]
+    {
+        new ServiceType("Blobs", "Blobs", "blobs", "fa-solid fa-sharp fa-box-archive", "Files (Blobs) in Collections"),
+        new ServiceType("KeyValues", "KeyValues", "key-values", "fa-solid fa-sharp fa-key", "Key / Value pairs in Collections"),
+        new ServiceType("Messages", "Messages", "messages", "fa-solid fa-sharp fa-envelope", "Publish and Subscribe to Messages (ex. MQTT)"),
+        new ServiceType("MessageQueues", "MessageQueues", "message-queues", "fa-solid fa-sharp fa-inbox", "Queues of Messages to Consume (ex. RabbitMQ)"),
+        new ServiceType("Tables", "Tables", "tables", "fa-solid fa-sharp fa-table", "Data in queryable Tables"),
+        new ServiceType("TimeSeries", "TimeSeries", "time-series", "fa-solid fa-sharp fa-chart-line", "Timestamped Values by Measurement and Tags")
+    };
+
+    private List<TrakHoundServiceInformation> services = new List<TrakHoundServiceInformation>();
+    private string previousInstanceId;
+    private bool loading = true;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        if (InstanceId != previousInstanceId)
+        {
+            previousInstanceId = InstanceId;
+            await Load();
+        }
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        await explorerService.LoadInstance(InstanceId, forceReload);
+
+        // Set Explorer Breadcrumbs
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", null));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+
+        services = explorerService.GetServices(InstanceId)?
+            .OrderBy(o => o.Name)
+            .ToList() ?? new List<TrakHoundServiceInformation>();
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load(true);
+    }
+
+    private string GetCountText()
+    {
+        if (loading || services.Count < 1) return null;
+        return services.Count == 1 ? " · 1 Service" : $" · {services.Count:N0} Services";
+    }
+
+    private int GetTypeCount(ServiceType type)
+    {
+        return services.Count(o => o.Routes != null && o.Routes.Contains(type.Route));
+    }
+
+    private static IEnumerable<ServiceType> GetServiceTypes(TrakHoundServiceInformation service)
+    {
+        if (service.Routes == null) return Enumerable.Empty<ServiceType>();
+        return _types.Where(o => service.Routes.Contains(o.Route));
+    }
+
+    private string GetTypeLink(ServiceType type)
+    {
+        return Url.Combine("_admin/explorer", InstanceId, "services", type.Path);
+    }
+
+    private string GetServiceLink(ServiceType type, TrakHoundServiceInformation service)
+    {
+        return Url.Combine("_admin/explorer", InstanceId, "services", type.Path, service.ConfigurationId);
+    }
+
+    private string GetMetricsLink()
+    {
+        return Url.Combine("_admin/explorer", InstanceId, "diagnostics", "services");
+    }
+
+}

@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Packages.App",
+  "category": "app",
+  "version": "0.2",
+  "metadata": {
+    "publisher": "",
+    "description": "",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Packages.App",
+    ".defaultRoute": "trakhound/packages"
+  }
+}

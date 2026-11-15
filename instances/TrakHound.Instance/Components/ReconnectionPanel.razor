@@ -1,0 +1,21 @@
+﻿@* Shown by trakhound-blazor.js while the Blazor circuit is disconnected (the elements are found by ID, the state is set as data-state on the panel).
+   A Toast over the dimmed App (rather than a full page) so the App's own branding and last data stay visible. *@
+
+<div id="reconnection-panel" class="reconnection-overlay" style="display: none;">
+    <div class="reconnection-toast" role="alertdialog" aria-modal="true" aria-labelledby="reconnection-toast-title" aria-describedby="reconnection-panel-description">
+        <div class="reconnection-toast-icon" aria-hidden="true">
+            <span class="icon-disconnected fa-sharp fa-solid fa-plug-circle-xmark"></span>
+            <span class="icon-reconnecting fa-sharp fa-solid fa-spinner-third"></span>
+        </div>
+        <div class="reconnection-toast-content">
+            <span id="reconnection-toast-title" class="title">Disconnected from Server</span>
+            <span id="reconnection-panel-description" class="description">Lost connection to the server</span>
+            <span id="reconnection-panel-label" class="label" aria-live="polite"></span>
+            <span id="reconnection-panel-since" class="since"></span>
+            <div class="buttons">
+                <button id="reconnection-panel-retry" type="button" class="reconnection-toast-button primary"><span class="icon fa-sharp fa-solid fa-rotate-right" aria-hidden="true"></span>Retry Now</button>
+                <button id="reconnection-panel-reload" type="button" class="reconnection-toast-button"><span class="icon fa-sharp fa-solid fa-arrows-rotate" aria-hidden="true"></span>Reload</button>
+            </div>
+        </div>
+    </div>
+</div>

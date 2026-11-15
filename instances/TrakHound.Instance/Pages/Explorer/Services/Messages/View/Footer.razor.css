@@ -1,0 +1,75 @@
+﻿.footer-panel {
+    display: grid;
+    grid-template-columns: 1fr max-content;
+    border-top: 1px solid #000;
+    height: 24px;
+    color: white;
+    font-size: var(--fontSizeSm);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+    .footer-panel.connected {
+        background: #00b33c;
+        background: linear-gradient(180deg, #00994d 0%, #008040 100%);
+    }
+
+    .footer-panel.connecting {
+        background: #b37400;
+        background: linear-gradient(180deg, #b37400 0%, #995f00 100%);
+    }
+
+    .footer-panel.disconnected,
+    .footer-panel.error {
+        background: #b32d2d;
+        background: linear-gradient(180deg, #b32d2d 0%, #992626 100%);
+    }
+
+    .footer-panel.not-subscribed {
+        background: #5c5c5c;
+        background: linear-gradient(180deg, #666666 0%, #4d4d4d 100%);
+    }
+
+.connection-panel {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    overflow: hidden;
+}
+
+.metrics-panel {
+    grid-column: 2;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 0 20px;
+}
+
+.connection-icon {
+    line-height: 12px;
+}
+
+.connection-status {
+    padding-left: 10px;
+    font-weight: 500;
+}
+
+.connection-server {
+    padding-left: 40px;
+}
+
+.connection-version {
+    padding-left: 6px;
+    opacity: 0.75;
+}
+
+.connection-message {
+    padding-left: 24px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.metric-value {
+    font-weight: 500;
+}

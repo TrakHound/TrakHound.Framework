@@ -1,0 +1,320 @@
+.health-page {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-panel .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+.header-panel .header-text {
+    grid-column: 2;
+}
+
+    .header-panel .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    grid-row: 2;
+    padding: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.content-panel {
+    grid-row: 3;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 10px 20px;
+}
+
+.loading-panel {
+    grid-row: 3;
+}
+
+/* Status colors (used by the Overall panel, Checks and Items) */
+.status-healthy {
+    --statusColor: var(--colorGreen);
+}
+
+.status-degraded {
+    --statusColor: var(--colorOrange);
+}
+
+.status-unhealthy {
+    --statusColor: var(--colorRed);
+}
+
+.status-unknown {
+    --statusColor: var(--textLight);
+}
+
+/* Overall */
+.overall-panel {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 4px solid var(--statusColor);
+    border-radius: 3px;
+}
+
+.overall-icon {
+    font-size: 2rem;
+    color: var(--statusColor);
+}
+
+.overall-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.overall-status {
+    font-size: var(--fontSizeXl);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.overall-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .overall-detail .separator {
+        color: var(--textVeryLight);
+    }
+
+    .overall-detail a {
+        color: var(--accent);
+    }
+
+/* Checks */
+.checks-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.check {
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--statusColor);
+    border-radius: 3px;
+}
+
+.check-header {
+    display: grid;
+    grid-template-columns: max-content 130px 90px minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+}
+
+.check-icon {
+    color: var(--statusColor);
+}
+
+.check-title {
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.check-status {
+    font-size: var(--fontSizeXs);
+    font-weight: bold;
+    text-transform: uppercase;
+    color: var(--statusColor);
+}
+
+.check-description {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.check-link {
+    font-size: var(--fontSizeSm);
+    color: var(--accent);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+    .check-link:hover {
+        text-decoration: underline;
+    }
+
+    .check-link .icon {
+        margin-left: 6px;
+        font-size: var(--fontSizeXs);
+    }
+
+.check-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 2px 14px 10px 40px;
+}
+
+.check-item {
+    display: grid;
+    grid-template-columns: max-content minmax(120px, max-content) minmax(0, 1fr);
+    align-items: baseline;
+    gap: 10px;
+    font-size: var(--fontSizeSm);
+}
+
+.item-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--statusColor);
+    align-self: start;
+    margin-top: 5px; /* Line up with the first line of text */
+}
+
+.item-name {
+    font-weight: bold;
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+a.item-name {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+    a.item-name:hover {
+        text-decoration: underline;
+    }
+
+.item-description {
+    color: var(--textMild);
+    overflow-wrap: anywhere;
+}
+
+.check-since {
+    padding: 0 14px 8px 40px;
+    font-size: var(--fontSizeXs);
+    color: var(--textLight);
+}
+
+@media (max-width: 700px) {
+    .check-header {
+        grid-template-columns: max-content minmax(0, 1fr) max-content;
+    }
+
+    .check-status,
+    .check-description {
+        grid-column: 2 / 4;
+    }
+
+    .check-item {
+        grid-template-columns: max-content minmax(0, 1fr);
+    }
+
+    .item-description {
+        grid-column: 2;
+    }
+}
+
+/* Settings badges */
+.badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 0.65rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border-radius: 8px;
+    vertical-align: middle;
+}
+
+.item-description .badge {
+    margin-left: 0;
+    margin-right: 6px;
+}
+
+    .badge.ignored {
+        color: var(--textMild);
+        border: 1px solid var(--borderColor);
+    }
+
+    .badge.critical {
+        color: var(--colorRed);
+        border: 1px solid var(--colorRed);
+    }
+
+.check.ignored,
+.check-item.ignored {
+    opacity: 0.6;
+}
+
+/* Empty State */
+.empty-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+    .empty-panel .icon {
+        font-size: var(--fontSize3xl);
+        color: var(--textVeryLight);
+        margin-bottom: 6px;
+    }
+
+    .empty-panel .empty-title {
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .empty-panel .empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }

@@ -1,0 +1,187 @@
+.api-page {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-panel .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+.header-panel .header-text {
+    grid-column: 2;
+}
+
+    .header-panel .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+}
+
+/* Filter */
+.filter {
+    position: relative;
+    flex: 0 1 320px;
+    min-width: 180px;
+    margin-left: auto;
+}
+
+    .filter .filter-icon {
+        position: absolute;
+        left: 9px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        pointer-events: none;
+    }
+
+    .filter input {
+        width: 100%;
+        height: 30px;
+        padding: 2px 28px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        background: var(--inputBackground);
+        border: 1px solid var(--borderColorLight);
+        border-radius: 3px;
+        outline: none;
+    }
+
+        .filter input:focus {
+            border-color: var(--accent);
+        }
+
+    .filter .btn-clear-filter {
+        position: absolute;
+        right: 3px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        background: none;
+        border: none;
+        cursor: pointer;
+    }
+
+        .filter .btn-clear-filter:hover {
+            color: var(--textDark);
+        }
+
+/* Table */
+.table-panel {
+    grid-row: 3;
+    padding: 0 10px 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .table-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: auto;
+    }
+
+        .table-panel ::deep .rz-data-grid td {
+            border-right: 1px solid var(--tableBorderColor);
+            padding: 3px 10px;
+        }
+
+            .table-panel ::deep .rz-data-grid td:last-child {
+                border-right: none;
+            }
+
+    .table-panel ::deep .rz-cell-data {
+        font-size: var(--fontSizeSm);
+    }
+
+    /* Api Information / OpenAPI icon links beside View */
+    .table-panel .btn-document {
+        padding: 0 5px;
+    }
+
+    .table-panel .route-link {
+        color: var(--textLink);
+        text-decoration: none;
+    }
+
+        .table-panel .route-link:hover {
+            text-decoration: underline;
+        }
+
+    .table-panel .version {
+        margin-left: 8px;
+        color: var(--textLight);
+    }
+
+    .table-panel .number {
+        font-variant-numeric: tabular-nums;
+    }
+
+.loading-panel {
+    grid-row: 3;
+}
+
+/* Empty State */
+.empty-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+    .empty-panel .icon {
+        font-size: var(--fontSize3xl);
+        color: var(--textVeryLight);
+        margin-bottom: 6px;
+    }
+
+    .empty-panel .empty-title {
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .empty-panel .empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }

@@ -1,0 +1,656 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/apps"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Apps
+@using TrakHound.Clients
+@using TrakHound.Instance.Apps
+
+<TrakHoundPageTitle Text="App Metrics - Diagnostics" />
+
+<div class="app-metrics-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-browsers"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">App Metrics</span>
+                <span class="header-description">Page views and time on page for each App and Client Connection · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <a class="btn btn-light" href="@TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId)" title="Access Log : the page views of every App (client, page and time on page)"><span class="icon fa-solid fa-sharp fa-file-lines"></span>Access Log</a>
+
+        <MetricsDisabledNotice Area="Apps" />
+        <MetricsDisabledNotice Area="Cpu" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (!tableItems.IsNullOrEmpty())
+            {
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@tableItems"
+                                    TItem="TableItem"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TableItem" Property="Name" Title="App" MinWidth="140px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="Route" Title="Route" MinWidth="120px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="PackageId" Title="Package" MinWidth="140px">
+                                <Template Context="item">
+                                    <span>@item.PackageId</span>
+                                    @if (!string.IsNullOrEmpty(item.PackageVersion))
+                                    {
+                                        <span class="version">@item.PackageVersion</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalPageViews" Title="Page Views" Width="110px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.TotalPageViews.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="ActivePageViews" Title="Viewing" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.ActivePageViews.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalConnections" Title="Connections" Width="110px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.TotalConnections.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="AveragePageDuration" Title="Avg Time" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.TotalPageViews > 0 ? FormatDuration(item.AveragePageDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="MaxPageDuration" Title="Max Time" Width="105px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.TotalPageViews > 0 ? FormatDuration(item.MaxPageDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="CpuUsage" Title="CPU" Width="80px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number" title="@($"{FormatCpuTime(item.CpuTime)} of CPU time since the Instance started")">@FormatPercent(item.CpuUsage)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastViewed" Title="Last View" Width="130px">
+                                <Template Context="item">
+                                    <span class="number">@FormatTimestamp(item.LastViewed)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = tableItems.FirstOrDefault(o => o.AppId == selectedAppId);
+                if (selected != null)
+                {
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <span class="detail-name">@selected.Name</span>
+                            @if (!string.IsNullOrEmpty(selected.PackageId))
+                            {
+                                <span class="detail-type">@selected.PackageId @selected.PackageVersion</span>
+                            }
+                            <span class="detail-state"><span class="icon fa-regular fa-sharp fa-clock"></span>@(selected.LastViewed != null ? $"Last view {FormatTimestamp(selected.LastViewed)}" : "No page views yet")</span>
+                            <a class="detail-link" href="@TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId, selected.PackageId)" title="The page views of this App (client, page and time on page)"><span class="icon fa-solid fa-sharp fa-file-lines"></span>Access Log</a>
+                        </div>
+
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label">Page Views</span>
+                                <span class="stat-value">@selected.TotalPageViews.ToString("N0")</span>
+                                <span class="stat-detail">since the Instance started</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Viewing Now</span>
+                                <span class="stat-value">@selected.ActivePageViews.ToString("N0")</span>
+                                <span class="stat-detail">open page views</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Connections</span>
+                                <span class="stat-value">@selected.TotalConnections.ToString("N0")</span>
+                                <span class="stat-detail">client connections that viewed the App</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Avg Time on Page</span>
+                                <span class="stat-value">@(selected.TotalPageViews > 0 ? FormatDuration(selected.AveragePageDuration) : "-")</span>
+                                <span class="stat-detail">max @(selected.TotalPageViews > 0 ? FormatDuration(selected.MaxPageDuration) : "-")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Total Time</span>
+                                <span class="stat-value">@FormatDuration(selected.TotalPageDuration)</span>
+                                <span class="stat-detail">across all page views</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label" title="The CPU used by the App's Pages in their Blazor Circuits (events, rendering and JavaScript calls)">CPU</span>
+                                <span class="stat-value">@FormatPercent(selected.CpuUsage)</span>
+                                <span class="stat-detail">@FormatCpuTime(selected.CpuTime) total · of all processors</span>
+                            </div>
+                        </div>
+
+                        @if (!selected.Pages.IsNullOrEmpty())
+                        {
+                            <div class="section-title">Pages</div>
+                            <div class="table-panel pages-panel">
+                                <RadzenDataGrid Data="@selected.Pages"
+                                                TItem="TrakHoundAppPageMetrics"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="Route" Title="Page" MinWidth="160px" />
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="LastPath" Title="Last Path" MinWidth="160px">
+                                            <Template Context="pageMetrics">
+                                                <span class="path" title="@pageMetrics.LastPath">@pageMetrics.LastPath</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="TotalViews" Title="Views" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="pageMetrics">
+                                                <span class="number">@pageMetrics.TotalViews.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="ActiveViews" Title="Viewing" Width="90px" TextAlign="TextAlign.Right">
+                                            <Template Context="pageMetrics">
+                                                <span class="number">@pageMetrics.ActiveViews.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="pageMetrics">
+                                                <span class="number">@FormatDuration(pageMetrics.AverageDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="MaxDuration" Title="Max Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="pageMetrics">
+                                                <span class="number">@FormatDuration(pageMetrics.MaxDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="TotalDuration" Title="Total Time" Width="105px" TextAlign="TextAlign.Right">
+                                            <Template Context="pageMetrics">
+                                                <span class="number">@FormatDuration(pageMetrics.TotalDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="LastViewed" Title="Last View" Width="130px">
+                                            <Template Context="pageMetrics">
+                                                <span class="number">@FormatTimestamp(pageMetrics.LastViewed)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+
+                        <div class="section-title">Client Connections<span class="section-subtitle">connected, and closed in the last @_closedRetentionText</span></div>
+                        @if (!connections.IsNullOrEmpty())
+                        {
+                            <div class="table-panel connections-panel">
+                                <RadzenDataGrid Data="@connections"
+                                                TItem="ConnectionItem"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true"
+                                                RowClick="@ConnectionRowClicked"
+                                                RowRender="@ConnectionRowRender">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="Client" Title="Client" MinWidth="160px">
+                                            <Template Context="connection">
+                                                <span title="@connection.ClientAgent">@connection.Client</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="IsConnected" Title="Status" Width="120px">
+                                            <Template Context="connection">
+                                                <span class="status @(connection.IsConnected ? "connected" : "closed")"><span class="dot"></span>@(connection.IsConnected ? "Connected" : "Closed")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="CurrentPath" Title="Current Page" MinWidth="160px">
+                                            <Template Context="connection">
+                                                @if (connection.CurrentAppId == selectedAppId && !string.IsNullOrEmpty(connection.CurrentPath))
+                                                {
+                                                    <span class="path" title="@connection.CurrentRoute">@connection.CurrentPath</span>
+                                                }
+                                                else if (!string.IsNullOrEmpty(connection.CurrentAppName))
+                                                {
+                                                    <span class="path muted">@connection.CurrentAppName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="muted">-</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="CurrentPageDuration" Title="On Page" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="connection">
+                                                <span class="number">@(!string.IsNullOrEmpty(connection.CurrentRoute) ? FormatDuration(connection.CurrentPageDuration) : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="AppPageViews" Title="Page Views" Width="105px" TextAlign="TextAlign.Right">
+                                            <Template Context="connection">
+                                                <span class="number">@connection.AppPageViews.ToString("N0")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="AppPageDuration" Title="Time in App" Width="110px" TextAlign="TextAlign.Right">
+                                            <Template Context="connection">
+                                                <span class="number">@FormatDuration(connection.AppPageDuration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="ConnectionItem" Property="Connected" Title="Connected" Width="130px">
+                                            <Template Context="connection">
+                                                <span class="number">@FormatTimestamp(connection.Connected)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+
+                            var selectedConnection = connections.FirstOrDefault(o => o.Id == selectedConnectionId);
+                            if (selectedConnection != null && !selectedConnection.Pages.IsNullOrEmpty())
+                            {
+                                <div class="section-title">Pages viewed by @selectedConnection.Client<span class="section-subtitle">@selectedConnection.AppPageViews.ToString("N0") views · @FormatDuration(selectedConnection.AppPageDuration) in @selected.Name</span>@if (!string.IsNullOrEmpty(selectedConnection.Code))
+                                {
+                                    <a class="section-link" href="@TrakHoundAppAccessLog.GetLink(explorerService.SelectedInstanceId, selected.PackageId, $"Code = {selectedConnection.Code}")" title="The page views of this Connection (@selectedConnection.Code) in @selected.Name"><span class="icon fa-solid fa-sharp fa-file-lines"></span>Access Log</a>
+                                }</div>
+                                <div class="table-panel pages-panel">
+                                    <RadzenDataGrid Data="@selectedConnection.Pages"
+                                                    TItem="TrakHoundAppPageMetrics"
+                                                    Density="Density.Compact"
+                                                    AllowSorting="true"
+                                                    AllowColumnResize="true">
+                                        <Columns>
+                                            <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="Route" Title="Page" MinWidth="160px" />
+                                            <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="LastPath" Title="Last Path" MinWidth="160px">
+                                                <Template Context="pageMetrics">
+                                                    <span class="path" title="@pageMetrics.LastPath">@pageMetrics.LastPath</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="TotalViews" Title="Views" Width="90px" TextAlign="TextAlign.Right">
+                                                <Template Context="pageMetrics">
+                                                    <span class="number">@pageMetrics.TotalViews.ToString("N0")</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                                <Template Context="pageMetrics">
+                                                    <span class="number">@FormatDuration(pageMetrics.AverageDuration)</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="TotalDuration" Title="Total Time" Width="105px" TextAlign="TextAlign.Right">
+                                                <Template Context="pageMetrics">
+                                                    <span class="number">@FormatDuration(pageMetrics.TotalDuration)</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                            <RadzenDataGridColumn TItem="TrakHoundAppPageMetrics" Property="LastViewed" Title="Last View" Width="130px">
+                                                <Template Context="pageMetrics">
+                                                    <span class="number">@FormatTimestamp(pageMetrics.LastViewed)</span>
+                                                </Template>
+                                            </RadzenDataGridColumn>
+                                        </Columns>
+                                    </RadzenDataGrid>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty-panel">
+                                <span class="empty-description">No Client Connections have viewed this App</span>
+                            </div>
+                        }
+
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-browsers"></span>
+                    <span class="empty-title">No Apps</span>
+                    <span class="empty-description">No Apps are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly string _closedRetentionText = $"{TrakHound.Instance.Apps.TrakHoundAppMetricsCollector.ClosedConnectionRetention.TotalHours:0} hours";
+
+    private IEnumerable<TrakHoundAppInformation> apps;
+    private IEnumerable<TableItem> tableItems;
+    private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>();
+    private IEnumerable<ConnectionItem> connections;
+    private string selectedAppId;
+    private string selectedConnectionId;
+
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Selects this App when the page opens (ex. from the App page)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string AppId { get; set; }
+
+
+    public class TableItem
+    {
+        public string AppId { get; set; }
+        public string Name { get; set; }
+        public string Route { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public long TotalPageViews { get; set; }
+        public int ActivePageViews { get; set; }
+        public long TotalConnections { get; set; }
+        public double TotalPageDuration { get; set; }
+        public double AveragePageDuration { get; set; }
+        public double MaxPageDuration { get; set; }
+        public DateTime? LastViewed { get; set; }
+        public double CpuUsage { get; set; }
+        public double CpuTime { get; set; }
+        public IEnumerable<TrakHoundAppPageMetrics> Pages { get; set; }
+
+        public TableItem(string appId, TrakHoundAppInformation information, TrakHoundAppMetrics metrics)
+        {
+            AppId = appId;
+            Update(information, metrics);
+        }
+
+        public void Update(TrakHoundAppInformation information, TrakHoundAppMetrics metrics)
+        {
+            Name = information?.Name ?? metrics?.AppName ?? AppId;
+            Route = !string.IsNullOrEmpty(information?.Route) ? information.Route : "/";
+            PackageId = information?.PackageId ?? metrics?.PackageId;
+            PackageVersion = information?.PackageVersion;
+
+            TotalPageViews = metrics?.TotalPageViews ?? 0;
+            ActivePageViews = metrics?.ActivePageViews ?? 0;
+            TotalConnections = metrics?.TotalConnections ?? 0;
+            TotalPageDuration = metrics?.TotalPageDuration ?? 0;
+            AveragePageDuration = metrics?.AveragePageDuration ?? 0;
+            MaxPageDuration = metrics?.MaxPageDuration ?? 0;
+            LastViewed = metrics?.LastViewed;
+            CpuUsage = metrics?.CpuUsage ?? 0;
+            CpuTime = metrics?.CpuTime ?? 0;
+            Pages = metrics?.Pages?.OrderByDescending(o => o.TotalViews).ToList();
+        }
+    }
+
+    public class ConnectionItem
+    {
+        public string Id { get; set; }
+        public string Client { get; set; }
+        public string ClientAgent { get; set; }
+        public string Code { get; set; }
+        public bool IsConnected { get; set; }
+        public DateTime Connected { get; set; }
+        public string CurrentAppId { get; set; }
+        public string CurrentAppName { get; set; }
+        public string CurrentRoute { get; set; }
+        public string CurrentPath { get; set; }
+        public double CurrentPageDuration { get; set; }
+
+        /// <summary>
+        /// Page Views and Time of the selected App (the Connection may have viewed other Apps too)
+        /// </summary>
+        public long AppPageViews { get; set; }
+        public double AppPageDuration { get; set; }
+        public IEnumerable<TrakHoundAppPageMetrics> Pages { get; set; }
+
+        public ConnectionItem(TrakHoundAppConnectionMetrics metrics)
+        {
+            Id = metrics.Id;
+            Client = metrics.ClientHostname ?? metrics.ClientAddress ?? metrics.ConnectionId ?? metrics.Id;
+            ClientAgent = metrics.ClientAgent;
+            Code = metrics.Code;
+            IsConnected = metrics.IsConnected;
+            Connected = metrics.Connected;
+            CurrentAppId = metrics.CurrentAppId;
+            CurrentAppName = metrics.CurrentAppName;
+            CurrentRoute = metrics.CurrentRoute;
+            CurrentPath = metrics.CurrentPath;
+            CurrentPageDuration = metrics.CurrentPageDuration;
+            Pages = metrics.Pages?.ToList();
+            AppPageViews = Pages?.Sum(o => o.TotalViews) ?? 0;
+            AppPageDuration = Pages?.Sum(o => o.TotalDuration) ?? 0;
+        }
+    }
+
+
+    void IDisposable.Dispose()
+    {
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading App Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            tableItems = null;
+            _tableItemsById.Clear();
+            connections = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+            if (!string.IsNullOrEmpty(AppId)) selectedAppId = AppId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Apps", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                // List every configured App (including those without Page Views yet)
+                apps = await client.Apps.GetInformation();
+
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var metrics = await client.Apps.GetMetrics();
+        var metricsByApp = metrics?.Where(o => !string.IsNullOrEmpty(o?.AppId)).ToDictionary(o => o.AppId) ?? new Dictionary<string, TrakHoundAppMetrics>();
+        var appsById = apps?.Where(o => !string.IsNullOrEmpty(o?.Id)).ToDictionary(o => o.Id) ?? new Dictionary<string, TrakHoundAppInformation>();
+
+        // Configured Apps, plus Apps that were viewed but are no longer configured
+        var items = appsById.Keys.Union(metricsByApp.Keys)
+            .Select(id => GetTableItem(id, appsById.GetValueOrDefault(id), metricsByApp.GetValueOrDefault(id)))
+            .OrderBy(o => o.Name)
+            .ToList();
+
+        SetTableItems(items);
+
+        // Select the most viewed App by default (or if the selected one went away)
+        if (selectedAppId == null || !items.Any(o => o.AppId == selectedAppId))
+        {
+            selectedAppId = items.OrderByDescending(o => o.TotalPageViews).FirstOrDefault()?.AppId;
+        }
+
+        if (selectedAppId != null)
+        {
+            var connectionMetrics = await client.Apps.GetConnectionMetrics(selectedAppId);
+            connections = connectionMetrics?.Select(o => new ConnectionItem(o)).ToList();
+        }
+        else
+        {
+            connections = null;
+        }
+    }
+
+    // Rows are updated in place (and the list kept while the Apps are the same) so the grid
+    // doesn't replace every row on each update
+    private TableItem GetTableItem(string appId, TrakHoundAppInformation information, TrakHoundAppMetrics metrics)
+    {
+        if (_tableItemsById.TryGetValue(appId, out var item))
+        {
+            item.Update(information, metrics);
+            return item;
+        }
+
+        item = new TableItem(appId, information, metrics);
+        _tableItemsById[appId] = item;
+        return item;
+    }
+
+    private void SetTableItems(List<TableItem> items)
+    {
+        if (tableItems != null && tableItems.SequenceEqual(items)) return;
+
+        tableItems = items;
+
+        var ids = items.Select(o => o.AppId).ToHashSet();
+        foreach (var id in _tableItemsById.Keys.Where(o => !ids.Contains(o)).ToList()) _tableItemsById.Remove(id);
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        if (args.Data?.AppId != selectedAppId)
+        {
+            selectedAppId = args.Data?.AppId;
+            selectedConnectionId = null;
+            connections = null; // Loaded for the new App on the next update
+        }
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        if (args.Data?.AppId == selectedAppId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private void ConnectionRowClicked(DataGridRowMouseEventArgs<ConnectionItem> args)
+    {
+        // Click again to hide the Connection's Pages
+        selectedConnectionId = args.Data?.Id != selectedConnectionId ? args.Data?.Id : null;
+    }
+
+    private void ConnectionRowRender(RowRenderEventArgs<ConnectionItem> args)
+    {
+        if (args.Data?.Id == selectedConnectionId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
+        if (duration.TotalHours >= 1) return $"{(int)duration.TotalHours}h {duration.Minutes:00}m";
+        if (duration.TotalMinutes >= 1) return $"{duration.Minutes}m {duration.Seconds:00}s";
+        if (duration.TotalSeconds >= 10) return $"{duration.TotalSeconds:0} s";
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.#} s";
+        return $"{milliseconds:0} ms";
+    }
+
+    private static string FormatPercent(double value) => value >= 10 ? $"{value:0}%" : $"{value:0.#}%";
+
+    /// <summary>
+    /// Milliseconds of CPU time
+    /// </summary>
+    private static string FormatCpuTime(double milliseconds)
+    {
+        if (milliseconds >= 3600000) return $"{milliseconds / 3600000:0.#} h";
+        if (milliseconds >= 60000) return $"{milliseconds / 60000:0.#} min";
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.#} s";
+        return $"{milliseconds:0} ms";
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+}

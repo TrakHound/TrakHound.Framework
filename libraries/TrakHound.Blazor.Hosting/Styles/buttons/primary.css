@@ -1,0 +1,47 @@
+﻿.btn-primary {
+    background: var(--buttonPrimaryBackground);
+    box-shadow: var(--buttonPrimaryShadow);
+    border-color: var(--buttonPrimaryBorder);
+    color: var(--buttonPrimaryText);
+    transition: none;
+}
+
+    .btn-primary:hover {
+        background: var(--buttonPrimaryBackgroundHover);
+        border-color: var(--buttonPrimaryBorderHover);
+        color: var(--buttonPrimaryTextHover);
+        transition: none;
+    }
+
+    .btn-primary:active {
+        box-shadow: var(--buttonPrimaryShadowHighlight);
+        background: var(--buttonPrimaryBackgroundHighlight);
+        border-color: var(--buttonPrimaryBorderHighlight);
+        color: var(--buttonPrimaryTextHighlight);
+    }
+
+    .btn-primary:disabled,
+    .btn-primary.disabled {
+        box-shadow: none;
+        outline: none;
+        background: var(--buttonPrimaryBackgroundDisabled);
+        border-color: var(--buttonPrimaryBorderDisabled);
+        color: var(--buttonPrimaryTextDisabled);
+    }
+
+    .btn-primary .icon {
+        color: var(--buttonPrimaryIcon);
+    }
+
+    .btn-primary:hover .icon {
+        color: var(--buttonPrimaryIconHover);
+    }
+
+    .btn-primary:active .icon {
+        color: var(--buttonPrimaryIconHighlight);
+    }
+
+    .btn-primary:disabled .icon,
+    .btn-primary.disabled .icon {
+        color: var(--buttonPrimaryIconDisabled);
+    }

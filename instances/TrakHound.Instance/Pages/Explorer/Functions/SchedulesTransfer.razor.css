@@ -1,0 +1,179 @@
+.schedules-download {
+    display: none;
+}
+
+.schedules-transfer ::deep .modal .modal-body {
+    padding: 0;
+}
+
+.import-panel {
+    padding: 20px 40px;
+}
+
+.import-description {
+    margin-bottom: 15px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.import-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+/* The file input covers the button so it receives both clicks and dropped files */
+.import-file-button {
+    position: relative;
+    overflow: hidden;
+}
+
+    .import-file-button ::deep .import-file-input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .import-file-button.disabled ::deep .import-file-input {
+        pointer-events: none;
+    }
+
+.import-mode label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: var(--fontSizeSm);
+    font-weight: bold;
+    color: var(--textMild);
+}
+
+.import-mode select {
+    min-width: 260px;
+}
+
+.import-file {
+    margin-top: 15px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .import-file .icon {
+        margin-right: 8px;
+        color: var(--textLight);
+    }
+
+    .import-file .import-file-name {
+        font-weight: bold;
+    }
+
+    .import-file .import-file-summary {
+        margin-left: 12px;
+        color: var(--textMild);
+    }
+
+.import-status,
+.import-error {
+    margin-top: 12px;
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+    .import-status .icon,
+    .import-error .icon {
+        margin-right: 8px;
+        color: var(--textLight);
+    }
+
+    .import-status.success .icon {
+        color: var(--colorGreen, #19b419);
+    }
+
+    .import-status.failed .icon,
+    .import-error .icon {
+        color: var(--colorRed, #d92b2b);
+    }
+
+.import-table {
+    margin-top: 12px;
+    max-height: 360px;
+    overflow: auto;
+}
+
+    .import-table table {
+        width: 100%;
+        table-layout: fixed;
+        font-size: var(--fontSizeSm);
+    }
+
+    .import-table th {
+        position: sticky;
+        top: 0;
+        padding: 6px 10px;
+        background: var(--panelBackgroundMedium);
+        color: var(--textMild);
+        font-weight: bold;
+    }
+
+        .import-table th:nth-child(1) { width: 95px; }
+        .import-table th:nth-child(2) { width: 55px; }
+        .import-table th:nth-child(3) { width: 22%; }
+        .import-table th:nth-child(4) { width: 26%; }
+
+    .import-table td {
+        padding: 6px 10px;
+        vertical-align: top;
+        border-top: 1px solid var(--panelBackgroundMedium);
+        color: var(--textDark);
+    }
+
+        .import-table td.ellipsis {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .import-table td.code {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+        }
+
+        .import-table td.messages .message {
+            display: block;
+            color: var(--textMild);
+        }
+
+/* Actions */
+.action-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+    .action-badge::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--textLight);
+    }
+
+    .action-badge.create::before,
+    .action-badge.update::before {
+        background: var(--accent);
+    }
+
+    .action-badge.conflict,
+    .action-badge.invalid,
+    .action-badge.error {
+        font-weight: bold;
+    }
+
+        .action-badge.conflict::before,
+        .action-badge.invalid::before,
+        .action-badge.error::before {
+            background: var(--colorRed, #d92b2b);
+        }

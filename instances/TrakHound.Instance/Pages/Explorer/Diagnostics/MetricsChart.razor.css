@@ -1,0 +1,79 @@
+.metrics-chart {
+    width: 100%;
+    min-width: 0;
+    padding: 12px 15px 8px;
+    background: var(--panelBackground);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+}
+
+.metrics-chart-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.metrics-chart-title {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.metrics-chart-subtitle {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.metrics-chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 180px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+/* Keep the area fill light so the 2px line reads as the primary mark */
+.metrics-chart ::deep .rz-area-series path[stroke="none"] {
+    fill-opacity: 0.2;
+}
+
+/* Recessive axes : tick labels in muted ink */
+.metrics-chart ::deep .rz-tick-text {
+    fill: var(--textMild);
+}
+
+.metrics-chart ::deep .rz-legend-item-text {
+    color: var(--textMild);
+    font-size: var(--fontSizeSm);
+}
+
+.metrics-chart-tooltip {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--fontSizeSm);
+}
+
+    .metrics-chart-tooltip .tooltip-time {
+        color: var(--textMild);
+    }
+
+    .metrics-chart-tooltip .tooltip-series {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .metrics-chart-tooltip .tooltip-swatch {
+        display: inline-block;
+        width: 10px;
+        height: 2px;
+        border-radius: 1px;
+    }
+
+    .metrics-chart-tooltip .tooltip-value {
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+    }

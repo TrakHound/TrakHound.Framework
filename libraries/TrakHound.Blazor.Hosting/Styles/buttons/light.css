@@ -1,0 +1,44 @@
+﻿.btn-light {
+    background: var(--buttonLightBackground);
+    box-shadow: var(--buttonLightShadow);
+    border: 1px solid var(--buttonLightBorder);
+    color: var(--buttonLightText);
+}
+
+    .btn-light:hover {
+        background: var(--buttonLightBackgroundHover);
+        border: 1px solid var(--buttonLightBorderHover);
+        color: var(--buttonLightTextHover);
+    }
+
+    .btn-light:active {
+        box-shadow: var(--buttonLightShadowHighlight);
+        background: var(--buttonLightBackgroundHighlight);
+        border: 1px solid var(--buttonLightBorderHighlight);
+        color: var(--buttonLightTextHighlight);
+    }
+
+    .btn-light:disabled,
+    .btn-light.disabled {
+        box-shadow: none;
+        background: var(--buttonLightBackgroundDisabled);
+        border: 1px solid var(--buttonLightBorderDisabled);
+        color: var(--buttonLightTextDisabled);
+    }
+
+    .btn-light .icon {
+        color: var(--buttonLightIcon);
+    }
+
+    .btn-light:hover .icon {
+        color: var(--buttonLightIconHover);
+    }
+
+    .btn-light:active .icon {
+        color: var(--buttonLightIconHighlight);
+    }
+
+    .btn-light:disabled .icon,
+    .btn-light.disabled .icon {
+        color: var(--buttonLightIconDisabled);
+    }

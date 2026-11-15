@@ -1,0 +1,86 @@
+/* Shown over an App, so it keeps the same dark look in every theme. Matches the Reconnection Toast (reconnection.css in TrakHound.Blazor.Hosting) */
+
+.app-update-banner {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 9997; /* Below the Reconnection overlay (9998), which takes the same place while disconnected */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(20, 24, 30, 0.94);
+    color: #fff;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.app-update-icon {
+    color: #74b9ff;
+    font-size: 1rem;
+}
+
+.app-update-text {
+    flex: 1 1 280px;
+    max-width: 560px;
+}
+
+.app-update-name {
+    font-weight: 600;
+}
+
+.app-update-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.app-update-button {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+    .app-update-button:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    .app-update-button:focus-visible {
+        outline: 2px solid #cce6ff;
+        outline-offset: 2px;
+    }
+
+.app-update-button-primary {
+    border-color: transparent;
+    background: #1a8cff;
+}
+
+    .app-update-button-primary:hover {
+        border-color: transparent;
+        background: #0079f2;
+    }
+
+@media (max-width: 480px) {
+    .app-update-banner {
+        bottom: 16px;
+        padding: 12px 14px;
+    }
+}

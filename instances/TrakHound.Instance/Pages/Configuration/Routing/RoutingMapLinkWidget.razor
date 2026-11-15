@@ -1,0 +1,55 @@
+@using TrakHound.Blazor.Diagrams
+@implements IDisposable
+
+@{
+    var result = Link.PathGeneratorResult;
+    if (result == null) return;
+
+    var color = Link.Color;
+    var opacity = Context?.IsFaded(Link.Edge.Key) == true ? "0.15" : "1";
+
+    // Router Targets send Requests back to an earlier column, and Modules aren't part of the Routers
+    var dashes = Link.Edge.Kind == RoutingMapEdgeKind.RouterTarget || Link.Edge.Kind == RoutingMapEdgeKind.Uses ? "6 4" : null;
+}
+
+<g opacity="@opacity">
+    <path d="@result.FullPath.ToString()"
+          stroke-width="@(Link.Width.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+          stroke-dasharray="@dashes"
+          fill="none"
+          stroke="@color" />
+
+    @if (Link.TargetMarker != null && result.TargetMarkerAngle != null && result.TargetMarkerPosition != null)
+    {
+        <g transform="@(FormattableString.Invariant($"translate({result.TargetMarkerPosition.X}, {result.TargetMarkerPosition.Y}) rotate({result.TargetMarkerAngle})"))">
+            <path d="@Link.TargetMarker.Path" fill="@color"></path>
+        </g>
+    }
+</g>
+
+@code {
+
+    [CascadingParameter]
+    public BlazorDiagram BlazorDiagram { get; set; } = null!;
+
+    [CascadingParameter]
+    public RoutingMapContext Context { get; set; }
+
+    // Filled by the Diagram
+    [Parameter]
+    public RoutingMapLinkModel Link { get; set; } = null!;
+
+
+    protected override void OnInitialized()
+    {
+        if (Context != null) Context.Changed += ContextChanged;
+    }
+
+    public void Dispose()
+    {
+        if (Context != null) Context.Changed -= ContextChanged;
+    }
+
+    private void ContextChanged() => _ = InvokeAsync(StateHasChanged);
+
+}

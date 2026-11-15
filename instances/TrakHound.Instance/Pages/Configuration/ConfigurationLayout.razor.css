@@ -1,0 +1,267 @@
+/* The area's header, sidebar and page are laid out by AreaLayout */
+
+.configuration-page {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Routing page (and older page structure) */
+
+.configuration-page ::deep .configuration-table-panel {
+    display: grid;
+    grid-template-rows: max-content max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .configuration-page ::deep .configuration-table-panel .breadcrumb-panel {
+        grid-row: 1;
+        border-bottom: 1px solid var(--borderColor);
+        padding: 5px 20px;
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel {
+        grid-row: 2;
+        border-bottom: 1px solid var(--borderColor);
+        padding: 10px 20px;
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel-container {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        grid-column-gap: 25px;
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel-icon-container {
+        grid-column: 1;
+        padding: 3px 0;
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel-icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel-information-container {
+        grid-column: 2;
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel-title {
+        display: block;
+        font-size: var(--fontSizeBase);
+        line-height: 18px;
+        font-weight: 500;
+        color: var(--textDark);
+    }
+
+    .configuration-page ::deep .configuration-table-panel .header-panel-description {
+        display: block;
+        font-size: var(--fontSizeSm);
+        line-height: 14px;
+        color: var(--textMild);
+    }
+
+    .configuration-page ::deep .configuration-table-panel .toolbar-panel {
+        grid-row: 3;
+        letter-spacing: 0;
+    }
+
+        .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn {
+            border: none;
+            margin: 0;
+            margin-left: -4px !important;
+        }
+
+            .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn:first-child {
+                margin-left: 0px !important;
+            }
+
+        .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-refresh {
+        }
+
+            .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-refresh:hover {
+                background: var(--accentLight);
+            }
+
+            .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-refresh .icon {
+                color: var(--accent);
+            }
+
+            .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-refresh:hover .icon {
+                color: #fff
+            }
+
+        .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-add {
+            background: var(--accent);
+            color: #fff;
+        }
+
+            .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-add:hover {
+                background: var(--accentLight);
+            }
+
+            .configuration-page ::deep .configuration-table-panel .toolbar-panel .btn-add .icon {
+                font-size: var(--fontSizeLg);
+                color: #fff;
+            }
+
+    .configuration-page ::deep .configuration-table-panel .content-panel {
+        grid-row: 4;
+        height: 100%;
+        overflow: hidden;
+    }
+
+.configuration-page ::deep .form-field {
+    display: block;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+    .configuration-page ::deep .form-field:last-child {
+        margin-bottom: 0px;
+    }
+
+    .configuration-page ::deep .form-field > label {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: var(--textDark);
+    }
+
+.configuration-page ::deep .spin-edit {
+    display: block;
+    width: 200px;
+}
+
+.configuration-page ::deep .form-field .rz-textbox {
+    display: block;
+    width: 100%;
+    font-size: var(--fontSizeSm);
+    padding: 8px 15px;
+    height: auto;
+}
+
+.configuration-page ::deep .form-field .rz-textarea {
+    display: block;
+    width: 100%;
+    font-size: var(--fontSizeBase);
+    height: 100px;
+}
+
+.configuration-page ::deep .deploy-modal {
+    width: 650px;
+}
+
+    .configuration-page ::deep .deploy-modal .modal-footer .btn-loading .icon {
+        animation: spin 1s linear infinite;
+    }
+
+.configuration-page ::deep .deploy-confirm-panel {
+    padding: 20px 40px 0;
+    height: 350px;
+}
+
+    .configuration-page ::deep .deploy-confirm-panel .loading-panel {
+        display: grid;
+        grid-template-rows: 1fr max-content 1fr;
+        grid-template-columns: 1fr max-content 1fr;
+        height: 100%;
+        overflow: hidden;
+        animation: fadeIn 1s normal;
+    }
+
+.configuration-page ::deep .deploy-confirm-top-panel {
+    display: grid;
+    grid-template-columns: 1fr max-content max-content max-content;
+    grid-column-gap: 15px;
+}
+
+.configuration-page ::deep .deploy-confirm-panel label {
+    display: block;
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: var(--textDark);
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-version {
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-major {
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-minor {
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-build {
+}
+
+
+.loading-panel {
+        display: grid;
+        grid-template-rows: 1fr max-content 1fr;
+        grid-template-columns: 1fr max-content 1fr;
+        height: 100%;
+        overflow: hidden;
+        animation: fadeIn 1s normal;
+    }
+
+.configuration-page ::deep .deploy-confirm-top-panel {
+    display: grid;
+    grid-template-columns: 1fr max-content max-content max-content;
+    grid-column-gap: 15px;
+}
+
+.configuration-page ::deep .deploy-confirm-panel label {
+    display: block;
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: var(--textDark);
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-version {
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-major {
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-minor {
+}
+
+.configuration-page ::deep .deploy-confirm-panel .deploy-confirm-panel-build {
+}
+
+
+.configuration-page ::deep .add-panel .container-label {
+    margin-bottom: 10px;
+    font-size: var(--fontSizeMd);
+    font-weight: bold;
+    color: var(--textMild);
+}
+
+.configuration-page ::deep .add-panel .container-content {
+    padding: 15px;
+    border: 1px solid var(--borderColorLight);
+}
+
+
+.loading-panel {
+    grid-row-start: 1;
+    grid-row-end: 5;
+    grid-column-start: 1;
+    grid-column-end: 3;
+    display: grid;
+    grid-template-rows: 1fr max-content 1fr;
+    grid-template-columns: 1fr max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    animation: fadeIn 1s normal;
+}
+
+    .loading-panel ::deep .loading-indicator {
+        grid-row: 2;
+        grid-column: 2;
+    }

@@ -1,0 +1,35 @@
+﻿@rendermode InteractiveServer
+@using TrakHound.Api
+@using TrakHound.Logging
+
+@* The Endpoint's Logger (api/{package}/{controller}/{type}/{endpoint}). Debug so Request lines are shown *@
+@if (ApiInformation != null && ControllerInformation != null && EndpointInformation != null)
+{
+    var pattern = GetPattern();
+    <LoggerLog @key="pattern" Pattern="@pattern" MinimumLevel="TrakHoundLogLevel.Debug" />
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundApiInformation ApiInformation { get; set; }
+
+    [Parameter]
+    public TrakHoundApiControllerInformation ControllerInformation { get; set; }
+
+    [Parameter]
+    public TrakHoundApiEndpointInformation EndpointInformation { get; set; }
+
+
+    private string GetPattern()
+    {
+        // As TrakHoundApiProvider names the Logger : Routes without their leading '/', and ":" for an empty or root Route
+        var controllerRoute = ControllerInformation.Route?.Trim('/');
+        var endpointRoute = EndpointInformation.Route?.Trim('/');
+        if (string.IsNullOrEmpty(controllerRoute)) controllerRoute = ":";
+        if (string.IsNullOrEmpty(endpointRoute)) endpointRoute = ":";
+
+        return $"api/{ApiInformation.PackageId}/{controllerRoute}/{EndpointInformation.Type}/{endpointRoute}";
+    }
+
+}

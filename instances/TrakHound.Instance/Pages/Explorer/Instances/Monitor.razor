@@ -1,0 +1,152 @@
+@* Displays the total CPU and Memory usage of the Instance process *@
+@implements IDisposable
+@inject TrakHoundProcessMonitor processMonitor
+@inject TrakHound.Blazor.Services.TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+@{
+    var current = processMonitor.Current;
+    var totalMemory = processMonitor.TotalAvailableMemory;
+    var memoryPercent = current != null && totalMemory > 0 ? current.WorkingSet / (double)totalMemory * 100 : 0;
+    var processUptime = DateTime.UtcNow - processMonitor.StartTime;
+}
+
+<div class="monitor-panel" style="@MetricsChartColors.GetStyle(IsDark)">
+    <div class="metrics-panel">
+        <div class="metric">
+            <span class="metric-label">CPU</span>
+            <span class="metric-value">@(current != null ? $"{current.CpuUsage:0.0}%" : "--")</span>
+            <span class="metric-detail">of @processMonitor.ProcessorCount logical processors</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Memory</span>
+            <span class="metric-value">@(current != null ? current.WorkingSet.ToFileSize() : "--")</span>
+            <span class="metric-detail">@memoryPercent.ToString("0.0")% of @totalMemory.ToFileSize()</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Managed Memory</span>
+            <span class="metric-value">@(current != null ? current.ManagedMemory.ToFileSize() : "--")</span>
+            <span class="metric-detail">.NET GC heap · @gcSummary</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Threads</span>
+            <span class="metric-value">@processMonitor.ThreadCount</span>
+            <span class="metric-detail">Thread Pool @ThreadPool.ThreadCount threads · @ThreadPool.PendingWorkItemCount pending</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Process Uptime</span>
+            <span class="metric-value">@processUptime.ToFormattedString()</span>
+            <span class="metric-detail">Started @processMonitor.StartTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") · PID @Environment.ProcessId</span>
+        </div>
+    </div>
+    <div class="charts-panel">
+        <div class="chart-container">
+            <MetricsChart TItem="TrakHoundProcessSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                          Title="CPU Usage"
+                          Subtitle="@($"% of total machine capacity · last {_windowText}")"
+                          Samples="@samples"
+                          Series="@cpuSeries"
+                          ValueFormatter="@FormatPercent"
+                          MaxPoints="120"
+                          Area="true" />
+        </div>
+        <div class="chart-container">
+            <MetricsChart TItem="TrakHoundProcessSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                          Title="Memory Usage"
+                          Subtitle="@($"Working Set · last {_windowText}")"
+                          Samples="@samples"
+                          Series="@memorySeries"
+                          ValueFormatter="@FormatMegabytes"
+                          MaxPoints="120"
+                          Area="true" />
+        </div>
+    </div>
+
+    <CpuByModule />
+</div>
+
+@code {
+
+    private static readonly TimeSpan _updateInterval = TimeSpan.FromSeconds(1);
+    private static readonly string _windowText = $"{TrakHoundProcessMonitor.HistoryDuration.TotalMinutes:0} min";
+
+    private TrakHoundProcessSample[] samples = Array.Empty<TrakHoundProcessSample>();
+    private MetricsChartSeries[] cpuSeries;
+    private MetricsChartSeries[] memorySeries;
+    private string gcSummary;
+    private System.Threading.Timer updateTimer;
+    private bool disposed;
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        UpdateSamples();
+
+        themeService.ThemeChanged += ThemeChanged;
+        updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        if (disposed) return;
+
+        try
+        {
+            UpdateSamples();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // The component or circuit may have been disposed
+        }
+    }
+
+    private void UpdateSamples()
+    {
+        // Pass a new array so the Charts detect the change
+        samples = processMonitor.GetHistory().ToArray();
+        gcSummary = $"GC {GC.CollectionCount(0):N0} / {GC.CollectionCount(1):N0} / {GC.CollectionCount(2):N0} (gen 0/1/2)";
+    }
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        cpuSeries = new[] { new MetricsChartSeries("CPU", nameof(TrakHoundProcessSample.CpuUsage), colors[0]) };
+        memorySeries = new[] { new MetricsChartSeries("Memory", nameof(TrakHoundProcessSample.WorkingSetMB), colors[2]) };
+    }
+
+    private static double GetSampleValue(TrakHoundProcessSample sample, string property)
+    {
+        switch (property)
+        {
+            case nameof(TrakHoundProcessSample.CpuUsage): return sample.CpuUsage;
+            case nameof(TrakHoundProcessSample.WorkingSetMB): return sample.WorkingSetMB;
+            default: return 0;
+        }
+    }
+
+    private static DateTime GetSampleTimestamp(TrakHoundProcessSample sample) => sample.Timestamp;
+
+    private static string FormatPercent(double value) => value >= 10 ? $"{value:0}%" : $"{value:0.#}%";
+
+    private static string FormatMegabytes(double value) => value >= 1024 ? $"{value / 1024:0.##} GB" : $"{value:0} MB";
+
+}

@@ -1,0 +1,14 @@
+# Build output
+bin/
+obj/
+
+# Debug host storage
+volume/
+
+# Package files (th packages dotnet --output)
+out/
+*.thp
+
+# Visual Studio
+.vs/
+*.user

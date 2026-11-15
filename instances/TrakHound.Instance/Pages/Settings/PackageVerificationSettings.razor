@@ -1,0 +1,127 @@
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@inject ITrakHoundInstance instance
+@inject IServiceProvider services
+@using Microsoft.Extensions.DependencyInjection
+@using TrakHound.Instance.Configurations
+@using TrakHound.Instance.PackageSources
+@using TrakHound.Instances
+@using TrakHound.Packages
+
+<div class="settings-package-verification">
+    <SettingsSection Title="Package Verification" HelpLink="@TrakHoundWebsite.Docs(TrakHoundWebsite.Topics.Packages, "verification")" Description="Check Packages against their Manifest and signature when they're installed and when the Instance loads them" Icon="fa-solid fa-sharp fa-shield-check">
+        <SettingsField Label="Mode" Description="@GetModeDescription(Model.PackageVerification)" RequiresRestart="true">
+            <RadzenDropDown TValue="string" Data="@modes" Value="@Model.PackageVerification.ToString()" ValueChanged="@((string value) => ModeChanged(value))" />
+        </SettingsField>
+
+        @if (TrakHoundPackageVerificationPolicy.RequiresTrust(Model.PackageVerification))
+        {
+            <div class="verification-impact">
+                @if (wouldRefuse.Count > 0)
+                {
+                    <span class="icon warning fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>
+                        <span>@wouldRefuse.Count Package version(s) on this Instance would be refused, and anything using them would stop working :</span>
+                        <ul>
+                            @foreach (var package in wouldRefuse.Take(_maxListed))
+                            {
+                                <li>@package.Id v@(package.Version) : @package.Description</li>
+                            }
+                            @if (wouldRefuse.Count > _maxListed)
+                            {
+                                <li>and @(wouldRefuse.Count - _maxListed) more</li>
+                            }
+                        </ul>
+                        <a href="_admin/packages">View Installed Packages</a> or <a href="_admin/security/trusted-publishers">@(Model.PackageVerification == TrakHoundPackageVerificationMode.RequireApproval ? "view Trusted Publishers and Package Manager Approvals" : "add Trusted Publishers")</a>
+                    </div>
+                }
+                else
+                {
+                    <span class="icon ok fa-solid fa-sharp fa-circle-check"></span>
+                    <div>Every Package on this Instance would pass, as of the last check.</div>
+                }
+            </div>
+        }
+    </SettingsSection>
+</div>
+
+@code {
+
+    private const int _maxListed = 5;
+
+    private string[] modes = Enum.GetNames<TrakHoundPackageVerificationMode>();
+
+    private List<TrakHoundPackageVerificationInformation> wouldRefuse = new List<TrakHoundPackageVerificationInformation>();
+
+
+    [Parameter]
+    public InstanceSettingsModel Model { get; set; }
+
+    [CascadingParameter]
+    public SettingsEditContext EditContext { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // RequireApproval needs a Package Manager to approve anything, so it's only offered with one (or when it's already set)
+        var hasPackageManager = TrakHoundPackageInventoryReporter.GetPackageManagerSources(services.GetService<RemotesConfiguration>()).Any();
+        modes = Enum.GetValues<TrakHoundPackageVerificationMode>()
+            .Where(o => o != TrakHoundPackageVerificationMode.RequireApproval || hasPackageManager || Model.PackageVerification == TrakHoundPackageVerificationMode.RequireApproval)
+            .Select(o => o.ToString())
+            .ToArray();
+
+        UpdateImpact();
+    }
+
+    private void UpdateImpact()
+    {
+        // The installed Packages are the running Instance's (a Workspace's Packages aren't installed here)
+        if (!configurationsService.Target.IsLive)
+        {
+            wouldRefuse = new List<TrakHoundPackageVerificationInformation>();
+            return;
+        }
+
+        var packages = instance.PackageManager.GetVerificationReport().Packages;
+
+        if (Model.PackageVerification == TrakHoundPackageVerificationMode.RequireApproval)
+        {
+            // The Mode in use may not check approvals, so check the Verified Packages against the lists now
+            var approvals = services.GetService<TrakHoundPackageManagerApprovalSync>()?.GetApprovals() ?? new TrakHoundPackageApprovals(null, "no Package Source is a TrakHound Package Manager");
+            var now = DateTime.UtcNow;
+
+            wouldRefuse = packages
+                .Select(o =>
+                {
+                    if (o.State != TrakHoundPackageVerificationState.Verified) return o;
+
+                    var approval = approvals.Check(o.Id, o.Version, o.ContentHash, false, now);
+                    return approval.Approved ? null : new TrakHoundPackageVerificationInformation { Id = o.Id, Version = o.Version, Description = approval.Description };
+                })
+                .Where(o => o != null)
+                .ToList();
+        }
+        else
+        {
+            wouldRefuse = packages.Where(o => o.State != TrakHoundPackageVerificationState.Verified).ToList();
+        }
+    }
+
+    private void ModeChanged(string value)
+    {
+        Model.PackageVerification = Enum.Parse<TrakHoundPackageVerificationMode>(value);
+        UpdateImpact();
+        EditContext.Changed();
+    }
+
+    private static string GetModeDescription(TrakHoundPackageVerificationMode mode)
+    {
+        switch (mode)
+        {
+            case TrakHoundPackageVerificationMode.Off: return "Packages aren't checked.";
+            case TrakHoundPackageVerificationMode.Require: return "Only Packages whose files match and that are signed by a Trusted Publisher are used. Anything else is refused.";
+            case TrakHoundPackageVerificationMode.RequireApproval: return "As Require, and only the builds a TrakHound Package Manager approved (on its signed attestation list) are used, so a Package copied onto the Instance by hand is refused.";
+            default: return "Every Package is used, and problems are logged.";
+        }
+    }
+
+}

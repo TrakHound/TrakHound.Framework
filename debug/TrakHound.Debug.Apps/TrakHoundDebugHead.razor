@@ -1,0 +1,29 @@
+@* The Stylesheets the Instance loads for App pages (see AppDocument.razor in the Instance), the Theme, and the App's scoped CSS.
+   Put it in the debug host's <head>, so a change to the Instance's list only needs a new version of this package *@
+
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment environment
+
+@foreach (var stylesheet in TrakHoundIconAssets.GetStylesheets(environment.WebRootFileProvider))
+{
+    <link rel="stylesheet" href="@stylesheet" />
+}
+
+<link rel="stylesheet" href="_content/Radzen.Blazor/css/material-base.css" />
+<link rel="stylesheet" href="_content/TrakHound.Blazor.Hosting/css/trakhound/trakhound.css" />
+
+@* The Theme Stylesheet (Light or Dark), set by TrakHoundDebugApp *@
+<TrakHoundThemeOutlet />
+
+@if (!string.IsNullOrEmpty(AppStylesheet))
+{
+    <link rel="stylesheet" href="@AppStylesheet" />
+}
+
+@code {
+
+    /// <summary>
+    /// The App's scoped CSS (defaults to "{assembly}.styles.css" for the App's assembly)
+    /// </summary>
+    [Parameter]
+    public string AppStylesheet { get; set; } = $"{System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name}.styles.css";
+}

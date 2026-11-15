@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Memory.Service",
+  "category": "service",
+  "version": "0.5",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "In Memory Key-Value, Message and Message Queue Services for the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Memory.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png"
+  }
+}

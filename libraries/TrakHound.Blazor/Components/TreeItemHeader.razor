@@ -1,0 +1,136 @@
+﻿@inject TrakHound.Blazor.Services.ContextMenuService contextMenuService
+
+<div class="tree-item-header">
+
+    @if (!string.IsNullOrEmpty(Link))
+    {
+        if (HeaderTemplate != null)
+        {
+            <TrakHoundNavLink Match="NavLinkMatch.All" IncludeQueryParameters="@MatchLinkQueryParameters" href="@Link" tabindex="-1" class="@($"header-content-container{(IsCurrent ? " active" : null)}")" @ondblclick="Expand">
+                @HeaderTemplate
+            </TrakHoundNavLink>
+        }
+        else
+        {
+            <TrakHoundNavLink Match="NavLinkMatch.All" IncludeQueryParameters="@MatchLinkQueryParameters" href="@Link" tabindex="-1" class="@($"header-content-container default-header-content-container{(IsCurrent ? " active" : null)}")" @ondblclick="Expand">
+
+                @if (Icon != null)
+                {
+                    <div class="icon-container">
+                        <span class="icon @Icon" title="@IconLabel" aria-hidden="@(IconLabel == null ? "true" : null)" role="@(IconLabel != null ? "img" : null)" aria-label="@IconLabel"></span>
+                    </div>
+                }
+
+                <div class="description-container">
+                    <span class="title" title="@TitleLabel">@Title <span class="subtitle">@Subtitle</span></span>
+                </div>
+
+            </TrakHoundNavLink>
+        }
+    }
+    else
+    {
+        var active = IsActive ? "active" : "";
+
+        if (HeaderTemplate != null)
+        {
+            <div class="header-content-container @active" @ondblclick="Expand" @oncontextmenu="ToggleContextMenu" @oncontextmenu:preventDefault="true">
+                <CascadingValue Name="IsActive" Value="IsActive">
+                    @HeaderTemplate
+                </CascadingValue>
+            </div>
+        }
+        else
+        {
+            <div class="header-content-container default-header-content-container @active" @onclick="Selected" @ondblclick="Expand" @oncontextmenu="ToggleContextMenu" @oncontextmenu:preventDefault="true">
+
+                @if (Icon != null)
+                {
+                    <div class="icon-container">
+                        <span class="icon @Icon" title="@IconLabel" aria-hidden="@(IconLabel == null ? "true" : null)" role="@(IconLabel != null ? "img" : null)" aria-label="@IconLabel"></span>
+                    </div>
+                }
+
+                <div class="description-container">
+                    <span class="title" title="@TitleLabel">@Title <span class="subtitle">@Subtitle</span></span>
+                </div>
+
+            </div>
+        }
+    }
+
+    @if (ContextMenu != null)
+    {
+        <ContextMenu Id="@contextMenuId">
+            @ContextMenu
+        </ContextMenu>
+    }
+
+</div>
+
+@code {
+
+    private readonly string contextMenuId = Guid.NewGuid().ToString();
+
+
+    [Parameter]
+    public RenderFragment HeaderTemplate { get; set; }
+
+    [Parameter]
+    public RenderFragment ContextMenu { get; set; }
+
+    [Parameter]
+    public string Title { get; set; }
+
+    [Parameter]
+    public string TitleLabel { get; set; }
+
+    [Parameter]
+    public string Subtitle { get; set; }
+
+    [Parameter]
+    public string Link { get; set; }
+
+    [Parameter]
+    public string Icon { get; set; }
+
+    [Parameter]
+    public string IconLabel { get; set; }
+
+    [Parameter]
+    public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Shows a linked item as active although the current URL isn't exactly its Link (ex. it has other query parameters)
+    /// </summary>
+    [Parameter]
+    public bool IsCurrent { get; set; }
+
+    [Parameter]
+    public bool IsExpanded { get; set; }
+
+    [Parameter]
+    public EventCallback Selected { get; set; }
+
+    [Parameter]
+    public EventCallback Expanded { get; set; }
+
+    [Parameter]
+    public bool MatchLinkQueryParameters { get; set; }
+
+
+    private void ToggleContextMenu(MouseEventArgs args)
+    {
+        if (args != null)
+        {
+            // The ContextMenu is always rendered, so only position and show it (Javascript)
+            contextMenuService.Show(contextMenuId, args.PageX, args.PageY);
+        }
+    }
+
+    private async void Expand()
+    {
+        await Expanded.InvokeAsync();
+    }
+
+}

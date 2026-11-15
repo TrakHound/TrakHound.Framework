@@ -1,0 +1,115 @@
+@page "/_admin/deployments"
+@page "/_admin/deployments/{Tab}"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Deployments)]
+@inject DeploymentsService deploymentsService
+@inject ITrakHoundInstance instance
+@inject RemotesConfiguration remotesConfiguration
+@using TrakHound.Deployments
+@using TrakHound.Instance.Configurations
+@using TrakHound.Instance.Pages.Packages
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="Deployments" />
+<AreaBreadcrumbs Items="@GetBreadcrumbs()" />
+
+<div class="deployments-page">
+
+    <AreaLayout Icon="fa-solid fa-sharp fa-rocket" Title="Deployments" Subtitle="Copy this Instance's configurations and packages to other Instances" Link="_admin/deployments">
+        <Tools>
+            @* Installed Deployment *@
+            <div class="installed-deployment" title="@installed?.Description">
+                <span class="installed-label">Installed Deployment</span>
+                @if (installed != null)
+                {
+                    <span class="installed-value">
+                        <strong>@installed.ProfileId</strong> v@(installed.Version)
+                        <span class="muted"> · built @installed.BuildDate.ToLocalTime().ToString("g")</span>
+                    </span>
+                }
+                else
+                {
+                    <span class="installed-value muted" title="This Instance was not set up from a deployment">None</span>
+                }
+            </div>
+        </Tools>
+        <Nav>
+            @foreach (var tab in _tabs)
+            {
+                <AreaNavItem Href="@GetLink(tab)" Icon="@tab.Icon" Label="@tab.Title" Match="@(tab == _tabs[0] ? NavLinkMatch.All : NavLinkMatch.Prefix)" />
+            }
+        </Nav>
+        <ChildContent>
+            <CascadingValue Value="notifications">
+                @switch (SelectedTab)
+                {
+                    case "install":
+                        <Install Changed="Refresh" />
+                        break;
+
+                    case "backups":
+                        <Backups Changed="Refresh" />
+                        break;
+
+                    case "workspaces":
+                        <Workspaces />
+                        break;
+
+                    default:
+                        <Create />
+                        break;
+                }
+            </CascadingValue>
+        </ChildContent>
+    </AreaLayout>
+
+    <PackageNotifications Context="notifications" />
+
+</div>
+
+@code {
+
+    private record DeploymentsTab(string Id, string Title, string Icon);
+
+    private static readonly DeploymentsTab[] _tabs = new[]
+    {
+        new DeploymentsTab("create", "Create", "fa-solid fa-sharp fa-box-archive"),
+        new DeploymentsTab("install", "Install", "fa-solid fa-sharp fa-down-to-bracket"),
+        new DeploymentsTab("backups", "Backups", "fa-solid fa-sharp fa-clock-rotate-left"),
+        new DeploymentsTab("workspaces", "Workspaces", "fa-solid fa-sharp fa-layer-group")
+    };
+
+    private PackagesContext notifications;
+    private TrakHoundDeployment installed;
+
+
+    // The section (from the route). The first one is the area's first page ("_admin/deployments")
+    [Parameter]
+    public string Tab { get; set; }
+
+    private string SelectedTab => _tabs.Any(o => o.Id == Tab?.ToLower()) ? Tab.ToLower() : _tabs[0].Id;
+
+    private static string GetLink(DeploymentsTab tab) => tab == _tabs[0] ? "_admin/deployments" : $"_admin/deployments/{tab.Id}";
+
+    private IEnumerable<BreadcrumbItem> GetBreadcrumbs()
+    {
+        var tab = _tabs.First(o => o.Id == SelectedTab);
+        return tab == _tabs[0] ? [] : [new(tab.Title)];
+    }
+
+
+    protected override void OnInitialized()
+    {
+        // Used for its Notifications (shared with the Packages and Configuration pages)
+        notifications = new PackagesContext(instance, remotesConfiguration);
+        notifications.Changed += () => _ = InvokeAsync(StateHasChanged);
+
+        installed = deploymentsService.GetInstalledDeployment();
+    }
+
+    private void Refresh()
+    {
+        installed = deploymentsService.GetInstalledDeployment();
+        StateHasChanged();
+    }
+
+}

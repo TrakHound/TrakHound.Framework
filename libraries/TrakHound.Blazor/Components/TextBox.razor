@@ -1,0 +1,172 @@
+﻿@{
+    var size = Size == Size.Small ? "small" : "";
+    var empty = string.IsNullOrEmpty(Value) ? "empty" : "";
+}
+
+<div id="@ElementId" class="@RootClass @size @empty @Class">
+
+    <div class="form-group">
+
+        @if (!string.IsNullOrEmpty(Title))
+        {
+            <label class="title" for="@inputId">
+                @Title
+                @if (!string.IsNullOrEmpty(SubTitle))
+                {
+                    <span class="subtitle small">@SubTitle</span>
+                }
+            </label>
+        }
+
+        @if (Enabled)
+        {
+            <input id="@inputId" type="@InputType" name="@InputName" class="form-control form-control-sm"
+                   value="@Value"
+                   @oninput="ValueInput"
+                   @onfocusout="FocusLost"
+                   @onkeypress="ValueSubmitted"
+                   @ondrop="OnDrop"
+                   ondragover="event.preventDefault();"
+                   spellcheck="@SpellCheck"
+                   tabindex="@TabIndex"
+                   autocomplete="@AutoComplete" placeholder="@PlaceHolder">
+        }
+        else
+        {
+            <input id="@inputId" type="@InputType" name="@InputName" class="form-control form-control-sm disabled"
+                   value="@Value"
+                   spellcheck="@SpellCheck"
+                   tabindex="@TabIndex"
+                   autocomplete="@AutoComplete" placeholder="@PlaceHolder" disabled>
+        }
+
+        @if (!string.IsNullOrEmpty(Message))
+        {
+            <label class="message">@Message</label>
+        }
+    </div>
+
+</div>
+
+
+@code {
+
+    [Parameter]
+    public bool Enabled { get; set; } = true;
+
+    [Parameter]
+    public string Title { get; set; }
+
+    [Parameter]
+    public string SubTitle { get; set; }
+
+    [Parameter]
+    public string Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Submitted { get; set; }
+
+    [Parameter]
+    public EventCallback<DragEventArgs> OnDrop { get; set; }
+
+    [Parameter]
+    public string Message { get; set; }
+
+    [Parameter]
+    public string PlaceHolder { get; set; }
+
+    [Parameter]
+    public string Prefix { get; set; }
+
+    [Parameter]
+    public string Suffix { get; set; }
+
+    [Parameter]
+    public string ElementId { get; set; }
+
+    [Parameter]
+    public string InputElementId { get; set; }
+
+    [Parameter]
+    public string InputType { get; set; } = "search";
+
+    [Parameter]
+    public string InputName { get; set; }
+
+    [Parameter]
+    public InputChangeType InputChangeType { get; set; }
+
+    [Parameter]
+    public string Class { get; set; }
+
+    [Parameter]
+    public string SpellCheck { get; set; } = "true";
+
+    [Parameter]
+    public string AutoComplete { get; set; } = "off";
+
+    // Null leaves tabindex off the input so it keeps its natural place in the Tab order
+    [Parameter]
+    public int? TabIndex { get; set; }
+
+    [Parameter]
+    public Size Size { get; set; }
+
+    // PasswordBox passes "password-box" so it keeps its own look (the text-box styles, including the global ones in forms.css, don't apply to it)
+    [Parameter]
+    public string RootClass { get; set; } = "text-box";
+
+
+    // Generated once so the label stays associated with the input when no InputElementId is set
+    private readonly string _defaultInputId = "text-box-" + Guid.NewGuid().ToString("N");
+
+    private string inputId => !string.IsNullOrEmpty(InputElementId) ? InputElementId : _defaultInputId;
+
+
+    private string GetOutputValue()
+    {
+        var value = Value;
+        if (!string.IsNullOrEmpty(value))
+        {
+            if (!string.IsNullOrEmpty(Prefix)) value = Prefix + value;
+            if (!string.IsNullOrEmpty(Suffix)) value = value + Suffix;
+        }
+        return value;
+    }
+
+    private async Task ValueInput(ChangeEventArgs args)
+    {
+        // Keep what was typed (OnLostFocus only reports it later)
+        Value = args.Value?.ToString();
+
+        if (InputChangeType == InputChangeType.OnValueChange)
+        {
+            await ValueChanged.InvokeAsync(GetOutputValue());
+        }
+    }
+
+    private async Task FocusLost(FocusEventArgs args)
+    {
+        if (InputChangeType == InputChangeType.OnLostFocus)
+        {
+            await ValueChanged.InvokeAsync(GetOutputValue());
+        }
+    }
+
+    private async Task ValueSubmitted(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey)
+        {
+            if (InputChangeType == InputChangeType.OnLostFocus)
+            {
+                await ValueChanged.InvokeAsync(GetOutputValue());
+            }
+
+            await Submitted.InvokeAsync(Value);
+        }
+    }
+
+}

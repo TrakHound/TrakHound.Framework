@@ -1,0 +1,649 @@
+@page "/_admin/explorer/{instanceId}/services/time-series/{configurationId}/measurement/{measurement}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Blazor.Services
+@using TrakHound.Services
+@using TrakHound.Services.TimeSeries
+
+<TrakHoundPageTitle Text="@($"{Measurement} - {GetServiceName()} - TimeSeries")" />
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="time-series-view-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-chart-line"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name" title="@Measurement">@Measurement</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="Query"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <button class="admin-write btn @(showWrite ? "btn-secondary" : "btn-light")" @onclick="() => showWrite = !showWrite"><span class="icon fa-solid fa-sharp fa-plus"></span>Write</button>
+
+    </div>
+
+    <div class="query-panel">
+
+        <div class="field field-series">
+            <label>Series</label>
+            <select class="form-select dropdown-sm" aria-label="Series" value="@selectedSeries" @onchange="SeriesChanged" disabled="@(series.Count < 2)">
+                @for (var i = 0; i < series.Count; i++)
+                {
+                    <option value="@i">@GetSeriesLabel(series[i])</option>
+                }
+            </select>
+        </div>
+
+        <div class="field">
+            <label>Start (UTC)</label>
+            <input type="datetime-local" step="1" aria-label="Start (UTC)" value="@start" @onchange="(args) => start = args.Value?.ToString()" />
+        </div>
+
+        <div class="field">
+            <label>Stop (UTC)</label>
+            <input type="datetime-local" step="1" aria-label="Stop (UTC)" value="@stop" @onchange="(args) => stop = args.Value?.ToString()" />
+        </div>
+
+        <div class="field">
+            <label>Range</label>
+            <div class="range-buttons">
+                @foreach (var range in _ranges)
+                {
+                    <button class="btn btn-light btn-sm" title="@($"The {range.Text} before the newest Point")" @onclick="() => RangeClicked(range.Length)">@range.Text</button>
+                }
+            </div>
+        </div>
+
+        <div class="field">
+            <label>Show</label>
+            <select class="form-select dropdown-sm" aria-label="Show" @bind="@function" @bind:after="Query">
+                <option value="@_raw">Points</option>
+                @foreach (var item in _functions)
+                {
+                    <option value="@item">@item</option>
+                }
+            </select>
+        </div>
+
+        @if (function != _raw)
+        {
+            <div class="field">
+                <label>Window</label>
+                <select class="form-select dropdown-sm" aria-label="Window" @bind="@window" @bind:after="Query">
+                    <option value="@_autoWindow">Auto</option>
+                    @foreach (var item in TimeSeriesExplorer.Intervals)
+                    {
+                        <option value="@item.ToString()">@TimeSeriesExplorer.FormatInterval(item)</option>
+                    }
+                </select>
+            </div>
+        }
+
+        @if (fields.Count > 0)
+        {
+            <div class="field field-fields">
+                <label>Fields</label>
+                <div class="field-options">
+                    @foreach (var field in fields)
+                    {
+                        <label class="field-option">
+                            <input type="checkbox" checked="@selectedFields.Contains(field)" @onchange="(args) => FieldChanged(field, args)" />
+                            @field
+                        </label>
+                    }
+                </div>
+            </div>
+        }
+
+    </div>
+
+    <div class="write-container">
+        @if (showWrite)
+        {
+            <WritePanel InstanceId="@InstanceId" ConfigurationId="@ConfigurationId" Measurement="@Measurement" Tags="@GetSeriesTagsText()" Written="PointWritten" WriteFailed="PointWriteFailed" Cancelled="() => showWrite = false" />
+        }
+    </div>
+
+    <div class="content-panel">
+
+        @if (loading && result == null)
+        {
+            <div class="loading-panel"><Loading Message="Loading.." /></div>
+        }
+        else if (errorMessage != null)
+        {
+            <div class="empty-panel error">
+                <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                <span class="empty-title">Points could not be Loaded</span>
+                <span class="empty-description">@errorMessage</span>
+            </div>
+        }
+        else if (result == null || result.Rows.IsNullOrEmpty())
+        {
+            <div class="empty-panel">
+                <span class="icon fa-solid fa-sharp fa-chart-line"></span>
+                <span class="empty-title">No Points</span>
+                <span class="empty-description">@(GetEmptyText())</span>
+            </div>
+        }
+        else
+        {
+            <div class="results">
+
+                @if (note != null)
+                {
+                    <div class="result-note">@note</div>
+                }
+
+                <div class="charts">
+                    @foreach (var chart in charts)
+                    {
+                        <div class="chart">
+                            <div class="chart-title">@chart.Title</div>
+                            <div class="chart-body">
+                                <div class="chart-scale">
+                                    <span>@TimeSeriesExplorer.FormatValue(chart.Max)</span>
+                                    <span>@TimeSeriesExplorer.FormatValue(chart.Min)</span>
+                                </div>
+                                <svg class="chart-plot" viewBox="0 0 @_chartWidth @_chartHeight" preserveAspectRatio="none" role="img" aria-label="@chart.Title">
+                                    @foreach (var line in chart.Lines)
+                                    {
+                                        <polyline points="@line" />
+                                    }
+                                </svg>
+                            </div>
+                            <div class="chart-times">
+                                <span>@TimeSeriesExplorer.FormatValue(queryStart)</span>
+                                <span>@TimeSeriesExplorer.FormatValue(queryStop)</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="rows-panel">
+                    <table class="rows">
+                        <thead>
+                            <tr>
+                                @foreach (var column in result.Columns)
+                                {
+                                    <th>@column</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in result.Rows.Reverse().Take(_maxTableRows))
+                            {
+                                <tr>
+                                    @foreach (var value in row)
+                                    {
+                                        <td class="@(TimeSeriesExplorer.IsNumber(value) ? "number" : null)">@TimeSeriesExplorer.FormatValue(value)</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@code {
+
+    private const string _raw = "Points";
+    private const int _chartWidth = 1000;
+    private const int _chartHeight = 100;
+    private const int _maxTableRows = 500;
+    private const string _autoWindow = "auto";
+
+    private static readonly (string Text, TimeSpan Length)[] _ranges = new[]
+    {
+        ("1 h", TimeSpan.FromHours(1)),
+        ("24 h", TimeSpan.FromDays(1)),
+        ("7 d", TimeSpan.FromDays(7)),
+        ("30 d", TimeSpan.FromDays(30))
+    };
+
+    private static readonly TrakHoundTimeSeriesAggregate[] _functions = new[]
+    {
+        TrakHoundTimeSeriesAggregate.Mean,
+        TrakHoundTimeSeriesAggregate.TimeWeightedMean,
+        TrakHoundTimeSeriesAggregate.Min,
+        TrakHoundTimeSeriesAggregate.Max,
+        TrakHoundTimeSeriesAggregate.Sum,
+        TrakHoundTimeSeriesAggregate.Count,
+        TrakHoundTimeSeriesAggregate.First,
+        TrakHoundTimeSeriesAggregate.Last
+    };
+
+
+    private class Chart
+    {
+        public string Title { get; set; }
+        public List<string> Lines { get; set; }
+        public double? Min { get; set; }
+        public double? Max { get; set; }
+    }
+
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private TrakHoundServiceInformation service;
+    private List<TrakHoundTimeSeries> series = new List<TrakHoundTimeSeries>();
+    private int selectedSeries;
+    private List<string> fields = new List<string>();
+    private HashSet<string> numericFields = new HashSet<string>();
+    private HashSet<string> selectedFields = new HashSet<string>();
+    private string start;
+    private string stop;
+    private DateTimeOffset? latest;
+    private DateTimeOffset queryStart;
+    private DateTimeOffset queryStop;
+    private string function = TrakHoundTimeSeriesAggregate.Mean.ToString();
+    private string window = _autoWindow;
+    private TrakHoundTimeSeriesResult result;
+    private List<Chart> charts = new List<Chart>();
+    private string note;
+    private string errorMessage;
+    private string previousKey;
+    private bool showWrite;
+    private bool loading = true;
+    private int queryVersion;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    [Parameter]
+    public string Measurement { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        queryVersion++;
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        var key = $"{InstanceId}:{ConfigurationId}:{Measurement}";
+        if (key != previousKey)
+        {
+            previousKey = key;
+            showWrite = false;
+
+            await explorerService.LoadInstance(InstanceId);
+            service = explorerService.GetServices(InstanceId, ConfigurationId);
+
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+            breadcrumbItems.Add(new BreadcrumbItem("TimeSeries", Url.Combine("_admin/explorer", InstanceId, "services", "time-series")));
+            breadcrumbItems.Add(new BreadcrumbItem(GetServiceName(), Url.Combine("_admin/explorer", InstanceId, "services", "time-series", ConfigurationId)));
+            breadcrumbItems.Add(new BreadcrumbItem(Measurement, null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            await LoadSeries();
+        }
+    }
+
+    private async Task LoadSeries()
+    {
+        loading = true;
+        result = null;
+        errorMessage = null;
+        await InvokeAsync(StateHasChanged);
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null)
+        {
+            errorMessage = $"Instance {InstanceId} is not available";
+            loading = false;
+            return;
+        }
+
+        try
+        {
+            var response = await client.Services.TimeSeries.ListSeries(Measurement, routerId: ConfigurationId);
+            if (!response.Success)
+            {
+                errorMessage = GetMessage(response.StatusCode, response.Message);
+                loading = false;
+                return;
+            }
+
+            // Stay on the same Series when reloading (ex. after a Write), since a new Series can change the order
+            var previous = GetSelectedSeries();
+            series = response.Result?.ToList() ?? new List<TrakHoundTimeSeries>();
+            selectedSeries = previous != null ? Math.Max(0, series.FindIndex(o => GetSeriesLabel(o) == GetSeriesLabel(previous))) : 0;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            loading = false;
+            return;
+        }
+
+        await LoadFields();
+    }
+
+    private async Task LoadFields()
+    {
+        fields = new List<string>();
+        numericFields = new HashSet<string>();
+        selectedFields = new HashSet<string>();
+        latest = null;
+
+        var selected = GetSelectedSeries();
+        if (selected == null)
+        {
+            loading = false;
+            result = null;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            var client = explorerService.GetClient(InstanceId, ConfigurationId);
+
+            var fieldsResponse = await client.Services.TimeSeries.ListFields(Measurement, routerId: ConfigurationId);
+            if (!fieldsResponse.Success)
+            {
+                errorMessage = GetMessage(fieldsResponse.StatusCode, fieldsResponse.Message);
+                loading = false;
+                return;
+            }
+
+            foreach (var field in fieldsResponse.Result ?? Enumerable.Empty<TrakHoundTimeSeriesField>())
+            {
+                fields.Add(field.Name);
+                if (field.Type == TrakHoundTimeSeriesFieldType.Double || field.Type == TrakHoundTimeSeriesFieldType.Long) numericFields.Add(field.Name);
+            }
+
+            // The newest Point gives a range that has data, however old it is
+            var response = await client.Services.TimeSeries.ReadLatest(Measurement, TrakHoundTimeSeriesQuery.GetTagFilter(selected.Tags), routerId: ConfigurationId);
+            if (!response.Success)
+            {
+                errorMessage = GetMessage(response.StatusCode, response.Message);
+                loading = false;
+                return;
+            }
+
+            var latestResult = response.Result?.FirstOrDefault(o => IsSeries(o.Tags, selected));
+            if (latestResult != null && !latestResult.Values.IsNullOrEmpty())
+            {
+                latest = latestResult.Values.Max(o => o.Timestamp);
+                selectedFields = new HashSet<string>(fields);
+                SetRange(TimeSpan.FromDays(1));
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            loading = false;
+            return;
+        }
+
+        await Query();
+    }
+
+    private async Task Query()
+    {
+        var version = ++queryVersion;
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        var selected = GetSelectedSeries();
+        if (client == null || selected == null) return;
+
+        var startTime = TimeSeriesExplorer.ParseTime(start);
+        var stopTime = TimeSeriesExplorer.ParseTime(stop);
+        if (startTime == null || stopTime == null || startTime >= stopTime)
+        {
+            errorMessage = "Start must be before Stop";
+            result = null;
+            loading = false;
+            return;
+        }
+
+        loading = true;
+        errorMessage = null;
+        note = null;
+        await InvokeAsync(StateHasChanged);
+
+        queryStart = startTime.Value;
+        queryStop = stopTime.Value;
+
+        try
+        {
+            TrakHoundServiceResponse<TrakHoundTimeSeriesResult[]> response;
+            var names = fields.Where(selectedFields.Contains).ToArray();
+
+            if (names.Length < 1)
+            {
+                result = null;
+                charts = new List<Chart>();
+                loading = false;
+                return;
+            }
+
+            if (function == _raw)
+            {
+                response = await client.Services.TimeSeries.Read(new TrakHoundTimeSeriesQuery
+                {
+                    Measurement = Measurement,
+                    Tags = TrakHoundTimeSeriesQuery.GetTagFilter(selected.Tags),
+                    Fields = names,
+                    Start = queryStart,
+                    Stop = queryStop,
+                    Take = TrakHoundTimeSeriesQuery.MaxTake
+                }, routerId: ConfigurationId);
+            }
+            else
+            {
+                var aggregate = Enum.Parse<TrakHoundTimeSeriesAggregate>(function);
+
+                // A Function that needs a number can't run on the other Fields, so they're left out instead of failing the whole Query
+                var usable = names.Where(o => numericFields.Contains(o) || TrakHoundTimeSeriesValidation.IsSupported(aggregate, TrakHoundTimeSeriesFieldType.String)).ToArray();
+                if (usable.Length < names.Length) note = $"{aggregate} needs a number, so it leaves out {string.Join(", ", names.Except(usable))}";
+
+                if (usable.Length < 1)
+                {
+                    result = null;
+                    charts = new List<Chart>();
+                    loading = false;
+                    return;
+                }
+
+                var range = queryStop - queryStart;
+                var interval = window != _autoWindow ? TimeSeriesExplorer.GetWindow(range, TimeSpan.Parse(window)) : TimeSeriesExplorer.GetInterval(range);
+                var longer = window != _autoWindow && interval != TimeSpan.Parse(window) ? $" ({TimeSeriesExplorer.FormatInterval(TimeSpan.Parse(window))} is too short for this range)" : "";
+                note = $"{aggregate} every {TimeSeriesExplorer.FormatInterval(interval)}{longer}" + (note != null ? $". {note}" : "");
+
+                response = await client.Services.TimeSeries.Aggregate(new TrakHoundTimeSeriesAggregateQuery
+                {
+                    Measurement = Measurement,
+                    Tags = TrakHoundTimeSeriesQuery.GetTagFilter(selected.Tags),
+                    Fields = usable,
+                    Start = queryStart,
+                    Stop = queryStop,
+                    Interval = interval,
+                    Functions = new[] { aggregate }
+                }, routerId: ConfigurationId);
+            }
+
+            // A newer Query started while this one was running
+            if (version != queryVersion) return;
+
+            if (response.Success)
+            {
+                result = FindSeries(response.Result, selected);
+
+                if (function == _raw && result?.HasMore == true) note = $"Showing the first {TrakHoundTimeSeriesQuery.MaxTake:N0} Points of this range. Choose a shorter range or a Function to see all of it";
+                else if (result?.Rows?.Length > _maxTableRows) note = (note != null ? $"{note}. " : "") + $"The table shows the newest {_maxTableRows:N0} of {result.Rows.Length:N0} Rows";
+
+                charts = CreateCharts(result);
+            }
+            else
+            {
+                result = null;
+                charts = new List<Chart>();
+                errorMessage = GetMessage(response.StatusCode, response.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            result = null;
+            charts = new List<Chart>();
+            errorMessage = ex.Message;
+        }
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private List<Chart> CreateCharts(TrakHoundTimeSeriesResult source)
+    {
+        var output = new List<Chart>();
+        if (source?.Rows == null) return output;
+
+        for (var i = 1; i < source.Columns.Length; i++)
+        {
+            if (TrakHoundTimeSeriesResult.IsQualityColumn(source.Columns[i])) continue;
+
+            // Only numbers can be charted, and null only means a Row has no Value for this Field
+            var column = i;
+            if (!source.Rows.Any(row => TimeSeriesExplorer.IsNumber(row[column]))) continue;
+
+            var points = source.Rows.Where(row => function != _raw || row[column] != null).Select(row => ((DateTimeOffset)row[0], row[column] != null ? (double?)Convert.ToDouble(row[column]) : null)).ToList();
+            var lines = TimeSeriesExplorer.GetLines(points, queryStart, queryStop, _chartWidth, _chartHeight, out var min, out var max);
+
+            output.Add(new Chart { Title = source.Columns[i], Lines = lines, Min = min, Max = max });
+        }
+
+        return output;
+    }
+
+    private void SetRange(TimeSpan length)
+    {
+        var end = latest != null ? latest.Value.AddSeconds(1) : DateTimeOffset.UtcNow;
+        stop = end.UtcDateTime.ToString(TimeSeriesExplorer.TimeInputFormat);
+        start = end.Subtract(length).UtcDateTime.ToString(TimeSeriesExplorer.TimeInputFormat);
+    }
+
+    private async Task RangeClicked(TimeSpan length)
+    {
+        SetRange(length);
+        await Query();
+    }
+
+    private async Task SeriesChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var index))
+        {
+            selectedSeries = index;
+            await LoadFields();
+        }
+    }
+
+    private async Task FieldChanged(string field, ChangeEventArgs args)
+    {
+        if (args.Value is true) selectedFields.Add(field);
+        else selectedFields.Remove(field);
+
+        await Query();
+    }
+
+    private async Task PointWritten(string measurement)
+    {
+        notificationService.AddNotification(NotificationType.Success, "Point Written", measurement);
+        showWrite = false;
+
+        // A new Tag combination, or a Point that moves the newest time
+        await LoadSeries();
+    }
+
+    private void PointWriteFailed(string message)
+    {
+        notificationService.AddNotification(NotificationType.Error, "Write Failed", message);
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private TrakHoundTimeSeries GetSelectedSeries() => selectedSeries >= 0 && selectedSeries < series.Count ? series[selectedSeries] : null;
+
+    // Tags select every Series that has them, so a Series with more Tags can also come back
+    private static TrakHoundTimeSeriesResult FindSeries(TrakHoundTimeSeriesResult[] results, TrakHoundTimeSeries selected)
+    {
+        return results?.FirstOrDefault(o => IsSeries(o.Tags, selected));
+    }
+
+    private static bool IsSeries(Dictionary<string, string> tags, TrakHoundTimeSeries selected)
+    {
+        return (tags?.Count ?? 0) == (selected.Tags?.Count ?? 0) && (selected.Tags == null || selected.Tags.All(tag => tags.TryGetValue(tag.Key, out var value) && value == tag.Value));
+    }
+
+    private static string GetSeriesLabel(TrakHoundTimeSeries item)
+    {
+        return item.Tags.IsNullOrEmpty() ? "(no Tags)" : string.Join(", ", item.Tags.OrderBy(o => o.Key).Select(o => $"{o.Key}={o.Value}"));
+    }
+
+    private string GetSeriesTagsText()
+    {
+        var tags = GetSelectedSeries()?.Tags;
+        return tags != null ? string.Join("\n", tags.OrderBy(o => o.Key).Select(o => $"{o.Key}={o.Value}")) : null;
+    }
+
+    private string GetEmptyText()
+    {
+        if (series.Count < 1) return "This Measurement has no Series";
+        if (selectedFields.Count < 1) return "Select a Field";
+        return "No Points in this range for the selected Fields";
+    }
+
+    private static string GetMessage(int statusCode, string message) => !string.IsNullOrEmpty(message) ? message : $"Status Code {statusCode}";
+
+    private string GetServiceName()
+    {
+        return !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+    }
+
+    private string GetDescription()
+    {
+        var description = GetServiceName();
+        description += series.Count == 1 ? " · 1 Series" : $" · {series.Count:N0} Series";
+        if (latest != null) description += $" · Newest Point {TimeSeriesExplorer.FormatValue(latest)} UTC";
+        return description;
+    }
+
+}

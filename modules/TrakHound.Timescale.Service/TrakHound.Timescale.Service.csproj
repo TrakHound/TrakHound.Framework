@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>$(TrakHoundTargetFramework)</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Npgsql" Version="9.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
+	</ItemGroup>
+
+	<!-- Compiled in, not referenced: a Package reference would load PostgresTableService as a Service of this Package too -->
+	<ItemGroup>
+		<Compile Include="..\TrakHound.Postgres.Service\PostgresConnectionString.cs" Link="Postgres\PostgresConnectionString.cs" />
+		<Compile Include="..\TrakHound.Postgres.Service\PostgresErrors.cs" Link="Postgres\PostgresErrors.cs" />
+	</ItemGroup>
+
+</Project>

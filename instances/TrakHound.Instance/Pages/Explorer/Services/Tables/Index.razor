@@ -1,0 +1,568 @@
+@page "/_admin/explorer/{instanceId}/services/tables/{configurationId}"
+@page "/_admin/explorer/{instanceId}/services/tables/{configurationId}/{tableId}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Services
+@using TrakHound.Services.Tables
+
+<TrakHoundPageTitle Text="@($"{(!string.IsNullOrEmpty(TableId) ? $"{TableId} - " : "")}{GetServiceName()} - Tables")" />
+
+<div class="tables-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-table"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">@GetServiceName()</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="body-panel">
+
+        <div class="sidebar-panel">
+            <div class="sidebar-toolbar">
+                <div class="filter">
+                    <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                    <input type="text" placeholder="Filter Tables" aria-label="Filter Tables" value="@tableFilter" @oninput="TableFilterChanged" @onkeydown="TableFilterKeyDown" />
+                    @if (!string.IsNullOrWhiteSpace(tableFilter))
+                    {
+                        <button class="btn-clear-filter" title="Clear Filter" @onclick="() => tableFilter = null"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                    }
+                </div>
+                <button class="btn btn-light btn-icon" title="Refresh Tables" @onclick="RefreshTablesClicked" disabled="@tablesLoading">
+                    <span class="fa-solid fa-sharp fa-rotate @(tablesLoading ? "spin" : "")"></span>
+                </button>
+            </div>
+            <div class="sidebar-list">
+                @if (tablesLoading && tables.Count < 1)
+                {
+                    <div class="sidebar-message"><span class="icon fa-regular fa-sharp fa-loader spin"></span>Loading Tables..</div>
+                }
+                else if (tablesError != null)
+                {
+                    <div class="sidebar-message error" title="@tablesError"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Tables could not be Loaded</div>
+                }
+                else if (tables.Count < 1)
+                {
+                    <div class="sidebar-message">No Tables</div>
+                }
+                else
+                {
+                    var groups = GetTableGroups();
+                    if (groups.Count < 1)
+                    {
+                        <div class="sidebar-message">No matching Tables</div>
+                    }
+
+                    foreach (var group in groups)
+                    {
+                        if (!string.IsNullOrEmpty(group.Key))
+                        {
+                            <div class="schema-header">@group.Key</div>
+                        }
+
+                        foreach (var table in group)
+                        {
+                            <a class="table-item @(table.Id == TableId ? "active" : "")" href="@GetTableLink(table)" title="@GetTableTitle(table)">
+                                <span class="icon @(table.Type == TrakHoundTableType.View ? "fa-regular fa-sharp fa-eye" : "fa-regular fa-sharp fa-table")"></span>
+                                <span class="table-name">@table.Name</span>
+                            </a>
+                        }
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="main-panel">
+            <RadzenSplitter Orientation="Orientation.Vertical">
+                <RadzenSplitterPane Min="90px" Size="180px" Collapsible="false">
+                    <div class="query-panel">
+                        <div class="query-toolbar">
+                            @if (!queryLoading)
+                            {
+                                <button class="btn btn-primary" @onclick="RunQuery" disabled="@string.IsNullOrWhiteSpace(query)" title="Run (Ctrl+Enter)"><span class="icon fa-solid fa-sharp fa-play"></span>Run</button>
+                            }
+                            else if (queryCancellation != null && !queryCancellation.IsCancellationRequested)
+                            {
+                                <button class="btn btn-light btn-loading" @onclick="CancelQuery" title="Cancel the Query"><span class="icon fa-regular fa-sharp fa-loader spin"></span>Cancel</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-light btn-loading" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Cancelling..</button>
+                            }
+                            <button class="btn btn-light" @onclick="ClearQuery" disabled="@(queryLoading || string.IsNullOrEmpty(query))"><span class="icon fa-regular fa-sharp fa-eraser"></span>Clear</button>
+
+                            <span class="query-status">
+                                @if (response != null && response.Cancelled)
+                                {
+                                    <span class="status cancelled"><span class="icon fa-solid fa-sharp fa-ban"></span>Cancelled</span>
+                                    <span class="duration">@FormatDuration(response.Duration)</span>
+                                }
+                                else if (response != null)
+                                {
+                                    <span class="status @(response.Success ? "success" : "error")">
+                                        <span class="icon @(response.Success ? "fa-solid fa-sharp fa-check" : "fa-solid fa-sharp fa-triangle-exclamation")"></span>
+                                        @(response.Success ? GetResultsText() : $"Failed ({response.StatusCode})")
+                                    </span>
+                                    <span class="duration">@FormatDuration(response.Duration)</span>
+                                    @if (!string.IsNullOrEmpty(response.ServiceId))
+                                    {
+                                        <span class="source" title="Router @response.RouterId">from @GetServiceLabel(response.ServiceId)</span>
+                                    }
+                                }
+                                else if (!queryLoading)
+                                {
+                                    <span class="hint">Ctrl+Enter to Run</span>
+                                }
+                            </span>
+                        </div>
+                        <div class="query-input">
+                            <textarea spellcheck="false" placeholder="Enter a query or select a Table" aria-label="Query" @bind="@query" @bind:event="oninput" @onkeydown="QueryKeyDown"></textarea>
+                        </div>
+                    </div>
+                </RadzenSplitterPane>
+                <RadzenSplitterPane Min="100px" Collapsible="false">
+                    <div class="results-container">
+                        @if (queryLoading)
+                        {
+                            <div class="loading-panel">
+                                <Loading Message="Running Query.." />
+                            </div>
+                        }
+                        else if (response == null)
+                        {
+                            <div class="empty-panel">
+                                <span class="icon fa-solid fa-sharp fa-table"></span>
+                                <span class="empty-title">No Results</span>
+                                <span class="empty-description">Select a Table, or enter a query and Run it</span>
+                            </div>
+                        }
+                        else if (response.Cancelled)
+                        {
+                            <div class="empty-panel">
+                                <span class="icon fa-solid fa-sharp fa-ban"></span>
+                                <span class="empty-title">Query Cancelled</span>
+                                <span class="empty-description">The query was cancelled before it completed</span>
+                            </div>
+                        }
+                        else if (!response.Success)
+                        {
+                            <div class="error-panel">
+                                <div class="error-title"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Query Failed (Status Code @response.StatusCode)</div>
+                                <pre class="error-message">@(!string.IsNullOrEmpty(response.Message) ? response.Message : "No message was returned")</pre>
+                            </div>
+                        }
+                        else
+                        {
+                            var tabs = GetTabs();
+                            if (tabs.Count > 0)
+                            {
+                                var selected = Math.Clamp(selectedTab, 0, tabs.Count - 1);
+
+                                <div class="results-tabs">
+                                    <div class="tab-strip" role="tablist">
+                                        @for (var i = 0; i < tabs.Count; i++)
+                                        {
+                                            var tabIndex = i;
+                                            var tab = tabs[i];
+                                            <button class="tab @(tabIndex == selected ? "active" : "")" role="tab" @onclick="() => selectedTab = tabIndex">
+                                                <span class="icon @(tab.Result != null ? "fa-regular fa-sharp fa-table" : "fa-regular fa-sharp fa-message")"></span>@tab.Title
+                                            </button>
+                                        }
+                                    </div>
+                                    <div class="tab-content">
+                                        @if (tabs[selected].Result != null)
+                                        {
+                                            <Results Result="@tabs[selected].Result" />
+                                        }
+                                        else
+                                        {
+                                            <pre class="messages">@tabs[selected].Message</pre>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="empty-panel">
+                                    <span class="icon fa-solid fa-sharp fa-check"></span>
+                                    <span class="empty-title">Query Completed</span>
+                                    <span class="empty-description">The query did not return any Results</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                </RadzenSplitterPane>
+            </RadzenSplitter>
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+
+    private const int _defaultRowLimit = 100;
+
+    private List<TrakHoundTable> tables = new List<TrakHoundTable>();
+    private TrakHoundServiceInformation service;
+    private QueryResponse response;
+    private string previousKey;
+    private string previousTableKey;
+    private string tableFilter;
+    private string tablesError;
+    private string query;
+    private int selectedTab;
+    private int queryVersion;
+    private bool tablesLoading;
+    private bool queryLoading;
+    private CancellationTokenSource queryCancellation;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    [Parameter]
+    public string TableId { get; set; }
+
+
+    class QueryResponse
+    {
+        public bool Success { get; set; }
+        public bool Cancelled { get; set; }
+        public int StatusCode { get; set; }
+        public string Message { get; set; }
+        public string RouterId { get; set; }
+        public string ServiceId { get; set; }
+        public TimeSpan Duration { get; set; }
+        public TrakHoundTableResult[] Results { get; set; }
+    }
+
+    class ResultTab
+    {
+        public string Title { get; set; }
+        public TrakHoundTableResult Result { get; set; }
+        public string Message { get; set; }
+    }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        var key = $"{InstanceId}:{ConfigurationId}";
+        if (key != previousKey)
+        {
+            // Navigated to a different Service (cancel and ignore a Query still running for the previous one)
+            queryCancellation?.Cancel();
+            queryCancellation = null;
+            queryVersion++;
+            queryLoading = false;
+
+            previousKey = key;
+            previousTableKey = null;
+            tableFilter = null;
+            query = null;
+            response = null;
+
+            await explorerService.LoadInstance(InstanceId);
+            service = explorerService.GetServices(InstanceId, ConfigurationId);
+
+            SetBreadcrumbs();
+
+            tables = explorerService.GetServiceTables(InstanceId, ConfigurationId)?.ToList() ?? new List<TrakHoundTable>();
+            if (tables.Count < 1) await LoadTables();
+        }
+
+        var tableKey = $"{key}:{TableId}";
+        if (tableKey != previousTableKey)
+        {
+            // Selected a different Table : Query its first rows
+            previousTableKey = tableKey;
+
+            var table = GetSelectedTable();
+            if (table != null)
+            {
+                query = GetSelectQuery(table);
+                await RunQuery();
+            }
+        }
+    }
+
+    private void SetBreadcrumbs()
+    {
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+        breadcrumbItems.Add(new BreadcrumbItem("Tables", Url.Combine("_admin/explorer", InstanceId, "services", "tables")));
+        breadcrumbItems.Add(new BreadcrumbItem(GetServiceName(), Url.Combine("_admin/explorer", InstanceId, "services", "tables", ConfigurationId)));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+    }
+
+    private async Task LoadTables()
+    {
+        if (tablesLoading) return;
+
+        tablesLoading = true;
+        tablesError = null;
+        await InvokeAsync(StateHasChanged);
+
+        var client = explorerService.GetClient(InstanceId);
+        if (client != null)
+        {
+            try
+            {
+                var tablesResponse = await client.Services.Tables.List(routerId: ConfigurationId);
+                if (tablesResponse.Success || tablesResponse.StatusCode == 404)
+                {
+                    tables = tablesResponse.Result?.Where(o => o != null && !string.IsNullOrEmpty(o.Name)).ToList() ?? new List<TrakHoundTable>();
+
+                    // Update the Explorer Tree
+                    await explorerService.LoadServiceTables(InstanceId, ConfigurationId);
+                }
+                else
+                {
+                    tablesError = !string.IsNullOrEmpty(tablesResponse.Message) ? tablesResponse.Message : $"Status Code {tablesResponse.StatusCode}";
+                }
+            }
+            catch (Exception ex)
+            {
+                tablesError = ex.Message;
+            }
+        }
+        else
+        {
+            tablesError = $"Instance {InstanceId} is not available";
+        }
+
+        tablesLoading = false;
+        await InvokeAsync(StateHasChanged);
+
+        // Run the Table's query if the Table was not known before the list was loaded
+        if (response == null && !queryLoading && GetSelectedTable() is TrakHoundTable selectedTable)
+        {
+            query = GetSelectQuery(selectedTable);
+            await RunQuery();
+        }
+    }
+
+    private async Task RunQuery()
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+
+        var client = explorerService.GetClient(InstanceId);
+        if (client == null) return;
+
+        var version = ++queryVersion;
+        var queryText = query;
+
+        // Cancel a Query that is still running (its response is ignored)
+        queryCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        var cancellationToken = cancellation.Token;
+        queryCancellation = cancellation;
+
+        queryLoading = true;
+        selectedTab = 0;
+        await InvokeAsync(StateHasChanged);
+
+        var result = new QueryResponse();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            var queryResponse = await client.Services.Tables.ExecuteQuery(queryText, routerId: ConfigurationId, cancellationToken: cancellationToken);
+            result.Success = queryResponse.Success;
+            result.StatusCode = queryResponse.StatusCode;
+            result.Message = queryResponse.Message;
+            result.RouterId = queryResponse.RouterId;
+            result.ServiceId = queryResponse.ServiceId;
+            result.Results = queryResponse.Result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.StatusCode = 500;
+            result.Message = ex.Message;
+        }
+
+        stopwatch.Stop();
+        result.Duration = stopwatch.Elapsed;
+
+        // Ignore the response if another query was run since
+        if (version != queryVersion) return;
+
+        // A Service that doesn't support cancellation may still return a response after Cancel was clicked
+        if (cancellationToken.IsCancellationRequested)
+        {
+            result = new QueryResponse { Cancelled = true, Duration = stopwatch.Elapsed };
+        }
+
+        queryCancellation = null;
+        response = result;
+        queryLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelQuery()
+    {
+        queryCancellation?.Cancel();
+    }
+
+    void IDisposable.Dispose()
+    {
+        queryCancellation?.Cancel();
+    }
+
+    private async Task QueryKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && (args.CtrlKey || args.MetaKey) && !queryLoading)
+        {
+            await RunQuery();
+        }
+    }
+
+    private void ClearQuery()
+    {
+        query = null;
+        response = null;
+    }
+
+    private async Task RefreshTablesClicked()
+    {
+        await LoadTables();
+    }
+
+    private void TableFilterChanged(ChangeEventArgs args)
+    {
+        tableFilter = args.Value?.ToString();
+    }
+
+    private void TableFilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") tableFilter = null;
+    }
+
+    private List<IGrouping<string, TrakHoundTable>> GetTableGroups()
+    {
+        var items = tables.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(tableFilter))
+        {
+            var value = tableFilter.Trim();
+            items = items.Where(o => o.Name.Contains(value, StringComparison.OrdinalIgnoreCase) || (o.Schema?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return items
+            .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(o => o.Schema ?? "")
+            .OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private List<ResultTab> GetTabs()
+    {
+        var tabs = new List<ResultTab>();
+        var messages = new List<string>();
+
+        var results = response?.Results ?? Array.Empty<TrakHoundTableResult>();
+        var resultSets = results.Where(o => o?.Columns != null).ToList();
+
+        for (var i = 0; i < resultSets.Count; i++)
+        {
+            var rowCount = resultSets[i].Rows?.Length ?? 0;
+            var title = resultSets.Count > 1 ? $"Results {i + 1} ({rowCount:N0})" : $"Results ({rowCount:N0})";
+            tabs.Add(new ResultTab { Title = title, Result = resultSets[i] });
+        }
+
+        messages.AddRange(results.Where(o => !string.IsNullOrEmpty(o?.Message)).Select(o => o.Message));
+        if (!string.IsNullOrEmpty(response?.Message) && !messages.Contains(response.Message)) messages.Add(response.Message);
+
+        if (messages.Count > 0)
+        {
+            tabs.Add(new ResultTab { Title = "Messages", Message = string.Join(Environment.NewLine, messages) });
+        }
+
+        return tabs;
+    }
+
+
+    private TrakHoundTable GetSelectedTable()
+    {
+        if (string.IsNullOrEmpty(TableId)) return null;
+        return tables.FirstOrDefault(o => o.Id == TableId) ?? explorerService.GetServiceTable(InstanceId, ConfigurationId, TableId);
+    }
+
+    private string GetSelectQuery(TrakHoundTable table)
+    {
+        // Use the syntax of the Service's database
+        var packageId = service?.PackageId ?? "";
+        if (packageId.Contains("SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            var name = !string.IsNullOrEmpty(table.Schema) ? $"[{table.Schema}].[{table.Name}]" : $"[{table.Name}]";
+            return $"select top {_defaultRowLimit} * from {name};";
+        }
+        else if (packageId.Contains("MySql", StringComparison.OrdinalIgnoreCase) || packageId.Contains("MariaDb", StringComparison.OrdinalIgnoreCase))
+        {
+            var name = !string.IsNullOrEmpty(table.Schema) ? $"`{table.Schema}`.`{table.Name}`" : $"`{table.Name}`";
+            return $"select * from {name} limit {_defaultRowLimit};";
+        }
+        else
+        {
+            var name = !string.IsNullOrEmpty(table.Schema) ? $"\"{table.Schema}\".\"{table.Name}\"" : $"\"{table.Name}\"";
+            return $"select * from {name} limit {_defaultRowLimit};";
+        }
+    }
+
+    private string GetServiceName()
+    {
+        return !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+    }
+
+    private string GetDescription()
+    {
+        var description = !string.IsNullOrEmpty(service?.Description) ? service.Description : "Table Service";
+        if (!string.IsNullOrEmpty(service?.PackageId)) description += $" · {service.PackageId}";
+        if (tables.Count > 0) description += tables.Count == 1 ? " · 1 Table" : $" · {tables.Count:N0} Tables";
+        return description;
+    }
+
+    private string GetServiceLabel(string serviceId)
+    {
+        var responseService = explorerService.GetServices(InstanceId, serviceId);
+        return !string.IsNullOrEmpty(responseService?.Name) ? responseService.Name : serviceId;
+    }
+
+    private string GetResultsText()
+    {
+        var resultSets = response?.Results?.Where(o => o?.Columns != null).ToList();
+        if (resultSets.IsNullOrEmpty()) return "Completed";
+
+        var rowCount = resultSets.Sum(o => o.Rows?.Length ?? 0);
+        var rowText = rowCount == 1 ? "1 Row" : $"{rowCount:N0} Rows";
+        return resultSets.Count > 1 ? $"{resultSets.Count} Results · {rowText}" : rowText;
+    }
+
+    private string GetTableLink(TrakHoundTable table)
+    {
+        return Url.Combine("_admin/explorer", InstanceId, "services", "tables", ConfigurationId, table.Id);
+    }
+
+    private static string GetTableTitle(TrakHoundTable table)
+    {
+        var name = !string.IsNullOrEmpty(table.Schema) ? $"{table.Schema}.{table.Name}" : table.Name;
+        return $"{name} ({table.Type})";
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.###} s";
+        return $"{duration.TotalMilliseconds:0} ms";
+    }
+
+}

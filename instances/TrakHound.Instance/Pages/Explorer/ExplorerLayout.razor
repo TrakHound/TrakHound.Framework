@@ -1,0 +1,186 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@rendermode InteractiveServer
+@inject NavigationManager navigationManager
+@inject ExplorerService explorerService
+@inject ExplorerTreeViewService explorerTreeService
+@using TrakHound.Clients
+@using TrakHound.Configurations
+
+<div class="explorer @(sidebarCollapsed ? "sidebar-collapsed" : null)">
+
+    @* Header : Title and the page's Breadcrumbs (the same as the other areas) *@
+    <div class="explorer-header">
+        <AreaHeader Icon="fa-regular fa-sharp fa-list-tree" Title="Explorer" Subtitle="Browse App, API, Functions, Workers, & Services" Link="_admin/explorer" />
+        <ExplorerBreadcrumbs />
+    </div>
+
+    <div class="explorer-container">
+
+        @if (sidebarCollapsed)
+        {
+            <div class="explorer-navigation-sidebar">
+                <button class="btn btn-light" title="Show the Explorer Sidebar" aria-label="Show the Explorer Sidebar" @onclick="() => SetSidebarCollapsed(false)">
+                    <span class="icon fa-regular fa-sharp fa-list-tree"></span>
+                </button>
+                <button class="btn btn-light" title="Refresh" aria-label="Refresh the Explorer" @onclick="Refresh" disabled="@loading">
+                    <span class="icon fa-solid fa-sharp @(loading ? "fa-loader spin" : "fa-rotate")"></span>
+                </button>
+            </div>
+        }
+
+        <div class="explorer-content">
+            @* The Sidebar is hidden with CSS (instead of removing the Splitter) so the page (Body) is not recreated *@
+            <RadzenSplitter>
+                <RadzenSplitterPane Size="350px" Collapsible="false">
+                    <div class="explorer-sidebar">
+                        <div class="explorer-sidebar-content">
+                            <div class="explorer-sidebar-toolbar">
+
+                                @if (!loading)
+                                {
+                                    <button class="btn btn-toolbar" title="Refresh" @onclick="Refresh"><span class="icon fa-solid fa-sharp fa-rotate"></span></button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-toolbar" title="Refreshing"><span class="icon fa-solid fa-sharp fa-loader spin"></span></button>
+                                }
+
+                                <button class="btn btn-sm btn-toolbar" title="Expand All" @onclick="explorerTreeService.ExpandAll"><span class="icon fa-solid fa-sharp fa-layer-plus"></span></button>
+                                <button class="btn btn-sm btn-toolbar" title="Collapse All" @onclick="explorerTreeService.CollapseAll"><span class="icon fa-solid fa-sharp fa-layer-minus"></span></button>
+
+                                <div class="explorer-sidebar-filter">
+                                    <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                                    <input type="text" placeholder="Filter" aria-label="Filter the Explorer" value="@explorerTreeService.Filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+                                    @if (explorerTreeService.IsFiltering)
+                                    {
+                                        <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                                    }
+                                </div>
+
+                                <button class="btn btn-sm btn-toolbar" title="Hide the Explorer Sidebar" aria-label="Hide the Explorer Sidebar" @onclick="() => SetSidebarCollapsed(true)"><span class="icon fa-solid fa-sharp fa-angles-left"></span></button>
+
+                            </div>
+                            @if (explorerService.IsInstanceStarting)
+                            {
+                                @* The Instance is still loading its Modules (the tree reloads when it has Started) *@
+                                <div class="explorer-sidebar-starting" role="status">
+                                    <span class="icon fa-solid fa-sharp fa-loader spin"></span>
+                                    <span>The Instance is starting. More items will appear when it has finished.</span>
+                                </div>
+                            }
+                            <div class="explorer-sidebar-tree">
+                                <ExplorerTreeView />
+                            </div>
+                        </div>
+                    </div>
+                </RadzenSplitterPane>
+                <RadzenSplitterPane Min="25%" Collapsible="false">
+                    <div class="explorer-main">
+                        <div class="explorer-body">
+                            <TrakHoundPageTitleSuffix Text="Explorer">
+                                @Body
+                            </TrakHoundPageTitleSuffix>
+                        </div>
+                    </div>
+                </RadzenSplitterPane>
+            </RadzenSplitter>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private bool loaded;
+    private bool loading;
+    private bool sidebarCollapsed;
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        explorerService.InstanceStatusUpdated += InstanceStatusUpdated;
+
+        if (!loaded)
+        {
+            loaded = true;
+            await Load();
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        explorerService.InstanceStatusUpdated -= InstanceStatusUpdated;
+    }
+
+    private async void InstanceStatusUpdated(object sender, EventArgs args)
+    {
+        // Show or hide the Starting notice
+        try { await InvokeAsync(StateHasChanged); }
+        catch (ObjectDisposedException) { } // The circuit has closed
+    }
+
+    private async void Refresh()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        if (explorerService.SelectedInstanceId != null)
+        {
+            loading = true;
+            await InvokeAsync(StateHasChanged);
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, true);
+
+            loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Restore the Sidebar state (Local Storage requires JS Interop)
+            if (await explorerTreeService.GetSidebarCollapsed())
+            {
+                sidebarCollapsed = true;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task SetSidebarCollapsed(bool collapsed)
+    {
+        sidebarCollapsed = collapsed;
+        await explorerTreeService.SetSidebarCollapsed(collapsed);
+    }
+
+    private static string GetInstanceId(string path)
+    {
+        return Url.GetFirstFragment(path);
+    }
+
+    private static string GetPage(string path)
+    {
+        return Url.GetFirstFragment(Url.RemoveFirstFragment(path));
+    }
+
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        explorerTreeService.Filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        explorerTreeService.Filter = null;
+    }
+
+}

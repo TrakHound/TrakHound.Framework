@@ -1,0 +1,399 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/mcp"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHoundThemeService themeService
+@inject ITrakHoundInstance localInstance
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Instances
+@using TrakHound.Mcp
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<TrakHoundPageTitle Text="MCP Metrics - Diagnostics" />
+
+<div class="mcp-metrics-page" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-robot"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">MCP Metrics</span>
+                <span class="header-description">Tool calls, errors, denied calls and durations for the MCP Server (/_mcp), and the AI clients that connect · updated every second@(McpDisabledNote)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <MetricsDisabledNotice Area="Mcp" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (metrics != null)
+            {
+                var samples = GetSamples();
+
+                @* Current values (also the text equivalent of each chart Series) *@
+                <div class="stat-tiles">
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-1"></span>Tool Calls</span>
+                        <span class="stat-value">@FormatRate(metrics.CallRate)<span class="stat-unit">calls/s</span></span>
+                        <span class="stat-detail">@metrics.TotalCallCount.ToString("N0") total</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-6"></span>Errors</span>
+                        <span class="stat-value">@FormatRate(metrics.ErrorRate)<span class="stat-unit">err/s</span></span>
+                        <span class="stat-detail">@metrics.TotalErrorCount.ToString("N0") total · @metrics.TotalDeniedCount.ToString("N0") denied</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-2"></span>Average Duration</span>
+                        <span class="stat-value">@FormatMilliseconds(metrics.AverageDuration)</span>
+                        <span class="stat-detail">last @(metrics.Window)s</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-3"></span>Longest</span>
+                        <span class="stat-value">@FormatMilliseconds(metrics.MaxDuration)</span>
+                        <span class="stat-detail">last @(metrics.Window)s</span>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label"><span class="swatch series-4"></span>Clients</span>
+                        <span class="stat-value">@(metrics.Clients?.Count ?? 0)</span>
+                        <span class="stat-detail">@metrics.TotalInitializeCount.ToString("N0") connections</span>
+                    </div>
+                </div>
+
+                <div class="chart-grid">
+                    <MetricsChart TItem="McpSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Tool Calls"
+                                  Subtitle="@($"per second · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@callSeries"
+                                  ValueFormatter="@FormatRate" />
+
+                    <MetricsChart TItem="McpSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                                  Title="Duration"
+                                  Subtitle="@($"milliseconds · last {_windowText}")"
+                                  Samples="@samples"
+                                  Series="@durationSeries"
+                                  ValueFormatter="@FormatMilliseconds" />
+                </div>
+
+                <div class="section-title">Tools <span class="section-subtitle">since the Instance started</span></div>
+                @if (!metrics.Tools.IsNullOrEmpty())
+                {
+                    <div class="table-panel endpoints-panel">
+                        <RadzenDataGrid Data="@metrics.Tools"
+                                        TItem="TrakHoundMcpToolMetrics"
+                                        Density="Density.Compact"
+                                        AllowSorting="true"
+                                        AllowColumnResize="true">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="Name" Title="Tool" MinWidth="180px" />
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="TotalCallCount" Title="Calls" Width="90px" TextAlign="TextAlign.Right">
+                                    <Template Context="tool">
+                                        <span class="number">@tool.TotalCallCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="TotalErrorCount" Title="Errors" Width="80px" TextAlign="TextAlign.Right">
+                                    <Template Context="tool">
+                                        <span class="number @(tool.TotalErrorCount > 0 ? "has-errors" : null)" title="@tool.LastError">@tool.TotalErrorCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="TotalDeniedCount" Title="Denied" Width="80px" TextAlign="TextAlign.Right">
+                                    <Template Context="tool">
+                                        <span class="number @(tool.TotalDeniedCount > 0 ? "has-errors" : null)">@tool.TotalDeniedCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="AverageDuration" Title="Average" Width="95px" TextAlign="TextAlign.Right">
+                                    <Template Context="tool">
+                                        <span class="number">@FormatMilliseconds(tool.AverageDuration)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="MaxDuration" Title="Longest" Width="95px" TextAlign="TextAlign.Right">
+                                    <Template Context="tool">
+                                        <span class="number">@FormatMilliseconds(tool.MaxDuration)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="LastError" Title="Last Error" MinWidth="220px">
+                                    <Template Context="tool">
+                                        <span class="path" title="@tool.LastError">@(tool.LastError ?? "-")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpToolMetrics" Property="LastCalled" Title="Last Called" Width="120px">
+                                    <Template Context="tool">
+                                        <span class="number">@FormatTime(tool.LastCalled)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+                }
+                else
+                {
+                    <div class="section-empty">No Tools have been called since the Instance started</div>
+                }
+
+                <div class="section-title">Clients <span class="section-subtitle">since the Instance started</span></div>
+                @if (!metrics.Clients.IsNullOrEmpty())
+                {
+                    <div class="table-panel connections-panel">
+                        <RadzenDataGrid Data="@metrics.Clients"
+                                        TItem="TrakHoundMcpClientMetrics"
+                                        Density="Density.Compact"
+                                        AllowSorting="true"
+                                        AllowColumnResize="true">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpClientMetrics" Property="Name" Title="Client" MinWidth="180px" />
+                                <RadzenDataGridColumn TItem="TrakHoundMcpClientMetrics" Property="Version" Title="Version" Width="120px" />
+                                <RadzenDataGridColumn TItem="TrakHoundMcpClientMetrics" Property="RemoteAddress" Title="Address" Width="140px" />
+                                <RadzenDataGridColumn TItem="TrakHoundMcpClientMetrics" Property="InitializeCount" Title="Connections" Width="105px" TextAlign="TextAlign.Right">
+                                    <Template Context="client">
+                                        <span class="number">@client.InitializeCount.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TrakHoundMcpClientMetrics" Property="LastConnected" Title="Last Connected" Width="130px">
+                                    <Template Context="client">
+                                        <span class="number">@FormatTime(client.LastConnected)</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
+                }
+                else
+                {
+                    <div class="section-empty">No Clients have connected since the Instance started</div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-robot"></span>
+                    <span class="empty-title">No MCP Metrics</span>
+                    <span class="empty-description">MCP Metrics are not available for this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+    private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
+    private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
+
+    private readonly Queue<McpSample> _history = new Queue<McpSample>();
+    private readonly object _lock = new object();
+
+    private TrakHoundMcpMetrics metrics;
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private volatile bool disposed;
+
+    // Each Series has its own color slot across all charts on the page
+    private MetricsChartSeries[] callSeries;
+    private MetricsChartSeries[] durationSeries;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    // Only known for this Instance (the Explorer may be showing another Instance)
+    private string McpDisabledNote
+    {
+        get
+        {
+            if (localInstance == null || explorerService.SelectedInstanceId != localInstance.Id) return null;
+
+            var configuration = localInstance.Configuration;
+            if (configuration != null && (!configuration.SystemApiEnabled || !configuration.McpEnabled))
+            {
+                return " · The MCP Server is disabled on this Instance (Settings > Interfaces)";
+            }
+            return null;
+        }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading MCP Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            lock (_lock) _history.Clear();
+            metrics = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("MCP", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var updatedMetrics = await client.Mcp.GetMetrics();
+        var now = DateTime.UtcNow;
+
+        lock (_lock)
+        {
+            _history.Enqueue(McpSample.Create(updatedMetrics, now));
+            while (_history.Count > 0 && now - _history.Peek().Timestamp > _window) _history.Dequeue();
+        }
+
+        metrics = updatedMetrics;
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (disposed || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                if (!disposed) await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private IEnumerable<McpSample> GetSamples()
+    {
+        lock (_lock) return _history.ToArray();
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        callSeries = new[]
+        {
+            new MetricsChartSeries("Calls", nameof(McpSample.CallRate), colors[0]),
+            new MetricsChartSeries("Errors", nameof(McpSample.ErrorRate), colors[5])
+        };
+        durationSeries = new[]
+        {
+            new MetricsChartSeries("Average", nameof(McpSample.AverageDuration), colors[1]),
+            new MetricsChartSeries("Longest", nameof(McpSample.MaxDuration), colors[2])
+        };
+    }
+
+    private static double GetSampleValue(McpSample sample, string property) => sample.GetValue(property);
+
+    private static DateTime GetSampleTimestamp(McpSample sample) => sample.Timestamp;
+
+
+    private static string FormatRate(double value)
+    {
+        if (value >= 1000000) return $"{value / 1000000:0.#}M";
+        if (value >= 1000) return $"{value / 1000:0.#}k";
+        if (value >= 100) return value.ToString("0");
+        if (value >= 10) return value.ToString("0.#");
+        return value.ToString("0.##");
+    }
+
+    private static string FormatMilliseconds(double milliseconds)
+    {
+        if (milliseconds >= 1000) return TimeSpan.FromMilliseconds(milliseconds).ToFormattedString();
+        return $"{milliseconds:0.#} ms";
+    }
+
+    private static string FormatTime(DateTime? timestamp)
+    {
+        if (timestamp == null) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

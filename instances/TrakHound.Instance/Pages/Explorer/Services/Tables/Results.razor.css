@@ -1,0 +1,105 @@
+.results-panel {
+    display: grid;
+    grid-template-rows: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.results-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 2px;
+}
+
+    .results-toolbar .results-count {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .results-toolbar .btn-link {
+        font-size: var(--fontSizeSm);
+        padding: 0 6px;
+    }
+
+        .results-toolbar .btn-link .icon {
+            margin-right: 5px;
+        }
+
+            .results-toolbar .btn-link .icon.copied {
+                color: var(--colorGreen);
+            }
+
+.results-table-panel {
+    height: 100%;
+    overflow: hidden;
+}
+
+    .results-table-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: auto;
+    }
+
+        .results-table-panel ::deep .rz-data-grid td {
+            border-right: 1px solid var(--tableBorderColor);
+            padding: 2px 8px;
+        }
+
+            .results-table-panel ::deep .rz-data-grid td:last-child {
+                border-right: none;
+            }
+
+    .results-table-panel ::deep .rz-cell-data {
+        font-size: var(--fontSizeXs);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .results-table-panel .column-header {
+        font-size: var(--fontSizeXs);
+    }
+
+    .results-table-panel .cell-value {
+        font-family: var(--fontMono);
+        color: var(--textDark);
+    }
+
+        .results-table-panel .cell-value.number {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .results-table-panel .cell-value.null {
+            color: var(--textLight);
+            font-style: italic;
+        }
+
+    .results-table-panel .row-number {
+        color: var(--textLight);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .results-table-panel ::deep td.row-number-cell {
+        background: var(--panelBackgroundMedium);
+    }
+
+.results-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+    .results-empty .results-empty-title {
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .results-empty .results-empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }

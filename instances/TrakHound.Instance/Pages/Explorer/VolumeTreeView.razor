@@ -1,0 +1,89 @@
+﻿@using TrakHound.Clients
+
+<div class="volume-tree-view">
+    @if (_loaded && _rootDirectories.IsNullOrEmpty() && _rootFiles.IsNullOrEmpty())
+    {
+        <div class="volume-tree-empty">No files in this Volume</div>
+    }
+
+    <TreeView SelectedId="@SelectedFile">
+
+        @if (!_rootDirectories.IsNullOrEmpty())
+        {
+            foreach (var directory in _rootDirectories)
+            {
+                <VolumeTreeItem Client="@Client" VolumeId="@VolumeId" Path="@directory" FileSelected="FileSelected" />
+            }
+        }
+
+        @if (!_rootFiles.IsNullOrEmpty())
+        {
+            foreach (var file in _rootFiles)
+            {
+                <TreeItem Id="@file" Title="@VolumeFileIcons.GetName(file)" Icon="@VolumeFileIcons.Get(file)" IsExpandable="false" Selected="FileSelected" />
+            }
+        }
+
+    </TreeView>
+</div>
+
+@code {
+
+    private IEnumerable<string> _rootDirectories;
+    private IEnumerable<string> _rootFiles;
+    private bool _loaded;
+
+
+    [CascadingParameter(Name = "VolumeExplorer")]
+    public VolumeExplorer VolumeExplorer { get; set; }
+
+    [Parameter]
+    public ITrakHoundClient Client { get; set; }
+
+    [Parameter]
+    public string VolumeId { get; set; }
+
+    [Parameter]
+    public string SelectedFile { get; set; }
+
+    [Parameter]
+    public EventCallback<string> FileSelected { get; set; }
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        if (VolumeExplorer != null)
+        {
+            VolumeExplorer.VolumeChanged += ExplorerVolumeChanged;
+        }
+
+        await Load(VolumeId);
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+
+    }
+
+    private async void ExplorerVolumeChanged(object sender, string volumeId)
+    {
+        await Load(volumeId);
+    }
+
+    private async Task Load(string volumeId)
+    {
+        _rootDirectories = null;
+        _rootFiles = null;
+        _loaded = false;
+
+        if (Client != null)
+        {
+            _rootDirectories = await Client.Volumes.ListDirectories(volumeId, "/");
+            _rootFiles = await Client.Volumes.ListFiles(volumeId, "/");
+        }
+
+        _loaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

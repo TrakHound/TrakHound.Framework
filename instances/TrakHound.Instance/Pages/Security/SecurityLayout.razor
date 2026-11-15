@@ -1,0 +1,127 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@inject TrakHound.Instance.Security.TrakHoundAdminAccountStore adminAccounts
+@inject TrakHound.Instance.Security.TrakHoundAdminRoleStore adminRoles
+@using TrakHound.Instances
+@using TrakHound.Instance.Security
+@using TrakHound.Security
+
+<AreaLayout Icon="fa-solid fa-sharp fa-lock-keyhole" Title="Security" Subtitle="Control who can access Apis, Apps, Services, and the System API, and what Modules can reach" Link="_admin/security">
+    <Nav>
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.SecurityProfiles))
+        {
+            <AreaNavItem Href="_admin/security" Icon="fa-solid fa-sharp fa-grid-2" Label="Overview" Match="NavLinkMatch.All" />
+        }
+
+        @* Who can sign in and call this Instance (Security Profiles and Zones are in Configuration > Access, since deployments carry them) *@
+        @* Only the pages the signed in Admin's Roles let them view *@
+        @if (adminAccess.CanReadAny(TrakHoundAdminSecurity.IdentityProviders, TrakHoundAdminSecurity.Users, TrakHoundAdminSecurity.ApiKeys, TrakHoundAdminSecurity.Admins))
+        {
+            <AreaNavGroup Title="Identity" />
+        }
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.IdentityProviders))
+        {
+            <AreaNavItem Href="_admin/security/providers" Icon="fa-solid fa-sharp fa-id-badge" Label="Providers" Count="@ProviderCount" Issues="@ProviderIssueCount" IssuesTitle="@($"{ProviderIssueCount} Identity Provider(s) not loaded")" />
+        }
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.Users))
+        {
+            <AreaNavItem Href="_admin/security/users" Icon="fa-solid fa-sharp fa-users" Label="Users" Count="@UserCount" Issues="@DisabledUserCount" IssuesTitle="@($"{DisabledUserCount} disabled User(s)")" />
+        }
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.ApiKeys))
+        {
+            <AreaNavItem Href="_admin/security/api-keys" Icon="fa-solid fa-sharp fa-key" Label="API Keys" Count="@KeyCount" Issues="@ExpiredKeyCount" IssuesTitle="@($"{ExpiredKeyCount} expired API Key(s)")" />
+        }
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.Admins))
+        {
+            <AreaNavItem Href="_admin/security/admins" Icon="fa-solid fa-sharp fa-user-gear" Label="Admin Accounts" Count="@adminAccounts.GetAccounts().Count()" />
+            <AreaNavItem Href="_admin/security/admin-roles" Icon="fa-solid fa-sharp fa-list-check" Label="Admin Roles" Count="@TrakHoundAdminSecurity.AllRoles.Count" />
+        }
+
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.TrustedPublishers))
+        {
+            <AreaNavGroup Title="Packages" />
+            <AreaNavItem Href="_admin/security/trusted-publishers" Icon="fa-solid fa-sharp fa-signature" Label="Trusted Publishers" Issues="@RefusedPackageCount" IssuesTitle="@($"{RefusedPackageCount} Package version(s) refused")" />
+        }
+
+        @if (adminAccess.CanReadAny(TrakHoundAdminSecurity.SecurityProfiles, TrakHoundAdminSecurity.Audit))
+        {
+            <AreaNavGroup Title="Tools" />
+        }
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.SecurityProfiles))
+        {
+            <AreaNavItem Href="_admin/security/public" Icon="fa-solid fa-sharp fa-globe" Label="What is Public?" />
+            <AreaNavItem Href="_admin/security/access-check" Icon="fa-solid fa-sharp fa-user-shield" Label="Access Check" />
+        }
+        @if (adminAccess.CanRead(TrakHoundAdminSecurity.Audit))
+        {
+            <AreaNavItem Href="_admin/security/audit" Icon="fa-solid fa-sharp fa-clipboard-list" Label="Audit Log" />
+        }
+    </Nav>
+    <ChildContent>
+        <TrakHoundPageTitleSuffix Text="Security">
+            <SecurityPageStyles>
+                @Body
+            </SecurityPageStyles>
+        </TrakHoundPageTitleSuffix>
+    </ChildContent>
+</AreaLayout>
+
+@code {
+
+    private SecurityState state;
+
+    private int KeyCount => state.Keys.Count;
+    private int ExpiredKeyCount => state.Keys.Count(o => o.IsExpired);
+    private int ProviderCount => state.Providers.Count;
+    private int ProviderIssueCount => state.Providers.Count(o => !o.IsLoaded);
+    private int UserCount => state.Users.Count;
+    private int DisabledUserCount => state.Users.Count(o => !o.Enabled);
+    private int RefusedPackageCount => instance.PackageManager?.RefusedPackages?.Count() ?? 0;
+
+
+    protected override void OnInitialized()
+    {
+        state = SecurityState.Load(instance);
+
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+        instance.ConfigurationProfile.ConfigurationAdded += ConfigurationChanged;
+        instance.ConfigurationProfile.ConfigurationRemoved += ConfigurationChanged;
+        if (instance.PackageManager != null) instance.PackageManager.PackageVerified += PackageVerified;
+        adminAccounts.Changed += SecurityChanged;
+        adminRoles.Changed += SecurityChanged;
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Navigating between Security pages
+        state = SecurityState.Load(instance);
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+        instance.ConfigurationProfile.ConfigurationAdded -= ConfigurationChanged;
+        instance.ConfigurationProfile.ConfigurationRemoved -= ConfigurationChanged;
+        if (instance.PackageManager != null) instance.PackageManager.PackageVerified -= PackageVerified;
+        adminAccounts.Changed -= SecurityChanged;
+        adminRoles.Changed -= SecurityChanged;
+    }
+
+    private void PackageVerified(object sender, TrakHound.Packages.TrakHoundPackageVerifiedArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    private void SecurityChanged(object sender, EventArgs args) => Reload();
+
+    private void ConfigurationChanged(object sender, object args) => Reload();
+
+    private void Reload()
+    {
+        _ = InvokeAsync(() =>
+        {
+            state = SecurityState.Load(instance);
+            StateHasChanged();
+        });
+    }
+
+}

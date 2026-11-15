@@ -1,0 +1,189 @@
+﻿.package-select-item {
+    padding: 10px 10px 10px 25px;
+    border: 1px solid #ddd;
+    border: 1px solid var(--borderColor);
+    border-radius: 2px;
+    margin-top: 5px;
+    min-height: 55px;
+    background: #fdfdfd;
+    background: var(--panelItemBackground);
+}
+
+    .package-select-item.active {
+        background: var(--accentVeryVeryLight);
+        background: var(--panelItemBackgroundHover);
+        border: 1px solid var(--accentLight);
+    }
+
+    .package-select-item:hover {
+        border: 1px solid var(--accent);
+        cursor: default;
+    }
+
+    .package-select-item .package-select-item-content {
+        display: grid;
+        grid-template-columns: max-content 1fr max-content;
+    }
+
+    .package-select-item .icon-container {
+        grid-column: 1;
+        margin-right: 30px;
+        text-align: center;
+        width: 36px;
+    }
+
+        .package-select-item .icon-container ::deep img.icon {
+            max-width: 36px;
+            max-height: 36px;
+        }
+
+        .package-select-item .icon-container ::deep span.icon {
+            font-size: 30px;
+            line-height: 40px;
+            color: #ccc;
+            color: var(--textLight);
+        }
+
+    .package-select-item:hover .icon-container ::deep .icon,
+    .package-select-item.active .icon-container ::deep .icon {
+        color: var(--accent);
+    }
+
+    .package-select-item .package-select-item-content > .identity {
+        grid-column: 2;
+        padding-right: 50px;
+    }
+
+        .package-select-item .package-select-item-content > .identity > .identifier {
+            display: block;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 40px;
+            color: #555;
+            color: var(--textDark);
+            min-width: 150px;
+        }
+
+        .package-select-item .package-select-item-content > .identity .publisher {
+            color: #888;
+            color: var(--textLight);
+            font-size: 11px;
+            font-weight: normal;
+            margin-left: 8px;
+        }
+
+        .package-select-item .package-select-item-content > .identity .description {
+            display: block;
+            font-size: 11px;
+            color: #888;
+            color: var(--textMild);
+        }
+
+    .package-select-item.active .package-select-item-content > .identity .publisher,
+    .package-select-item.active .package-select-item-content > .identity .description {
+        color: #555;
+        color: var(--textDark);
+    }
+
+
+    .package-select-item .package-select-item-content > .license {
+        grid-column: 3;
+        padding: 5px 30px 5px 10px;
+    }
+
+        .package-select-item .package-select-item-content > .license .license-label {
+            color: var(--accent);
+            font-size: 12px;
+            padding: 10px 10px;
+            border: 1px solid var(--accent);
+            border: 1px solid #ddd;
+            border: 1px solid var(--borderColor);
+            border-radius: 2px;
+        }
+
+            .package-select-item .package-select-item-content > .license .license-label .icon {
+                color: var(--accent);
+                margin-right: 10px;
+                font-size: 12px;
+            }
+
+
+    .package-select-item .package-select-item-content > .buttons {
+        grid-column: 3;
+        width: auto;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+        .package-select-item .package-select-item-content > .buttons .btn {
+            margin-right: 10px;
+        }
+
+            .package-select-item .package-select-item-content > .buttons .btn:last-child {
+                margin-right: 0;
+            }
+
+    .package-select-item:hover .package-select-item-content > .buttons .btn-install {
+        background: var(--accent);
+        color: #fff;
+        color: var(--textDark);
+    }
+
+        .package-select-item:hover .package-select-item-content > .buttons .btn-install:hover {
+            background: var(--accentLight);
+        }
+
+        .package-select-item:hover .package-select-item-content > .buttons .btn-install .icon {
+            color: #fff;
+            color: var(--textDark);
+        }
+
+
+    .package-select-item .installed {
+        display: inline-block;
+        text-align: center;
+        margin-left: 10px;
+        margin-right: 0px;
+        font-size: 14px;
+        color: #aaa;
+        color: var(--textLight);
+        width: 70px;
+        height: 30px;
+    }
+
+    .package-select-item.active .installed {
+        color: #555;
+        color: var(--textMild);
+    }
+
+    .package-select-item .installing {
+        display: inline-block;
+        text-align: center;
+        margin-left: 10px;
+        margin-right: 0px;
+        font-size: 12px;
+        color: var(--accent);
+        width: 70px;
+        height: 30px;
+    }
+
+        .package-select-item .installing ::deep .lds-spinner {
+            padding-top: 5px;
+        }
+
+            .package-select-item .installing ::deep .lds-spinner div:after {
+                background: var(--accent);
+            }
+
+
+    .package-select-item .version {
+        display: inline-block;
+        margin-right: 20px;
+        font-size: 12px;
+        color: #333;
+        color: var(--textMild);
+    }
+
+        .package-select-item .version .symbol {
+            font-size: 12px;
+        }

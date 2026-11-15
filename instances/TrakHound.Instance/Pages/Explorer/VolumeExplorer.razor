@@ -1,0 +1,292 @@
+@using TrakHound.Clients
+
+<CascadingValue Name="VolumeExplorer" Value="this">
+    <div class="volume-panel">
+        <div class="sidebar-container">
+            <div class="sidebar-toolbar-container">
+                <span class="sidebar-title">Files</span>
+                <button class="admin-write btn btn-light btn-icon" title="New File" @onclick="AddFile"><span class="icon fa-solid fa-sharp fa-plus"></span></button>
+                <button class="btn btn-light btn-icon" title="Refresh Files" @onclick="Refresh"><span class="icon fa-solid fa-sharp fa-rotate"></span></button>
+            </div>
+            <div class="sidebar-content-container">
+                <VolumeTreeView Client="@Client" VolumeId="@VolumeId" SelectedFile="@_selectedFile" FileSelected="FileSelected" />
+            </div>
+        </div>
+        <div class="toolbar-container">
+            <div class="file-header">
+                @if (!string.IsNullOrEmpty(_selectedFile))
+                {
+                    <span class="file-icon @VolumeFileIcons.Get(_selectedFile)"></span>
+                    <span class="file-path" title="@_selectedFile">@_selectedFile</span>
+
+                    @if (IsDirty)
+                    {
+                        <span class="file-status dirty" title="This file has changes that have not been saved">Unsaved changes</span>
+                    }
+                    else if (!string.IsNullOrEmpty(_statusMessage))
+                    {
+                        <span class="file-status @(_statusIsError ? "error" : "success")">@_statusMessage</span>
+                    }
+                }
+                else
+                {
+                    <span class="file-path empty">No file selected</span>
+                }
+            </div>
+            <div class="file-buttons">
+                <button class="btn btn-light" title="Reload File" disabled="@(!HasFile)" @onclick="ReloadFile"><span class="icon fa-solid fa-sharp fa-rotate-right"></span><span class="btn-label">Reload</span></button>
+                <button class="admin-write btn btn-light btn-save" title="Save File" disabled="@(!CanSave)" @onclick="Save"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span><span class="btn-label">Save</span></button>
+                <button class="admin-write btn btn-light btn-delete" title="Delete File" disabled="@(!HasFile)" @onclick="Delete"><span class="icon fa-solid fa-sharp fa-trash"></span><span class="btn-label">Delete</span></button>
+            </div>
+        </div>
+        <div class="content-container">
+            @if (!HasFile)
+            {
+                <div class="empty-state">
+                    <span class="empty-state-icon fa-regular fa-sharp fa-folder-open"></span>
+                    <span class="empty-state-title">Select a file to view or edit</span>
+                    <span class="empty-state-description">Choose a file from the list, or create a new one with <span class="fa-solid fa-sharp fa-plus"></span></span>
+                </div>
+            }
+            else if (!_isText)
+            {
+                <div class="empty-state">
+                    <span class="empty-state-icon fa-regular fa-sharp fa-file-binary"></span>
+                    <span class="empty-state-title">This file can't be displayed</span>
+                    <span class="empty-state-description">Only text files can be viewed and edited here</span>
+                </div>
+            }
+            else
+            {
+                <RadzenTextArea @bind-Value="@_fileText" />
+            }
+        </div>
+    </div>
+</CascadingValue>
+
+<Modal Visible="@_addModalVisible">
+    <HeaderContent>
+        Create New File
+    </HeaderContent>
+    <BodyContent>
+        <div class="add-modal-body-container">
+            <TextBox Title="File Path" @bind-Value="@_addPath" />
+            @if (!string.IsNullOrEmpty(_addError))
+            {
+                <span class="add-modal-error">@_addError</span>
+            }
+        </div>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="CancelAddFile">Cancel</button>
+        <button class="admin-write btn btn-primary" @onclick="CreateFile">Create</button>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    private string _previousVolumeId;
+
+    private string _selectedFile;
+    private string _fileText;
+    private string _loadedText; // The text as last loaded / saved (to detect unsaved changes)
+    private bool _isText;
+
+    private string _statusMessage;
+    private bool _statusIsError;
+
+    private bool _addModalVisible;
+    private string _addPath;
+    private string _addError;
+
+    public event EventHandler<string> VolumeChanged;
+
+
+    [Parameter]
+    public ITrakHoundClient Client { get; set; }
+
+    [Parameter]
+    public string VolumeId { get; set; }
+
+
+    private bool HasFile => !string.IsNullOrEmpty(_selectedFile);
+
+    private bool CanSave => HasFile && _isText;
+
+    private bool IsDirty => CanSave && (_fileText ?? "") != (_loadedText ?? "");
+
+
+    protected async override Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async void Refresh()
+    {
+        await Load(true);
+    }
+
+    private async Task Load(bool forceLoad = false)
+    {
+        if (forceLoad || VolumeId != _previousVolumeId)
+        {
+            _previousVolumeId = VolumeId;
+
+            ClearFile();
+
+            _addModalVisible = false;
+            _addPath = null;
+            _addError = null;
+
+            if (VolumeChanged != null) VolumeChanged.Invoke(this, VolumeId);
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ClearFile()
+    {
+        _selectedFile = null;
+        _fileText = null;
+        _loadedText = null;
+        _isText = false;
+        SetStatus(null);
+    }
+
+    private void SetStatus(string message, bool isError = false)
+    {
+        _statusMessage = message;
+        _statusIsError = isError;
+    }
+
+    private async void AddFile()
+    {
+        _addError = null;
+        _addModalVisible = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void CreateFile()
+    {
+        if (Client != null && !string.IsNullOrEmpty(_addPath))
+        {
+            var filePath = _addPath;
+
+            if (await Client.Volumes.CreateFile(VolumeId, filePath))
+            {
+                _addPath = null;
+                _addError = null;
+                _addModalVisible = false;
+
+                await Load(true);
+                await SelectFile(filePath);
+            }
+            else
+            {
+                _addError = $"Unable to create '{filePath}'";
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async void CancelAddFile()
+    {
+        _addModalVisible = false;
+        _addError = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void ReloadFile()
+    {
+        await SelectFile(_selectedFile);
+    }
+
+    private async Task SelectFile(string file)
+    {
+        if (!string.IsNullOrEmpty(file))
+        {
+            _selectedFile = file;
+            SetStatus(null);
+
+            await LoadFileContent(file);
+        }
+        else
+        {
+            ClearFile();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadFileContent(string file)
+    {
+        _fileText = null;
+        _loadedText = null;
+        _isText = false;
+
+        if (Client != null && !string.IsNullOrEmpty(file))
+        {
+            var extension = Path.GetExtension(file);
+            var contentType = MimeTypes.GetMimeType(extension);
+            if (MimeTypes.IsText(contentType))
+            {
+                var bytes = await Client.Volumes.DownloadFile(VolumeId, file);
+                _fileText = StringFunctions.GetUtf8String(bytes);
+                _loadedText = _fileText;
+                _isText = true;
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void FileSelected(string file)
+    {
+        await SelectFile(file);
+    }
+
+    private async void Save()
+    {
+        if (Client != null && CanSave)
+        {
+            var text = _fileText ?? "";
+            var bytes = System.Text.Encoding.ASCII.GetBytes(text);
+            if (await Client.Volumes.UploadFile(VolumeId, _selectedFile, bytes))
+            {
+                _loadedText = text;
+                SetStatus($"Saved {DateTime.Now:HH:mm:ss}");
+            }
+            else
+            {
+                SetStatus("Save failed", true);
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void Delete()
+    {
+        if (Client != null && HasFile)
+        {
+            if (await Client.Volumes.DeleteFile(VolumeId, _selectedFile))
+            {
+                ClearFile();
+
+                await Load(true);
+            }
+            else
+            {
+                SetStatus("Delete failed", true);
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+}

@@ -1,0 +1,189 @@
+﻿@inject IJSRuntime JSRuntime
+
+<CascadingValue Value="this">
+    <div class="tree-view" role="tree" aria-label="@AriaLabel" @ref="_element">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+
+    // The tree follows the WAI-ARIA Tree View pattern: the whole tree is one Tab stop (roving tabindex) and the
+    // arrow keys move between the visible items. Items register here (and with their parent item) in the order
+    // they're first rendered, which is their order on the page.
+    private readonly List<TreeItem> _rootItems = new();
+    private ElementReference _element;
+    private TreeItem _focusedItem;
+    private TreeItem _tabStop;
+    private string _selectedId;
+
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    [Parameter]
+    public string SelectedId { get; set; }
+
+    /// <summary>
+    /// The accessible name of the tree, read by screen readers (ex. "Objects")
+    /// </summary>
+    [Parameter]
+    public string AriaLabel { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        if (_selectedId != SelectedId)
+        {
+            _selectedId = SelectedId;
+            UpdateTabStop();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Stops the keys the tree handles from also scrolling the page (Blazor can't prevent a default per key)
+                await JSRuntime.InvokeVoidAsync("JsFunctions.attachTreeView", _element);
+            }
+            catch (Exception)
+            {
+                // The keys still work without it (ex. a host whose trakhound.js doesn't have attachTreeView)
+            }
+        }
+    }
+
+
+    internal void Register(TreeItem item)
+    {
+        var siblings = item.ParentItem != null ? item.ParentItem.ChildItems : _rootItems;
+        if (!siblings.Contains(item)) siblings.Add(item);
+
+        // An item added after the first (or the selected item) can only take the Tab stop when there isn't one yet
+        if (_tabStop == null || (_focusedItem == null && item.IsSelectedItem && !_tabStop.IsSelectedItem)) UpdateTabStop();
+    }
+
+    internal void Unregister(TreeItem item)
+    {
+        var siblings = item.ParentItem != null ? item.ParentItem.ChildItems : _rootItems;
+        siblings.Remove(item);
+
+        if (_focusedItem == item) _focusedItem = null;
+        if (_tabStop == item) UpdateTabStop();
+    }
+
+    internal bool IsTabStop(TreeItem item) => item == _tabStop;
+
+    internal void SetFocused(TreeItem item)
+    {
+        if (_focusedItem != item)
+        {
+            _focusedItem = item;
+            UpdateTabStop();
+        }
+    }
+
+    /// <summary>
+    /// Moves the Tab stop to the focused item, or else the selected item, or else the first item, so the tree can
+    /// always be reached with Tab. Called when an item is expanded or collapsed, since that changes what's visible.
+    /// </summary>
+    internal void UpdateTabStop()
+    {
+        var visibleItems = GetVisibleItems();
+        TreeItem next = null;
+
+        // A focused item hidden by collapsing an ancestor gives the Tab stop to that ancestor
+        for (var item = _focusedItem; item != null && next == null; item = item.ParentItem)
+        {
+            if (visibleItems.Contains(item)) next = item;
+        }
+
+        next ??= visibleItems.FirstOrDefault(o => o.IsSelectedItem) ?? visibleItems.FirstOrDefault();
+
+        if (next != _tabStop)
+        {
+            var previous = _tabStop;
+            _tabStop = next;
+            previous?.Refresh();
+            next?.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// The items that are shown (not inside a collapsed item), in the order they appear in the tree
+    /// </summary>
+    internal List<TreeItem> GetVisibleItems()
+    {
+        var items = new List<TreeItem>();
+        AddVisibleItems(_rootItems, items);
+        return items;
+    }
+
+    private static void AddVisibleItems(IEnumerable<TreeItem> source, List<TreeItem> items)
+    {
+        foreach (var item in source)
+        {
+            if (item.IsRendered)
+            {
+                items.Add(item);
+                if (item.IsOpen) AddVisibleItems(item.ChildItems, items);
+            }
+        }
+    }
+
+    internal async Task HandleKeyDown(TreeItem item, KeyboardEventArgs args)
+    {
+        if (item == null || args == null || args.AltKey || args.CtrlKey || args.MetaKey) return;
+
+        var visibleItems = GetVisibleItems();
+        var index = visibleItems.IndexOf(item);
+        if (index < 0) return;
+
+        switch (args.Key)
+        {
+            case "ArrowDown":
+                if (index < visibleItems.Count - 1) await visibleItems[index + 1].FocusAsync();
+                break;
+
+            case "ArrowUp":
+                if (index > 0) await visibleItems[index - 1].FocusAsync();
+                break;
+
+            case "Home":
+                await visibleItems[0].FocusAsync();
+                break;
+
+            case "End":
+                await visibleItems[visibleItems.Count - 1].FocusAsync();
+                break;
+
+            case "ArrowRight":
+                if (item.IsExpandable && !item.IsExpanded) await item.Expand();
+                else if (item.IsOpen)
+                {
+                    var firstChild = item.ChildItems.FirstOrDefault(o => o.IsRendered);
+                    if (firstChild != null) await firstChild.FocusAsync();
+                }
+                break;
+
+            case "ArrowLeft":
+                if (item.IsExpandable && item.IsExpanded) await item.Collapse();
+                else if (item.ParentItem != null) await item.ParentItem.FocusAsync();
+                break;
+
+            case "Enter":
+                await item.Activate();
+                break;
+
+            case " ":
+                // A checkbox item's Space toggles its checkbox (as for a multi-select tree), otherwise it selects
+                if (item.ShowCheckBox) await item.ToggleCheck();
+                else await item.Activate();
+                break;
+        }
+    }
+
+}

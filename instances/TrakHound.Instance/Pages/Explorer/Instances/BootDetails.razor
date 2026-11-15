@@ -1,0 +1,170 @@
+@* The steps, Runtime Starts, Log entries and Exception of one Boot *@
+@using TrakHound.Instances
+
+@if (Boot != null)
+{
+    <div class="boot-details">
+
+        <div class="boot-facts">
+            <span><span class="label">PID</span>@Boot.ProcessId</span>
+            @if (!string.IsNullOrEmpty(Boot.Version))
+            {
+                <span><span class="label">Version</span>@Boot.Version</span>
+            }
+            <span><span class="label">Host</span>@Boot.MachineName</span>
+            <span><span class="label">User</span>@Boot.User</span>
+            <span><span class="label">Runtime</span>@Boot.Runtime</span>
+            <span><span class="label">Ready</span>@Boots.FormatTimestamp(Boot.Ready)</span>
+            @if (Boot.Ended != null)
+            {
+                <span title="@(Boot.Status == TrakHoundInstanceBootStatus.Unclean ? "The last time the process was known to be running" : null)"><span class="label">@(Boot.Status == TrakHoundInstanceBootStatus.Unclean ? "Last Alive" : "Ended")</span>@Boots.FormatTimestamp(Boot.Ended)</span>
+            }
+            <span><span class="label">Uptime</span>@Boots.FormatUptime(Boot)</span>
+            @if (Boot.ExitCode != null)
+            {
+                <span><span class="label">Exit Code</span>@Boot.ExitCode</span>
+            }
+            <span class="boot-download"><BootDownloadButton Boot="@Boot" Label="JSON" Title="Download this Boot with everything recorded (ex. to attach to a support request)" /></span>
+        </div>
+
+        @if (!string.IsNullOrEmpty(Boot.Reason) && Boot.Status != TrakHoundInstanceBootStatus.Running)
+        {
+            <div class="boot-reason @(IsProblem(Boot.Status) ? "problem" : null)">@Boot.Reason</div>
+        }
+
+        @if (!string.IsNullOrEmpty(Boot.Details))
+        {
+            <details class="boot-exception">
+                <summary>Exception</summary>
+                <pre>@Boot.Details</pre>
+            </details>
+        }
+
+        <div class="boot-section-title">Startup</div>
+        @StepList(Boot.Steps)
+        @LogList(Boot.Log)
+
+        @if (Boot.Starts?.Count > 0)
+        {
+            var index = 0;
+            foreach (var start in Boot.Starts)
+            {
+                index++;
+                var title = index == 1 ? "Runtime Start" : $"Runtime Restart {index - 1}";
+
+                <div class="boot-section-title">
+                    @title
+                    <span class="section-detail">@Boots.FormatTimestamp(start.Started)</span>
+                    @if (start.Duration != null)
+                    {
+                        <span class="section-detail">· @Boots.FormatDuration(start.Duration.Value.TotalMilliseconds)</span>
+                    }
+                    @if (start.Success)
+                    {
+                        <span class="section-detail ok">· Started</span>
+                    }
+                    else
+                    {
+                        <span class="section-detail problem">· Failed</span>
+                    }
+                    @if (start.Stopped != null)
+                    {
+                        <span class="section-detail">· Stopped @Boots.FormatTimestamp(start.Stopped)</span>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(start.Error))
+                {
+                    <div class="boot-reason problem">@start.Error</div>
+                }
+                @StepList(start.Steps)
+                @LogList(start.Log)
+            }
+        }
+        else if (Boot.Ready == null && Boot.Status != TrakHoundInstanceBootStatus.Starting)
+        {
+            <div class="boot-section-title">Runtime Start</div>
+            <div class="muted">The Runtime was not Started</div>
+        }
+
+    </div>
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundInstanceBoot Boot { get; set; }
+
+
+    private RenderFragment StepList(List<TrakHoundInstanceBootStep> steps) => __builder =>
+    {
+        if (steps == null || steps.Count == 0)
+        {
+            <div class="muted">No steps recorded</div>
+            return;
+        }
+
+        var total = Math.Max(1, steps.Sum(o => o.DurationMs));
+        var max = Math.Max(1, steps.Max(o => o.DurationMs));
+
+        <div class="step-list">
+            @foreach (var step in steps)
+            {
+                <div class="step @(step.Error != null ? "failed" : null)" title="@step.Error">
+                    <span class="step-name">@step.Name</span>
+                    <span class="step-bar"><span class="step-bar-value" style="@FormattableString.Invariant($"width: {Math.Clamp(step.DurationMs / max * 100, 0.5, 100):0.##}%;")"></span></span>
+                    <span class="step-duration">@Boots.FormatDuration(step.DurationMs)</span>
+                    <span class="step-percent">@FormattableString.Invariant($"{step.DurationMs / total * 100:0}%")</span>
+                </div>
+                @if (step.Error != null)
+                {
+                    <div class="step-error problem">@step.Error</div>
+                }
+            }
+        </div>
+    };
+
+    private RenderFragment LogList(TrakHoundInstanceBootLog log) => __builder =>
+    {
+        if (log == null || (log.WarningCount == 0 && log.ErrorCount == 0)) return;
+
+        var shown = log.Entries?.Count ?? 0;
+        var total = log.WarningCount + log.ErrorCount;
+
+        <details class="boot-log" open="@(log.ErrorCount > 0)">
+            <summary>
+                @if (log.ErrorCount > 0)
+                {
+                    <span class="problem">@log.ErrorCount @(log.ErrorCount == 1 ? "Error" : "Errors")</span>
+                }
+                @if (log.ErrorCount > 0 && log.WarningCount > 0)
+                {
+                    <span class="muted"> · </span>
+                }
+                @if (log.WarningCount > 0)
+                {
+                    <span class="warning">@log.WarningCount @(log.WarningCount == 1 ? "Warning" : "Warnings")</span>
+                }
+                @if (shown < total)
+                {
+                    <span class="muted"> (first @shown shown)</span>
+                }
+            </summary>
+            <div class="log-entries">
+                @foreach (var entry in log.Entries ?? new List<TrakHoundInstanceBootLogEntry>())
+                {
+                    var isError = entry.Level == "Error" || entry.Level == "Critical";
+
+                    <div class="log-entry @(isError ? "error" : "warning")">
+                        <span class="log-time">@entry.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff")</span>
+                        <span class="log-level">@entry.Level</span>
+                        <span class="log-logger">@entry.Logger</span>
+                        <span class="log-message">@entry.Message</span>
+                    </div>
+                }
+            </div>
+        </details>
+    };
+
+    private static bool IsProblem(TrakHoundInstanceBootStatus status) => status == TrakHoundInstanceBootStatus.Failed || status == TrakHoundInstanceBootStatus.Crashed || status == TrakHoundInstanceBootStatus.Unclean;
+
+}

@@ -1,0 +1,25 @@
+.copy-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 4px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--textLight);
+    font-size: var(--fontSizeSm);
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+    .copy-button:hover {
+        color: var(--accent);
+        background: var(--panelBackgroundMedium);
+    }
+
+    .copy-button.copied {
+        color: var(--colorGreen);
+    }

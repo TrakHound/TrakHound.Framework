@@ -1,0 +1,163 @@
+/* Worker Status */
+.worker-panel {
+    grid-row: 3;
+    margin: 0 10px 10px;
+    border: 1px solid var(--borderColorLight);
+    border-radius: 4px;
+    background: var(--panelBackgroundMedium);
+}
+
+.worker-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    padding: 6px 12px;
+    font-size: var(--fontSizeSm);
+}
+
+.worker-state {
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+    .worker-state .icon {
+        margin-right: 6px;
+        font-size: var(--fontSizeXs);
+    }
+
+    .worker-state.ok .icon {
+        color: var(--colorGreen);
+    }
+
+    .worker-state.stale .icon {
+        color: var(--colorOrange);
+    }
+
+    .worker-state.unknown .icon {
+        color: var(--textLight);
+    }
+
+.worker-detail {
+    color: var(--textMild);
+}
+
+    .worker-detail b {
+        color: var(--textDark);
+    }
+
+    .worker-detail.warning b {
+        color: var(--colorOrange);
+    }
+
+    .worker-detail.muted {
+        color: var(--textLight);
+    }
+
+.btn-details {
+    margin-left: auto;
+}
+
+.worker-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px 20px;
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--borderColorLight);
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.worker-section {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.worker-section-title {
+    margin-bottom: 4px;
+    font-size: var(--fontSizeXs);
+    font-weight: bold;
+    text-transform: uppercase;
+    color: var(--textMild);
+}
+
+.worker-empty {
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+.worker-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: var(--fontSizeSm);
+    min-width: 0;
+}
+
+.worker-row-time {
+    flex: 0 0 auto;
+    min-width: 58px;
+    font-variant-numeric: tabular-nums;
+    color: var(--textMild);
+}
+
+/* Keep the live state on one line (the Task name shrinks instead) */
+.worker-row .live {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.worker-row-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--textDark);
+}
+
+.event-type {
+    flex: 0 0 auto;
+    min-width: 70px;
+    font-size: var(--fontSizeXs);
+    font-weight: bold;
+    text-transform: uppercase;
+    color: var(--textMild);
+}
+
+    .event-type.completed {
+        color: var(--colorGreen);
+    }
+
+    .event-type.failed {
+        color: var(--colorRed);
+    }
+
+    .event-type.skipped,
+    .event-type.dropped {
+        color: var(--colorOrange);
+    }
+
+    .event-type.started,
+    .event-type.missed {
+        color: var(--accent);
+    }
+
+/* Live state (Worker Status) */
+.live {
+    font-variant-numeric: tabular-nums;
+}
+
+    .live .icon {
+        margin-right: 5px;
+    }
+
+    .live.running {
+        color: var(--accent);
+    }
+
+    .live.waiting,
+    .live.skipped {
+        color: var(--colorOrange);
+    }

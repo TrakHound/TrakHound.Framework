@@ -1,0 +1,171 @@
+@page "/_admin/configuration/zone-map"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/zone-map"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Zones)]
+@layout TrakHound.Instance.Pages.Configuration.ConfigurationLayout
+@implements IDisposable
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@using TrakHound.Blazor.Diagrams
+@using TrakHound.Blazor.Diagrams.Components
+@using TrakHound.Blazor.Diagrams.Components.Widgets
+@using TrakHound.Instances
+
+<TrakHound.Instance.Pages.Security.SecurityPageStyles>
+    <TrakHoundPageTitle Text="Zone Map" />
+    <AreaBreadcrumbs Items="@([new("Zone Map")])" />
+
+    <div class="zone-map-page @(context.Drag != null ? "dragging" : "")" @onpointerup="EndDrag">
+
+        @if (context.Drag != null)
+        {
+            <div class="zone-map-drag-hint">
+                <span class="icon fa-solid fa-sharp fa-arrows-up-down-left-right"></span>
+                Moving <strong>@(modules?.Describe(context.Drag.Member) ?? context.Drag.Member)</strong>: release over a Zone@(context.Drag.FromZoneId != null ? ", or over Not in a Zone to remove it" : "")
+            </div>
+        }
+
+        <div class="page-header">
+            <span class="page-icon fa-solid fa-sharp fa-diagram-project"></span>
+            <div class="page-title">
+                <span class="title">Zone Map</span>
+                <span class="description">What each Zone's Members can reach, who can call them, and the calls that were denied. Drag Modules to change a Zone's Members, click a red or amber line to grant the calls, or click a Zone's name to edit it</span>
+            </div>
+        </div>
+
+        <div class="zone-map-toolbar">
+            <button class="btn btn-command" title="Reload the Zones" @onclick="Reload"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+            <button class="btn btn-command" title="Arrange the map in columns (Callers, Zones, Targets)" @onclick="AutoArrange"><span class="icon fa-solid fa-sharp fa-table-columns"></span>Arrange</button>
+            <button class="btn btn-command" title="Zoom to show the whole map" @onclick="ZoomToFit"><span class="icon fa-solid fa-sharp fa-expand"></span>Fit</button>
+            <button class="admin-write btn btn-command" title="Keep the current positions of the nodes" @onclick="SaveLayout"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span>Save Layout</button>
+            @if (layoutSaved)
+            {
+                <span class="saved-message"><span class="icon fa-solid fa-sharp fa-check"></span>Saved</span>
+            }
+
+            <label class="zone-map-toggle" title="Show the calls that were denied (or would be, in Audit Mode) since the Instance started">
+                <input type="checkbox" checked="@showActivity" @onchange="ShowActivityChanged" />
+                <span>Show Activity</span>
+            </label>
+
+            <div class="zone-map-legend">
+                <span class="legend-item"><span class="legend-line rule"></span>Allowed by a Rule</span>
+                <span class="legend-item"><span class="legend-line caller"></span>Allowed Caller</span>
+                <span class="legend-item"><span class="legend-line router"></span>Router</span>
+                @if (showActivity)
+                {
+                    <span class="legend-item"><span class="legend-line denied"></span>Denied</span>
+                    <span class="legend-item"><span class="legend-line would-deny"></span>Would Deny</span>
+                }
+            </div>
+        </div>
+
+        <div class="zone-map-body">
+
+            @if (!isEmpty)
+            {
+                var dropOut = context.Drag?.FromZoneId != null;
+
+                <aside class="zone-map-sidebar @(dropOut ? "drop-target" : "")"
+                       @onpointerup="DropOutOfZones">
+                    <div class="sidebar-header">
+                        <span class="sidebar-title">Not in a Zone</span>
+                        <span class="sidebar-description">@(dropOut ? "Drop here to remove it from its Zone" : "Drag a Module onto a Zone to add it")</span>
+                    </div>
+                    <div class="sidebar-list">
+                        @if (unzoned.Count == 0)
+                        {
+                            <span class="sidebar-empty">Every Module is in a Zone</span>
+                        }
+                        @foreach (var group in unzoned.GroupBy(o => o.TypeTitle))
+                        {
+                            <span class="sidebar-group">@group.Key</span>
+                            @foreach (var module in group.OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase))
+                            {
+                                var memberId = module.MemberId;
+                                <div class="sidebar-module @(context.Drag?.Member == memberId ? "dragging" : "")"
+                                     title="@($"{memberId}\nDrag onto a Zone to add it")"
+                                     @onpointerdown="() => context.StartDrag(memberId, null)">
+                                    <span class="module-icon @module.Icon"></span>
+                                    <span class="module-title">@module.DisplayName</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                </aside>
+            }
+
+            <div class="zone-map-container">
+                @if (isEmpty)
+                {
+                    <div class="empty-state">
+                        <span class="empty-icon fa-solid fa-sharp fa-object-group"></span>
+                        <span class="empty-title">No Zones</span>
+                        <span class="empty-description">Add a Zone to limit what a set of Modules can reach. It will be shown here with its Members, Rules and Allowed Callers.</span>
+                        <a class="btn btn-primary" href="@configurationsService.GetLink("_admin/configuration/zones")"><span class="icon fa-solid fa-sharp fa-object-group"></span>Zones</a>
+                    </div>
+                }
+                else
+                {
+                    <CascadingValue Value="context" IsFixed="true">
+                        <CascadingValue Value="Diagram" IsFixed="true">
+                            <DiagramCanvas>
+                                <Widgets>
+                                    <GridWidget Size="@GridSize" Mode="GridMode.Line" GridColor="var(--diagramGrid)" BackgroundColor="var(--diagramBackground)" ZoomThreshold="0.4" />
+                                </Widgets>
+                            </DiagramCanvas>
+                        </CascadingValue>
+                    </CascadingValue>
+                }
+
+                @if (selectedEdge != null)
+                {
+                    <div class="zone-map-panel">
+                        <div class="panel-header">
+                            <span class="panel-title">@(selectedEdge.Kind == ZoneMapEdgeKind.Denied ? "Denied Calls" : "Would Deny")</span>
+                            <button class="panel-close" title="Close" @onclick="() => selectedEdge = null"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                        </div>
+                        <div class="panel-list">
+                            @if (selectedEdge.Activity.Count == 0)
+                            {
+                                <span class="panel-empty">These calls have been granted or dismissed</span>
+                            }
+                            @foreach (var item in selectedEdge.Activity)
+                            {
+                                var activity = item;
+                                var broader = activity.Direction == TrakHound.Zones.TrakHoundZoneDirection.Outbound ? ZoneModules.GetBroaderPattern(activity.ResourceId) : null;
+                                <div class="panel-item">
+                                    <span class="item-caller">@(modules?.Describe(activity.CallerId) ?? activity.CallerName ?? activity.CallerId)</span>
+                                    <span class="item-resource">
+                                        <span class="fa-solid fa-sharp fa-arrow-right"></span>
+                                        @(modules?.DescribeResource(activity.ResourceId) ?? activity.ResourceId)
+                                    </span>
+                                    <code class="item-id">@activity.ResourceId · @activity.Permission · ×@activity.Count</code>
+                                    @if (activity.Direction == TrakHound.Zones.TrakHoundZoneDirection.Inbound)
+                                    {
+                                        <span class="item-note">The caller is not in the Zone's Allowed Callers</span>
+                                    }
+                                    <div class="item-actions">
+                                        @if (activity.Direction == TrakHound.Zones.TrakHoundZoneDirection.Outbound)
+                                        {
+                                            <button class="admin-write btn btn-sm btn-command" title="Add a Rule for exactly this Resource" @onclick="() => Grant(activity, null)"><span class="icon fa-solid fa-sharp fa-check"></span>Grant</button>
+                                            @if (broader != null)
+                                            {
+                                                <button class="admin-write btn btn-sm btn-command" title="@($"Add a Rule for {broader}")" @onclick="() => Grant(activity, broader)"><span class="icon fa-solid fa-sharp fa-check-double"></span>Grant All</button>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <button class="admin-write btn btn-sm btn-command" title="Add the caller to the Allowed Callers" @onclick="() => Grant(activity, null)"><span class="icon fa-solid fa-sharp fa-check"></span>Allow Caller</button>
+                                        }
+                                        <button class="admin-write btn btn-sm btn-command btn-remove" title="Remove from the list (it is recorded again if it happens again)" @onclick="() => Dismiss(activity)"><span class="icon fa-solid fa-sharp fa-xmark"></span>Dismiss</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+        </div>
+
+    </div>
+</TrakHound.Instance.Pages.Security.SecurityPageStyles>

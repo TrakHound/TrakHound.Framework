@@ -1,0 +1,34 @@
+.profile-page {
+    height: 100%;
+    overflow: auto;
+    padding-bottom: 60px;
+}
+
+    .profile-page > * {
+        max-width: 1300px;
+    }
+
+.page-header .btn {
+    flex-shrink: 0;
+}
+
+.provider-note {
+    margin-top: 14px;
+}
+
+    .profile-page .provider-note .status {
+        white-space: normal;
+    }
+
+.saved-message {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+    font-size: var(--fontSizeSm);
+    color: var(--bs-success, #198754);
+}
+
+.table-scroll {
+    overflow-x: auto;
+}

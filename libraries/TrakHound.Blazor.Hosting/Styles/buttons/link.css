@@ -1,0 +1,43 @@
+﻿.btn-link {
+    height: auto;
+    padding: 4px 8px;
+    text-decoration: none;
+    color: var(--buttonLinkText) !important;
+    outline: none;
+    box-shadow: none;
+    border: none;
+}
+
+    .btn-link:hover {
+        color: var(--buttonLinkTextHover) !important;
+        text-decoration: underline;
+    }
+
+    .btn-link:active {
+        box-shadow: none !important;
+    }
+
+    .btn-link:disabled,
+    .btn-link.disabled {
+        color: var(--buttonLinkTextDisabled) !important;
+    }
+
+    .btn-link .icon {
+        color: var(--buttonLinkIcon) !important;
+    }
+
+    .btn-link:hover .icon {
+        color: var(--buttonLinkIconHover) !important;
+    }
+
+    .btn-link:active .icon {
+        color: var(--buttonLinkIconHighlight) !important;
+    }
+
+    .btn-link:disabled .icon,
+    .btn-link.disabled .icon {
+        color: var(--buttonLinkIconDisabled) !important;
+    }
+
+
+

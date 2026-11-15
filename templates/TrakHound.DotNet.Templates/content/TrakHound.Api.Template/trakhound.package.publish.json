@@ -1,0 +1,13 @@
+{
+  "defaultTarget": "default",
+  "targets": {
+    "default": {
+      "destinations": [
+        {
+          "managementServer": "{managementServer}",
+          "organization": "{organization}"
+        }
+      ]
+    }
+  }
+}

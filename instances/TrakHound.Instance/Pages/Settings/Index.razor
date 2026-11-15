@@ -1,0 +1,230 @@
+@page "/_admin/configuration/settings"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/settings"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Settings)]
+@layout TrakHound.Instance.Pages.Configuration.ConfigurationLayout
+@inject ITrakHoundInstance instance
+@inject TrakHound.Instance.Pages.Configuration.ConfigurationsService configurationsService
+@implements IDisposable
+@using TrakHound.Blazor.Components
+@using TrakHound.Instance.Configurations
+@using TrakHound.Instance.Logging
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="Settings" />
+<AreaBreadcrumbs Items="@([new("Settings")])" />
+
+<div class="settings-page">
+
+    @* Header : Title and Save *@
+    <div class="header-panel">
+        <span class="header-panel-icon fa-solid fa-sharp fa-wrench"></span>
+        <div class="header-panel-text">
+            <span class="title">Settings</span>
+            <span class="description">View & Manage Instance related settings</span>
+        </div>
+        <div class="header-panel-actions">
+            @if (saveError != null)
+            {
+                <span class="save-status error" title="@saveError"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@saveError</span>
+            }
+            else if (IsDirty)
+            {
+                <span class="save-status dirty"><span class="status-dot"></span>Unsaved changes</span>
+            }
+            else if (savedTime.HasValue)
+            {
+                <span class="save-status saved"><span class="icon fa-solid fa-sharp fa-check"></span>Saved @savedTime.Value.ToString("T")</span>
+            }
+
+            <button class="btn btn-light btn-discard @(IsDirty && !saving ? "" : "disabled")" disabled="@(!IsDirty || saving)" @onclick="Discard"><span class="icon fa-solid fa-sharp fa-rotate-left"></span>Discard</button>
+
+            @if (!saving)
+            {
+                <button class="admin-write btn btn-primary btn-save @(IsDirty ? "" : "disabled")" disabled="@(!IsDirty)" @onclick="Save"><span class="icon fa-solid fa-sharp fa-floppy-disk"></span>Save Changes</button>
+            }
+            else
+            {
+                <button class="admin-write btn btn-primary btn-save disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Saving..</button>
+            }
+        </div>
+    </div>
+
+    <div class="settings-body">
+
+        @* Section Navigation *@
+        <nav class="settings-nav" aria-label="Settings Sections">
+            @foreach (var navItem in _navItems)
+            {
+                var active = navItem.Id == SelectedSection ? "active" : "";
+
+                <a class="settings-nav-item @active" href="@configurationsService.GetLink($"_admin/configuration/settings?section={navItem.Id}")" aria-current="@(active != "" ? "page" : null)">
+                    <span class="settings-nav-icon @navItem.Icon"></span>
+                    <span class="settings-nav-text">
+                        <span class="settings-nav-title">@navItem.Title</span>
+                        <span class="settings-nav-description">@navItem.Description</span>
+                    </span>
+                </a>
+            }
+        </nav>
+
+        @* Section Content *@
+        <div class="settings-content">
+            <div class="settings-content-inner">
+                <CascadingValue Value="editContext" IsFixed="true">
+                    @switch (SelectedSection)
+                    {
+                        case "interfaces":
+                            <Interfaces Model="instanceModel" />
+                            break;
+
+                        case "logs":
+                            <Logs Configuration="logConfiguration" />
+                            break;
+
+                        case "notifications":
+                            <NotificationSettings Model="instanceModel" />
+                            break;
+
+                        case "package-verification":
+                            <PackageVerificationSettings Model="instanceModel" />
+                            break;
+
+                        case "rate-limits":
+                            <RateLimitSettings Model="instanceModel" />
+                            break;
+
+                        case "health":
+                            <HealthSettings Model="instanceModel" />
+                            break;
+
+                        case "metrics":
+                            <MetricsSettings Model="instanceModel" PendingRestart="@MetricsPendingRestart" />
+                            break;
+
+                        default:
+                            <General Model="instanceModel" />
+                            break;
+                    }
+                </CascadingValue>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    private record NavItem(string Id, string Title, string Description, string Icon);
+
+    private static readonly NavItem[] _navItems = new[]
+    {
+        new NavItem("general", "General", "Instance name and description", "fa-solid fa-sharp fa-sliders"),
+        new NavItem("interfaces", "Interfaces", "HTTP, Apps, APIs and System API", "fa-solid fa-sharp fa-network-wired"),
+        new NavItem("package-verification", "Package Verification", "What happens to unverified Packages", "fa-solid fa-sharp fa-shield-check"),
+        new NavItem("rate-limits", "Rate Limits", "API, System API and MCP Tool limits", "fa-solid fa-sharp fa-gauge-high"),
+        new NavItem("logs", "Logs", "Log History storage and retention", "fa-solid fa-sharp fa-file-lines"),
+        new NavItem("notifications", "Notifications", "Package Update checks and Inventory reports", "fa-solid fa-sharp fa-bell"),
+        new NavItem("metrics", "Metrics", "Collected Metrics and CPU monitoring", "fa-solid fa-sharp fa-chart-simple"),
+        new NavItem("health", "Health", "Critical and Ignored Health items", "fa-solid fa-sharp fa-heart-pulse")
+    };
+
+    private SettingsEditContext editContext;
+    private InstanceSettingsModel instanceModel;
+    private TrakHoundLogConfiguration logConfiguration;
+    private string savedInstanceSnapshot;
+    private string savedLogSnapshot;
+    private DateTime? savedTime;
+    private string saveError;
+    private bool saving;
+    private System.Threading.Timer savedTimer;
+
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "section")]
+    public string Section { get; set; }
+
+    private string SelectedSection => _navItems.Any(o => o.Id == Section?.ToLower()) ? Section.ToLower() : _navItems[0].Id;
+
+    private TrakHound.Instance.Pages.Configuration.IConfigurationTarget Target => configurationsService.Target;
+
+    // The saved Metrics settings are only applied when the Instance is restarted
+    private bool MetricsPendingRestart => Target.IsLive && InstanceSettingsModel.Create(Target.InstanceConfiguration).MetricsDifferFrom(instance.Metrics);
+
+    private bool IsDirty => instanceModel?.GetSnapshot() != savedInstanceSnapshot || logConfiguration?.ToYaml() != savedLogSnapshot;
+
+
+    protected override void OnInitialized()
+    {
+        editContext = new SettingsEditContext(() => InvokeAsync(StateHasChanged));
+        if (!configurationsService.IsWorkspaceMissing) Load();
+    }
+
+    public void Dispose()
+    {
+        savedTimer?.Dispose();
+    }
+
+
+    private void Load()
+    {
+        saveError = null;
+
+        // Edit a copy so that changes are only applied when Saved
+        instanceModel = InstanceSettingsModel.Create(Target.InstanceConfiguration);
+        savedInstanceSnapshot = instanceModel.GetSnapshot();
+
+        logConfiguration = Target.ReadLogConfiguration(out var readError);
+        if (readError != null) saveError = readError;
+        savedLogSnapshot = logConfiguration.ToYaml();
+    }
+
+    private async Task Discard()
+    {
+        Load();
+        savedTime = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Save()
+    {
+        // A setting that isn't one Variable reference can't be read back (ex. the port)
+        var referenceErrors = instanceModel.GetReferenceErrors();
+        if (referenceErrors.Count > 0)
+        {
+            saveError = referenceErrors[0];
+            return;
+        }
+
+        saving = true;
+        saveError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Run(() => Target.SaveSettings(instanceModel, logConfiguration));
+
+            savedInstanceSnapshot = instanceModel.GetSnapshot();
+            savedLogSnapshot = logConfiguration.ToYaml();
+            savedTime = DateTime.Now;
+
+            // Hide the 'Saved' status after a few seconds
+            savedTimer?.Dispose();
+            savedTimer = new System.Threading.Timer(_ => InvokeAsync(() => { savedTime = null; StateHasChanged(); }), null, TimeSpan.FromSeconds(5), Timeout.InfiniteTimeSpan);
+        }
+        catch (Exception ex)
+        {
+            saveError = $"Save failed : {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+}

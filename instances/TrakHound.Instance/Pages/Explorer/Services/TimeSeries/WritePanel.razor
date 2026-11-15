@@ -1,0 +1,179 @@
+@inject ExplorerService explorerService
+@using TrakHound.Services.TimeSeries
+
+<div class="write-panel">
+    <div class="write-fields">
+
+        <div class="field">
+            <label>Measurement<span class="required" title="Required">*</span></label>
+            <input type="text" placeholder="spindle" aria-label="Measurement" @bind="@measurement" @bind:event="oninput" disabled="@writing" />
+        </div>
+
+        <div class="field">
+            <label>Time (UTC)</label>
+            <input type="datetime-local" step="1" aria-label="Time (UTC)" value="@time" @onchange="(args) => time = args.Value?.ToString()" disabled="@writing" />
+        </div>
+
+        <div class="field">
+            <label>Quality</label>
+            <select class="form-select dropdown-sm" aria-label="Quality" @bind="@quality" disabled="@writing">
+                @foreach (var item in Enum.GetValues<TrakHoundTimeSeriesQuality>())
+                {
+                    <option value="@item">@item</option>
+                }
+            </select>
+        </div>
+
+        <div class="field field-text">
+            <label>Tags (name=value on each line)</label>
+            <textarea placeholder="machine=M1" aria-label="Tags" rows="3" @bind="@tags" @bind:event="oninput" disabled="@writing"></textarea>
+        </div>
+
+        <div class="field field-text">
+            <label>Fields (name=value on each line)<span class="required" title="Required">*</span></label>
+            <textarea placeholder="@_fieldsExample" aria-label="Fields" rows="3" @bind="@fields" @bind:event="oninput" disabled="@writing"></textarea>
+        </div>
+
+    </div>
+
+    <div class="write-buttons">
+        @if (!writing)
+        {
+            <button class="admin-write btn btn-primary" @onclick="Write" disabled="@(!CanWrite())"><span class="icon fa-solid fa-sharp fa-pen"></span>Write</button>
+            <button class="btn btn-light" @onclick="Cancel">Cancel</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary btn-loading" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Writing..</button>
+        }
+
+        <span class="write-note">@(GetNote())</span>
+    </div>
+</div>
+
+@code {
+
+    private const string _fieldsExample = "speed=8000.5\nstate=RUN";
+
+    private string measurement;
+    private string time;
+    private string tags;
+    private string fields;
+    private TrakHoundTimeSeriesQuality quality;
+    private bool writing;
+    private string previousMeasurement;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    /// <summary>
+    /// The default Measurement (ex. the Measurement that is currently being viewed)
+    /// </summary>
+    [Parameter]
+    public string Measurement { get; set; }
+
+    /// <summary>
+    /// The default Tags (ex. the Series that is currently being viewed), with name=value on each line
+    /// </summary>
+    [Parameter]
+    public string Tags { get; set; }
+
+    [Parameter]
+    public EventCallback<string> Written { get; set; }
+
+    [Parameter]
+    public EventCallback<string> WriteFailed { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // Only reset the fields when the parameters change (so typed values are not overwritten on re-render)
+        if (Measurement != previousMeasurement)
+        {
+            previousMeasurement = Measurement;
+            measurement = Measurement;
+        }
+
+        if (tags == null) tags = Tags;
+    }
+
+    private bool CanWrite()
+    {
+        return GetError() == null && !string.IsNullOrWhiteSpace(measurement) && !string.IsNullOrWhiteSpace(fields);
+    }
+
+    private string GetError()
+    {
+        if (!string.IsNullOrWhiteSpace(time) && TimeSeriesExplorer.ParseTime(time) == null) return "The Time isn't valid";
+        return TimeSeriesExplorer.ParseLines(tags, out _) ?? TimeSeriesExplorer.ParseLines(fields, out _);
+    }
+
+    private string GetNote()
+    {
+        var error = GetError();
+        if (error != null) return error;
+        if (string.IsNullOrWhiteSpace(measurement)) return "Enter a Measurement";
+        if (string.IsNullOrWhiteSpace(fields)) return "Enter a Field";
+        if (string.IsNullOrWhiteSpace(time)) return "Leave the Time empty to use the current time. A whole number makes a new Field a long, so write 8000.5 or 8000.0 for a double";
+        return "A Point with the same Measurement, Tags and Time replaces the Fields written here and their Quality";
+    }
+
+    private async Task Write()
+    {
+        if (!CanWrite() || writing) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null) return;
+
+        TimeSeriesExplorer.ParseLines(tags, out var tagValues);
+        TimeSeriesExplorer.ParseLines(fields, out var fieldValues);
+
+        var point = new TrakHoundTimeSeriesPoint
+        {
+            Measurement = measurement.Trim(),
+            Tags = tagValues,
+            Timestamp = !string.IsNullOrWhiteSpace(time) ? TimeSeriesExplorer.ParseTime(time).Value : DateTimeOffset.UtcNow,
+            Fields = fieldValues.ToDictionary(o => o.Key, o => TimeSeriesExplorer.ParseFieldValue(o.Value)),
+            Quality = quality
+        };
+
+        writing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await client.Services.TimeSeries.Write(new[] { point }, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                // Keep the Measurement and Tags so more Points can be written to the same Series
+                fields = null;
+                await Written.InvokeAsync(point.Measurement);
+            }
+            else
+            {
+                await WriteFailed.InvokeAsync(!string.IsNullOrEmpty(response.Message) ? response.Message : $"Status Code {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await WriteFailed.InvokeAsync(ex.Message);
+        }
+
+        writing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Cancel()
+    {
+        fields = null;
+        await Cancelled.InvokeAsync();
+    }
+
+}

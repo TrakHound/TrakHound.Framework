@@ -1,0 +1,134 @@
+@page "/_admin/security/audit"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Audit)]
+@layout SecurityLayout
+@inject ITrakHoundInstance instance
+@inject TrakHound.Blazor.Services.TrakHoundDownloadService downloadService
+@inject IJSRuntime javascript
+@using TrakHound.Instance.Audit
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="Audit Log" />
+<AreaBreadcrumbs Items="@([new("Audit Log")])" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-clipboard-list"></span>
+        <div class="page-title">
+            <span class="title">Audit Log</span>
+            <span class="description">Changes to Packages and Configurations. <strong>Detected</strong> changes were found on disk, so who made them isn't known</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <input class="form-control" @bind="search" @bind:event="oninput" @bind:after="Load" placeholder="Search Target or User" spellcheck="false" aria-label="Search Target or User" />
+        <div class="toolbar-buttons">
+            <button class="btn btn-secondary" @onclick="Load"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+            <button class="btn btn-secondary" disabled="@(records.Count == 0 && string.IsNullOrEmpty(search))" title="Download the whole Audit Log, with its Hash Chain" @onclick="Download"><span class="icon fa-solid fa-sharp fa-download"></span>Download</button>
+            <button class="btn btn-primary" @onclick="Verify"><span class="icon fa-solid fa-sharp fa-link"></span>Verify</button>
+        </div>
+    </div>
+
+    @if (downloadKey != null)
+    {
+        <a id="@downloadElementId" href="@($"_download/{downloadKey}")" download="@downloadFilename" style="display: none"></a>
+    }
+
+    @if (verification != null)
+    {
+        <div class="section">
+            <div class="callout @(verification.Valid ? "success" : "danger")">
+                <span class="icon fa-solid fa-sharp @(verification.Valid ? "fa-circle-check" : "fa-circle-exclamation")"></span>
+                <div>@verification.Message</div>
+            </div>
+        </div>
+    }
+
+    <div class="table-container">
+        @if (records.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-clipboard-list"></span>
+                <span class="empty-title">No Records</span>
+            </div>
+        }
+        else
+        {
+            <table class="data-table audit-table">
+                <thead>
+                    <tr>
+                        <th class="col-narrow">Time</th>
+                        <th class="col-narrow">Action</th>
+                        <th>Target</th>
+                        <th class="col-narrow">Source</th>
+                        <th class="col-narrow">User</th>
+                        <th class="col-narrow">Client</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var record in records)
+                    {
+                        <tr>
+                            <td class="col-narrow">@record.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td class="col-narrow">@record.Action</td>
+                            <td><code class="resource-id" title="@record.ContentHash">@record.Target</code></td>
+                            <td class="col-narrow">@record.Source</td>
+                            <td class="col-narrow">@record.User</td>
+                            <td class="col-narrow">@record.ClientAddress</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+</div>
+
+@code {
+
+    private const int Take = 500;
+
+    private IReadOnlyList<TrakHoundAuditRecord> records = new List<TrakHoundAuditRecord>();
+    private TrakHoundAuditVerification verification;
+    private string search;
+    private readonly string downloadElementId = $"audit-download-{Guid.NewGuid():N}";
+    private string downloadKey;
+    private string downloadFilename;
+
+
+    protected override void OnInitialized() => Load();
+
+    private void Load()
+    {
+        records = instance.AuditMonitor?.Log.GetRecords(Take, search) ?? new List<TrakHoundAuditRecord>();
+    }
+
+    private void Verify()
+    {
+        verification = instance.AuditMonitor?.Log.Verify();
+        Load();
+    }
+
+    private async Task Download()
+    {
+        var path = instance.AuditMonitor?.Log.Path;
+        if (path == null) return;
+
+        if (downloadKey != null) downloadService.RemoveItem(downloadKey);
+
+        // The file itself, unfiltered, so a copy can still be checked. It's the live Audit Log, so it must not be deleted when the item is removed
+        downloadFilename = $"audit-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl";
+        downloadKey = downloadService.AddItem(new TrakHound.Blazor.Services.TrakHoundDownloadItem
+        {
+            Filename = downloadFilename,
+            ContentType = "application/x-ndjson",
+            FilePath = path,
+            DeleteFileWhenRemoved = false
+        }, TimeSpan.FromMinutes(5));
+
+        // Render the Link, then click it
+        await InvokeAsync(StateHasChanged);
+        await javascript.InvokeVoidAsync("JsFunctions.clickElement", downloadElementId);
+    }
+
+}

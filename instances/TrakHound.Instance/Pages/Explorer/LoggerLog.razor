@@ -1,0 +1,93 @@
+@inject ExplorerService explorerService
+@inject TrakHound.Instance.Logging.History.TrakHoundLogHistoryService logHistoryService
+@using TrakHound.Logging
+
+@* The Live and History log of a Logger Pattern (the Instance, an Api, an Endpoint or a Worker), so they all work the same way *@
+<LogView Filter="@Pattern"
+         GetLogLineConsumer="SubscribeLogLines"
+         QueryLogs="QueryLogs"
+         QueryLogCounts="QueryLogCounts"
+         @bind-From="@from"
+         @bind-To="@to"
+         @bind-SelectedLogLevel="@selectedLogLevel"
+         HistoryMinimumLevel="@logHistoryService.RunningConfiguration?.MinimumLogLevel"
+         AutoSubscribe="true">
+    <ToolbarContent>
+        @if (!string.IsNullOrEmpty(Pattern))
+        {
+            <a href="@GetDiagnosticsLink()" title="Open this Log in Diagnostics > Logs (with the Logger Tree)"><span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span>Open in Diagnostics</a>
+        }
+    </ToolbarContent>
+</LogView>
+
+@code {
+
+    private TrakHoundLogLevel selectedLogLevel;
+    private bool levelSet;
+    private DateTime from;
+    private DateTime to;
+
+
+    /// <summary>
+    /// The Loggers to show (ex. "api/TrakHound.Functions.Api/**"). Put a @key on this component with the Pattern, so a new Pattern starts a new log
+    /// </summary>
+    [Parameter]
+    public string Pattern { get; set; }
+
+    /// <summary>
+    /// The initial minimum level (ex. Debug, so an Api's Request lines are shown)
+    /// </summary>
+    [Parameter]
+    public TrakHoundLogLevel MinimumLevel { get; set; } = TrakHoundLogLevel.Information;
+
+
+    protected override void OnParametersSet()
+    {
+        if (!levelSet)
+        {
+            levelSet = true;
+            selectedLogLevel = MinimumLevel;
+        }
+    }
+
+    private string GetDiagnosticsLink()
+    {
+        return Url.AddQueryParameter(Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "diagnostics/logs/view"), "pattern", Pattern);
+    }
+
+    private async Task<ITrakHoundStream<IEnumerable<TrakHoundLogItem>>> SubscribeLogLines()
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null && !string.IsNullOrEmpty(Pattern))
+        {
+            return await client.Logs.Subscribe(Pattern, selectedLogLevel);
+        }
+
+        return null;
+    }
+
+    private async Task<TrakHoundLogQueryResult> QueryLogs(TrakHoundLogQuery query)
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null && !string.IsNullOrEmpty(Pattern))
+        {
+            query.Patterns = new[] { Pattern };
+            return await client.Logs.Query(query);
+        }
+
+        return null;
+    }
+
+    private async Task<IEnumerable<TrakHoundLoggerLogCount>> QueryLogCounts(TrakHoundLogQuery query)
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client != null && !string.IsNullOrEmpty(Pattern))
+        {
+            query.Patterns = new[] { Pattern };
+            return await client.Logs.QueryCounts(query);
+        }
+
+        return null;
+    }
+
+}

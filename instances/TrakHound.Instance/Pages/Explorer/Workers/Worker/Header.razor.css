@@ -1,0 +1,115 @@
+.header-panel {
+    container: worker-header / inline-size;
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-rows: 1fr max-content;
+    grid-template-columns: max-content minmax(0, max-content) max-content minmax(0, 1fr);
+    grid-column-gap: 10px;
+    padding-left: 0px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon-container {
+    grid-column: 1;
+    padding: 15px;
+}
+
+.header-panel .header-icon {
+    font-size: 1.25rem;
+    line-height: 35px;
+    color: var(--accent);
+}
+
+.header-panel .header-description-container {
+    grid-column: 2;
+    padding-right: 80px;
+    border-right: 1px solid var(--borderColorLight);
+    min-width: 0;
+}
+
+    /* Long names and descriptions truncate (full text in the title) instead of widening the page */
+    .header-panel .header-description-container span,
+    .header-panel .header-package-container span {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    .header-panel .header-description-container .header-title {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+    .header-panel .header-description-container .header-id {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 26px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-description-container .header-description {
+        display: block;
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.header-panel .header-package-icon-container {
+    grid-column: 3;
+    padding: 5px 10px;
+}
+
+.header-panel ::deep span.header-package-icon {
+    font-size: var(--fontSize3xl);
+    line-height: 30px;
+    color: var(--textLight);
+}
+
+.header-panel ::deep img.header-package-icon {
+    height: 50px;
+}
+
+.header-panel .header-package-container {
+    grid-column: 4;
+    border-left: 1px solid var(--borderColorLight);
+    padding: 0 20px;
+}
+
+    .header-panel .header-package-container .header-title {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        color: var(--textMild);
+    }
+
+    .header-panel .header-package-container .header-package {
+        display: block;
+        font-size: var(--fontSizeBase);
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-package-container .header-version {
+        display: block;
+        font-size: var(--fontSizeSm);
+        line-height: 14px;
+        color: var(--textMild);
+    }
+
+/* Narrow pages (a narrow screen, or a wide Explorer tree): the Package is also on the Information tab */
+@container worker-header (max-width: 600px) {
+    .header-panel .header-package-icon-container,
+    .header-panel .header-package-container {
+        display: none;
+    }
+
+    .header-panel .header-description-container {
+        padding-right: 0;
+        border-right: none;
+    }
+}

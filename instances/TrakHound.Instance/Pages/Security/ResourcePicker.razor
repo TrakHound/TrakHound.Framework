@@ -1,0 +1,312 @@
+@using TrakHound.Instance.Security
+@using TrakHound.Services
+
+@* Selects a Security Resource (or Resource pattern) by Scope => Target => Item. Value is the Resource ID / pattern *@
+
+<div class="resource-picker">
+    <div class="form-field">
+        <label for="@($"{Id}-scope")">Resource Type</label>
+        <select id="@($"{Id}-scope")" class="form-select" value="@scope" @onchange="ScopeChanged">
+            @if (!RequireSpecific)
+            {
+                <option value="@SecurityResourceScope.Everything">Everything</option>
+            }
+            <option value="@SecurityResourceScope.Api">Api</option>
+            <option value="@SecurityResourceScope.App">App</option>
+            <option value="@SecurityResourceScope.Service">Service</option>
+            <option value="@SecurityResourceScope.System">System API</option>
+            <option value="@SecurityResourceScope.Custom">@(RequireSpecific ? "Resource ID" : "Custom Pattern")</option>
+        </select>
+    </div>
+
+    @switch (scope)
+    {
+        case SecurityResourceScope.Api:
+        case SecurityResourceScope.App:
+        case SecurityResourceScope.Service:
+        case SecurityResourceScope.System:
+            var targets = Resources.GetTargets(scope).ToList();
+            <div class="form-field">
+                <label for="@($"{Id}-target")">@GetScopeTitle(scope)</label>
+                <select id="@($"{Id}-target")" class="form-select" value="@target" @onchange="TargetChanged">
+                    @if (RequireSpecific)
+                    {
+                        <option value="">Select..</option>
+                    }
+                    else
+                    {
+                        <option value="@SecurityResources.AllOption">All @(GetScopeTitle(scope))s</option>
+                    }
+                    @foreach (var option in targets)
+                    {
+                        <option value="@option.Value">@option.Text</option>
+                    }
+                </select>
+                @if (targets.Count == 0)
+                {
+                    <span class="hint">No @(GetScopeTitle(scope))s are loaded</span>
+                }
+            </div>
+
+            @if (scope == SecurityResourceScope.System && !string.IsNullOrEmpty(target))
+            {
+                <span class="hint">Reading requires the <strong>read</strong> Permission, and changes (ex. starting a Worker) require <strong>write</strong></span>
+            }
+            else if (!string.IsNullOrEmpty(target) && target != SecurityResources.AllOption)
+            {
+                var items = Resources.GetItems(scope, target).ToList();
+                <div class="form-field">
+                    <label for="@($"{Id}-item")">@GetItemTitle(scope)</label>
+                    <select id="@($"{Id}-item")" class="form-select" value="@item" @onchange="ItemChanged">
+                        @if (RequireSpecific)
+                        {
+                            <option value="">Select..</option>
+                        }
+                        else
+                        {
+                            <option value="@SecurityResources.AllOption">All @(GetItemTitle(scope))s</option>
+                        }
+                        @foreach (var option in items)
+                        {
+                            <option value="@option.Value">@option.Text</option>
+                        }
+                    </select>
+                </div>
+
+                @if (scope == SecurityResourceScope.Service && !string.IsNullOrEmpty(item) && item != SecurityResources.AllOption)
+                {
+                    <div class="form-field">
+                        <label for="@($"{Id}-operation")">Operation</label>
+                        <select id="@($"{Id}-operation")" class="form-select" value="@operation" @onchange="OperationChanged">
+                            @if (RequireSpecific)
+                            {
+                                <option value="">Select..</option>
+                            }
+                            else
+                            {
+                                <option value="@SecurityResources.AllOption">All Operations</option>
+                            }
+                            @foreach (var option in SecurityResources.GetServiceOperations(item))
+                            {
+                                <option value="@option.Value">@option.Text</option>
+                            }
+                        </select>
+                    </div>
+                }
+            }
+            break;
+
+        case SecurityResourceScope.Custom:
+            <div class="form-field wide">
+                <label for="@($"{Id}-custom")">@(RequireSpecific ? "Resource ID" : "Pattern")</label>
+                <input id="@($"{Id}-custom")" class="form-control" value="@custom" @oninput="CustomChanged" placeholder="@(RequireSpecific ? "ex. api:{apiId}:{controllerId}:{endpointId}" : "ex. api:{apiId}:* or service:*")" spellcheck="false" />
+                <span class="hint">@(RequireSpecific ? "The ID of a Resource" : "Matches Resource IDs exactly, or by prefix when it ends with *")</span>
+            </div>
+            break;
+    }
+
+    @if (!string.IsNullOrEmpty(Value))
+    {
+        <div class="form-field wide">
+            <code class="resource-id">@Value</code>
+        </div>
+    }
+</div>
+
+@code {
+
+    [Parameter]
+    public string Id { get; set; } = "resource";
+
+    [Parameter]
+    public SecurityResources Resources { get; set; }
+
+    /// <summary>
+    /// Require a single Resource (an Api Endpoint, App Page, or Service Operation) instead of allowing patterns
+    /// </summary>
+    [Parameter]
+    public bool RequireSpecific { get; set; }
+
+    [Parameter]
+    public string Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    private SecurityResourceScope scope;
+    private string target;
+    private string item;
+    private string operation;
+    private string custom;
+    private string parsedValue;
+    private bool initialized;
+
+
+    protected override void OnParametersSet()
+    {
+        // Only parse when the Value is changed from outside (ex. editing an existing Assignment), so that selections in progress are kept
+        if (!initialized || Value != parsedValue)
+        {
+            Parse(Value);
+            parsedValue = Value;
+            initialized = true;
+        }
+    }
+
+    private void Parse(string value)
+    {
+        scope = RequireSpecific ? SecurityResourceScope.Api : SecurityResourceScope.Everything;
+        target = RequireSpecific ? null : SecurityResources.AllOption;
+        item = RequireSpecific ? null : SecurityResources.AllOption;
+        operation = RequireSpecific ? null : SecurityResources.AllOption;
+        custom = null;
+
+        if (string.IsNullOrEmpty(value)) return;
+        if (value == "*" && !RequireSpecific) return;
+
+        var parts = value.Split(':');
+        switch (parts[0])
+        {
+            case "api":
+                scope = SecurityResourceScope.Api;
+                target = parts.Length > 1 ? parts[1] : SecurityResources.AllOption;
+                item = parts.Length > 3 ? $"{parts[2]}:{parts[3]}" : SecurityResources.AllOption;
+                if (parts.Length > 4 || (parts.Length == 3 && parts[2] != "*")) SetCustom(value);
+                break;
+
+            case "app":
+                scope = SecurityResourceScope.App;
+                target = parts.Length > 1 ? parts[1] : SecurityResources.AllOption;
+                item = parts.Length > 2 ? parts[2] : SecurityResources.AllOption;
+                if (parts.Length > 3) SetCustom(value);
+                break;
+
+            case TrakHoundSystemSecurity.ResourcePrefix:
+                scope = SecurityResourceScope.System;
+                target = parts.Length > 1 ? parts[1] : SecurityResources.AllOption;
+                if (parts.Length > 2) SetCustom(value);
+                break;
+
+            case TrakHoundServiceSecurity.ResourcePrefix:
+                scope = SecurityResourceScope.Service;
+                target = parts.Length > 1 ? parts[1] : SecurityResources.AllOption;
+                item = parts.Length > 2 ? parts[2] : SecurityResources.AllOption;
+                operation = parts.Length > 3 ? parts[3] : SecurityResources.AllOption;
+                if (parts.Length > 4) SetCustom(value);
+                break;
+
+            default:
+                SetCustom(value);
+                break;
+        }
+
+        // Patterns that the pickers can't represent (or Targets that are not loaded) are shown as Custom
+        if (scope != SecurityResourceScope.Custom && target != SecurityResources.AllOption && !Resources.GetTargets(scope).Any(o => o.Value == target))
+        {
+            SetCustom(value);
+        }
+    }
+
+    private void SetCustom(string value)
+    {
+        scope = SecurityResourceScope.Custom;
+        custom = value;
+    }
+
+    private async Task ScopeChanged(ChangeEventArgs args)
+    {
+        scope = Enum.Parse<SecurityResourceScope>(args.Value?.ToString() ?? nameof(SecurityResourceScope.Everything));
+        target = RequireSpecific ? null : SecurityResources.AllOption;
+        item = RequireSpecific ? null : SecurityResources.AllOption;
+        operation = RequireSpecific ? null : SecurityResources.AllOption;
+        await Update();
+    }
+
+    private async Task TargetChanged(ChangeEventArgs args)
+    {
+        target = args.Value?.ToString();
+        item = RequireSpecific ? null : SecurityResources.AllOption;
+        operation = RequireSpecific ? null : SecurityResources.AllOption;
+        await Update();
+    }
+
+    private async Task ItemChanged(ChangeEventArgs args)
+    {
+        item = args.Value?.ToString();
+        operation = RequireSpecific ? null : SecurityResources.AllOption;
+        await Update();
+    }
+
+    private async Task OperationChanged(ChangeEventArgs args)
+    {
+        operation = args.Value?.ToString();
+        await Update();
+    }
+
+    private async Task CustomChanged(ChangeEventArgs args)
+    {
+        custom = args.Value?.ToString()?.Trim();
+        await Update();
+    }
+
+    private async Task Update()
+    {
+        parsedValue = Build();
+        Value = parsedValue;
+        await ValueChanged.InvokeAsync(parsedValue);
+    }
+
+    private string Build()
+    {
+        const string all = SecurityResources.AllOption;
+
+        string prefix;
+        switch (scope)
+        {
+            case SecurityResourceScope.Everything: return "*";
+            case SecurityResourceScope.Custom: return string.IsNullOrEmpty(custom) ? null : custom;
+            case SecurityResourceScope.Api: prefix = "api"; break;
+            case SecurityResourceScope.App: prefix = "app"; break;
+            case SecurityResourceScope.System: prefix = TrakHoundSystemSecurity.ResourcePrefix; break;
+            default: prefix = TrakHoundServiceSecurity.ResourcePrefix; break;
+        }
+
+        if (string.IsNullOrEmpty(target)) return null;
+        if (target == all) return $"{prefix}:*";
+        if (scope == SecurityResourceScope.System) return $"{prefix}:{target}";
+        if (string.IsNullOrEmpty(item)) return RequireSpecific ? null : $"{prefix}:{target}:*";
+        if (item == all) return $"{prefix}:{target}:*";
+
+        if (scope == SecurityResourceScope.Service)
+        {
+            if (string.IsNullOrEmpty(operation)) return RequireSpecific ? null : $"{prefix}:{target}:{item}:*";
+            return $"{prefix}:{target}:{item}:{operation}";
+        }
+
+        return $"{prefix}:{target}:{item}";
+    }
+
+    private static string GetScopeTitle(SecurityResourceScope scope)
+    {
+        switch (scope)
+        {
+            case SecurityResourceScope.Api: return "Api";
+            case SecurityResourceScope.App: return "App";
+            case SecurityResourceScope.Service: return "Service";
+            case SecurityResourceScope.System: return "System API Area";
+            default: return scope.ToString();
+        }
+    }
+
+    private static string GetItemTitle(SecurityResourceScope scope)
+    {
+        switch (scope)
+        {
+            case SecurityResourceScope.Api: return "Endpoint";
+            case SecurityResourceScope.App: return "Page";
+            case SecurityResourceScope.Service: return "Service Type";
+            default: return "Item";
+        }
+    }
+
+}

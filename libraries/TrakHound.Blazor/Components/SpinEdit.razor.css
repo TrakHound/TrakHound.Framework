@@ -1,0 +1,134 @@
+﻿.spin-edit {
+    display: block;
+    margin: 0px;
+}
+
+    .spin-edit .title {
+        font-size: 12px;
+        color: var(--textDark);
+        margin-bottom: 2px;
+    }
+
+    .spin-edit .subtitle {
+        color: var(--textMild);
+        margin-left: 5px;
+    }
+
+    .spin-edit .spin-edit-group {
+        display: grid;
+        grid-template-columns: 1fr max-content max-content;
+    }
+
+    .spin-edit .spin-edit-input {
+        grid-column: 1;
+        min-width: 100px;
+    }
+
+        .spin-edit .spin-edit-input.small {
+            max-width: 130px;
+        }
+
+        .spin-edit .spin-edit-input input {
+            text-align: center;
+            height: 50px;
+            font-size: 20px;
+            border-radius: 0 !important;
+            border-right: none !important;
+            background: var(--inputBackground);
+            border: 1px solid var(--inputBorder);
+            color: var(--inputText);
+        }
+
+            .spin-edit .spin-edit-input input:hover {
+                background: var(--inputBackgroundHover);
+                border: 1px solid var(--inputBorderHover);
+                color: var(--inputTextHover);
+            }
+
+            .spin-edit .spin-edit-input input:focus {
+                background: var(--inputBackgroundHighlight);
+                border: 2px solid var(--inputBorderHighlight);
+                color: var(--inputTextHighlight);
+                outline: none !important;
+                box-shadow: none !important;
+            }
+
+            .spin-edit .spin-edit-input input:disabled {
+                background: var(--inputBackgroundDisabled);
+                border: 1px dashed var(--inputBorderDisabled);
+                color: var(--inputTextDisabled);
+                cursor: not-allowed;
+            }
+
+        .spin-edit.small .spin-edit-input input {
+            height: 36px;
+            font-size: 14px;
+        }
+
+
+    .spin-edit .spin-edit-buttons {
+        grid-column: 2;
+    }
+
+    .spin-edit .spin-edit-btn-top,
+    .spin-edit .spin-edit-btn-bottom {
+        width: 50px !important;
+        height: 25px !important;
+        display: block !important;
+        border-radius: 0 !important;
+        border: none !important;
+        padding: 2px;
+    }
+
+    .spin-edit.small .spin-edit-btn-top,
+    .spin-edit.small .spin-edit-btn-bottom {
+        width: 36px !important;
+        height: 18px !important;
+        line-height: 16px;
+        padding: 0px;
+    }
+
+        .spin-edit .spin-edit-btn-top:hover,
+        .spin-edit .spin-edit-btn-bottom:hover {
+            background: var(--accent);
+        }
+
+        .spin-edit .spin-edit-btn-top .icon,
+        .spin-edit .spin-edit-btn-bottom .icon {
+            color: var(--accent);
+            margin-right: 0;
+            font-size: 18px;
+        }
+
+    .spin-edit.small .spin-edit-btn-top .icon,
+    .spin-edit.small .spin-edit-btn-bottom .icon {
+        font-size: 14px;
+    }
+
+        .spin-edit .spin-edit-btn-top:hover .icon,
+        .spin-edit .spin-edit-btn-bottom:hover .icon {
+            color: white;
+        }
+
+    .spin-edit .spin-edit-btn-top {
+        border: 1px solid var(--borderColor) !important;
+    }
+
+    .spin-edit .spin-edit-btn-bottom {
+        border-bottom: 1px solid var(--borderColor) !important;
+        border-left: 1px solid var(--borderColor) !important;
+        border-right: 1px solid var(--borderColor) !important;
+    }
+
+    .spin-edit .spin-edit-units {
+        grid-column: 3;
+        height: 100%;
+    }
+
+    .spin-edit .units {
+        padding: 0 0 0 8px;
+        line-height: 35px;
+        vertical-align: baseline;
+        height: 100%;
+        color: var(--textMild);
+    }

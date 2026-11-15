@@ -1,0 +1,8 @@
+{
+  // Settings for the local debug host (Program.cs). Left out of the package
+  "instanceUrl": "{instanceUrl}",
+  "apiKey": "",
+
+  // Configuration Parameters (as set in the Identity Provider's Configuration on an Instance)
+  "parameters": {}
+}

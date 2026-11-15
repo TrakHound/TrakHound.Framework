@@ -1,0 +1,7 @@
+/* The rows are styled by LogRows (the Admin interface's log style) */
+.log-table {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--logBackground);
+    padding-bottom: 50px;
+}

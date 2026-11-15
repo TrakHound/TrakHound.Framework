@@ -1,0 +1,800 @@
+@page "/_admin/configuration/{CategoryKey}/{ConfigurationId}"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/{CategoryKey}/{ConfigurationId}"
+@attribute [TrakHound.Instance.Security.AdminResourceDynamic]
+@layout ConfigurationLayout
+@implements IDisposable
+@inject ConfigurationsService configurationsService
+@inject NavigationManager navigationManager
+@inject TrakHound.Blazor.Services.JavascriptService javascriptService
+@using TrakHound.Api
+@using TrakHound.Apps
+@using TrakHound.Configurations
+@using TrakHound.Instance.Pages.Packages
+@using TrakHound.Instance.Pages.Settings
+@using TrakHound.Packages
+@using TrakHound.Services
+
+<NavigationLock OnBeforeInternalNavigation="BeforeNavigation" ConfirmExternalNavigation="@IsDirty" />
+
+@if (category == null || notFound)
+{
+    <div class="edit-page">
+        <div class="empty-state">
+            <span class="empty-icon fa-regular fa-sharp fa-circle-question"></span>
+            <span class="empty-title">@(category == null ? $"Unknown Configuration Category '{CategoryKey}'" : $"{category.SingularTitle} '{ConfigurationId}' was not found")</span>
+            <span class="empty-description">It may have been removed.</span>
+            <a class="btn btn-light" href="@configurationsService.GetLink(category != null ? $"_admin/configuration/{category.Key}" : "_admin/configuration")">Back to the list</a>
+        </div>
+    </div>
+}
+else if (model != null)
+{
+    <TrakHoundPageTitle Text="@($"{(isNew ? "Add" : "Edit")} {category.SingularTitle}")" />
+    <AreaBreadcrumbs Items="@([new(category.Title, configurationsService.GetLink($"_admin/configuration/{category.Key}")), new(isNew ? "New" : category.GetDisplayName(model))])" />
+
+    <div class="edit-page">
+
+        @* Header : Title and Actions *@
+        <div class="edit-header">
+            <div class="edit-title">
+                <span class="title">@(isNew ? $"Add {category.SingularTitle}" : $"Edit {category.SingularTitle}")</span>
+            </div>
+            <div class="edit-actions">
+                @if (IsDirty && !saving)
+                {
+                    <span class="save-status"><span class="status-dot"></span>Unsaved changes</span>
+                }
+                <button class="btn btn-light" @onclick="Cancel" disabled="@saving"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                @if (!choosingPackage)
+                {
+                    @if (!saving)
+                    {
+                        <button class="admin-write btn btn-primary" @onclick="Save"><span class="icon fa-solid fa-sharp @(isNew ? "fa-plus" : "fa-floppy-disk")"></span>@(isNew ? $"Add {category.SingularTitle}" : "Save")</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>@savingMessage</button>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="edit-content">
+
+            @if (choosingPackage)
+            {
+                @* Step 1 (new) : Choose a Package *@
+                <div class="package-step">
+                    <div class="package-step-header">
+                        <div>
+                            <span class="step-title">Choose a Package</span>
+                            <span class="step-description">Select the @category.PackageCategory Package this configuration runs. You can change its settings next.</span>
+                        </div>
+                        <div class="package-step-actions">
+                        <div class="package-mode" role="group" aria-label="Package location">
+                            <button class="chip @(packageMode == PackageMode.Source ? "active" : "")" @onclick="() => packageMode = PackageMode.Source" disabled="@(configurationsService.PackageClient == null)" title="@(configurationsService.PackageClient == null ? "No Package Source is selected" : configurationsService.Packages.SelectedSource?.Name)">From Source</button>
+                            <button class="chip @(packageMode == PackageMode.Installed ? "active" : "")" @onclick="() => packageMode = PackageMode.Installed">Installed</button>
+                        </div>
+                        <button class="btn btn-primary btn-continue @(selectedPackage == null ? "disabled" : "")" disabled="@(selectedPackage == null)" @onclick="ContinueWithPackage">
+                            @(selectedPackage != null ? $"Continue with {selectedPackage.Id}" : "Select a Package")<span class="icon right fa-solid fa-sharp fa-chevron-right"></span>
+                        </button>
+                        </div>
+                    </div>
+                    <div class="package-browser">
+                        @if (packageMode == PackageMode.Source && configurationsService.PackageClient != null)
+                        {
+                            <PackageSelectBrowser @key="@($"source:{configurationsService.PackageClient.BaseUrl}:{configurationsService.PackageClient.Organization}")"
+                                                  Category="@category.PackageCategory"
+                                                  PackageClient="@configurationsService.PackageClient"
+                                                  @bind-Query="@packageQuery"
+                                                  SelectedPackage="@selectedPackage"
+                                                  SelectedPackageChanged="PackageSelected" />
+                        }
+                        else
+                        {
+                            <PackageSelectBrowser @key="@("installed")"
+                                                  Category="@category.PackageCategory"
+                                                  PackageClient="null"
+                                                  PackagePath="@configurationsService.PackageManager.Path"
+                                                  @bind-Query="@packageQuery"
+                                                  SelectedPackage="@selectedPackage"
+                                                  SelectedPackageChanged="PackageSelected" />
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="form-content">
+
+                    @if (errors.Count > 0)
+                    {
+                        <div class="form-errors" role="alert">
+                            <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                            <div>
+                                <span class="errors-title">@(errors.Count == 1 ? "Fix this before saving" : "Fix these before saving")</span>
+                                <ul>
+                                    @foreach (var error in errors)
+                                    {
+                                        <li>@error</li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+
+                    @* Package *@
+                    <SettingsSection Title="Package" Description="The Package this configuration runs" Icon="fa-solid fa-sharp fa-box">
+                        <HeaderContent>
+                            @if (isNew)
+                            {
+                                <button class="btn btn-light btn-sm" @onclick="ChangePackage"><span class="icon fa-solid fa-sharp fa-arrows-rotate"></span>Change Package</button>
+                            }
+                        </HeaderContent>
+                        <ChildContent>
+                            <SettingsField Label="Package">
+                                <DescriptionContent>
+                                    @if (resolvedPackage != null)
+                                    {
+                                        <span>Installed v@(resolvedPackage.Version) · built @resolvedPackage.BuildDate.ToLocalTime().ToString("g")</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Not installed. It is installed from the selected Package Source when saved.</span>
+                                    }
+                                </DescriptionContent>
+                                <ChildContent>
+                                    <div class="package-summary">
+                                        <span class="package-id">@model.PackageId</span>
+                                        @if (!string.IsNullOrEmpty(PackagesContext.GetDescription(selectedPackage ?? resolvedPackage)))
+                                        {
+                                            <span class="package-description">@PackagesContext.GetDescription(selectedPackage ?? resolvedPackage)</span>
+                                        }
+                                    </div>
+                                </ChildContent>
+                            </SettingsField>
+                            <SettingsField Label="Use Latest Version" Description="Use the latest installed version, including updates installed later. Turn off to use a specific version.">
+                                <div class="switch-control">
+                                    <RadzenSwitch Value="@model.UseLatest" ValueChanged="@((bool value) => SetUseLatest(value))" />
+                                    <span class="muted">@(model.UseLatest ? "Latest" : "Specific version")</span>
+                                </div>
+                            </SettingsField>
+                            @if (model.UseLatest)
+                            {
+                                <SettingsField Label="Include Prereleases" Description="Also use prerelease versions (ex. 0.4.5-dev.20261114153000) when they are newer, and offer them as updates. Turn off to use the latest stable version (a prerelease is only used if there is no stable version).">
+                                    <div class="switch-control">
+                                        <RadzenSwitch Value="@model.IncludePrereleases" ValueChanged="@((bool value) => SetIncludePrereleases(value))" />
+                                        <span class="muted">@(model.IncludePrereleases ? "Stable and prereleases" : "Stable only")</span>
+                                    </div>
+                                </SettingsField>
+                            }
+                            @if (!model.UseLatest)
+                            {
+                                <SettingsField Label="Version" Description="Versions that aren't installed are installed from the selected Package Source when saved">
+                                    @if (versionsLoading)
+                                    {
+                                        <span class="muted"><span class="icon fa-solid fa-sharp fa-loader spin"></span> Loading versions..</span>
+                                    }
+                                    else
+                                    {
+                                        <RadzenDropDown TValue="string" Data="@versionOptions" TextProperty="Text" ValueProperty="Version" @bind-Value="@model.PackageVersion" @bind-Value:after="StateHasChanged" />
+                                    }
+                                </SettingsField>
+                            }
+                        </ChildContent>
+                    </SettingsSection>
+
+                    @* General *@
+                    <SettingsSection Title="General" Icon="fa-solid fa-sharp fa-sliders">
+                        @if (category.HasName)
+                        {
+                            <SettingsField Label="Name" Description="A display name for this configuration">
+                                <RadzenTextBox Immediate="true" @bind-Value="@model.Name" Placeholder="@(selectedPackage?.Id ?? model.PackageId)" />
+                            </SettingsField>
+                        }
+                        <SettingsField Label="Description">
+                            <RadzenTextArea Immediate="true" @bind-Value="@model.Description" Rows="2" />
+                        </SettingsField>
+                        @if (category.HasRoute)
+                        {
+                            <SettingsField Label="Route" Description="The URL path it is served at (ex. /shopfloor/login). Must be unique.">
+                                <RadzenTextBox Immediate="true" @bind-Value="@model.Route" Placeholder="/" />
+                            </SettingsField>
+                        }
+                        @if (category.HasHttpEnabled)
+                        {
+                            <SettingsField Label="Serve over HTTP" Description="Turn off to only use it within the Instance (ex. from Apps and Functions). Requests over HTTP return 404.">
+                                <div class="switch-control">
+                                    <RadzenSwitch @bind-Value="@model.HttpEnabled" />
+                                    <span class="muted">@(model.HttpEnabled ? "Enabled" : "Disabled")</span>
+                                </div>
+                            </SettingsField>
+                        }
+                        @if (category.HasMcpTools)
+                        {
+                            <SettingsField Label="MCP Tools" Description="Serve Endpoints as Tools of the Instance's MCP Server (/_mcp), so AI clients can call them. Marked (the default) serves the Endpoints the package marks for AI clients ([ApiMcpTool]); All serves every Endpoint (ones that aren't GET are treated as changing data). Requires the MCP Server (Settings > Interfaces).">
+                                <RadzenDropDown TValue="TrakHoundApiMcpToolsMode" @bind-Value="@model.McpTools" Data="@_mcpToolsModes" />
+                            </SettingsField>
+                            @if (model.McpTools != TrakHoundApiMcpToolsMode.Off)
+                            {
+                                <SettingsField Label="Read-only Tools only" Description="Only serve Tools that don't change anything: GET and Stream Endpoints, and Endpoints the package marks as read only (ex. a POST search). On by default; turn it off to also serve Tools that change data (PUT, POST, DELETE). The patterns below still apply.">
+                                    <div class="switch-control">
+                                        <RadzenSwitch @bind-Value="@model.McpReadOnly" />
+                                        <span class="muted">@(model.McpReadOnly ? "Enabled" : "Disabled")</span>
+                                    </div>
+                                </SettingsField>
+                                <SettingsField Label="Included MCP Tools" Description="Only serve Endpoints that match one of these patterns, one per line: a route relative to the Api Route ('*' matches anything, ex. /orders/*), optionally after methods and a space (ex. GET * for every GET, STREAM * for Streams, or POST /orders/search). Leave empty for every Endpoint.">
+                                    <RadzenTextArea Immediate="true" @bind-Value="@model.McpInclude" Rows="2" Placeholder="All Endpoints" />
+                                </SettingsField>
+                                <SettingsField Label="Excluded MCP Tools" Description="Never serve Endpoints that match one of these patterns, one per line (ex. /admin/* or DELETE *).">
+                                    <RadzenTextArea Immediate="true" @bind-Value="@model.McpExclude" Rows="2" />
+                                </SettingsField>
+                            }
+                        }
+                        @if (category.HasFunctionId)
+                        {
+                            <SettingsField Label="Function ID" Description="The ID the Function is run by">
+                                <RadzenTextBox Immediate="true" @bind-Value="@model.FunctionId" />
+                            </SettingsField>
+                        }
+                        <SettingsField Label="Volume ID" Description="The Volume used for files (leave empty for the default)">
+                            <RadzenTextBox Immediate="true" @bind-Value="@model.VolumeId" />
+                        </SettingsField>
+                        @if (category.HasGroup)
+                        {
+                            <SettingsField Label="Group" Description="Groups organize Modules and set the Router they use when they don't name one">
+                                <DescriptionContent>
+                                    @if (!string.IsNullOrEmpty(model.GroupId) && !groupOptions.Any(o => string.Equals(o.Id, model.GroupId, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        <span class="field-warning">The Group "@model.GroupId" doesn't exist.</span>
+                                    }
+                                    else if (!string.IsNullOrEmpty(model.GroupId))
+                                    {
+                                        <a href="@configurationsService.GetLink(GroupModules.GetLink(model.GroupId))">Open the Group</a>
+                                    }
+                                </DescriptionContent>
+                                <ChildContent>
+                                    <RadzenDropDown TValue="string" Data="@groupOptions" TextProperty="Name" ValueProperty="Id" @bind-Value="@model.GroupId" AllowClear="true" Placeholder="No Group" />
+                                </ChildContent>
+                            </SettingsField>
+                        }
+                        @if (category.HasRouter)
+                        {
+                            <SettingsField Label="Router" Description="@(category.HasGroup ? "The Router used to route requests to Services. Leave empty to use the Group's Router (or the default Router)" : "The Router used to route requests to Services")">
+                                <RadzenDropDown TValue="string" Data="@routerIds" @bind-Value="@model.RouterId" AllowClear="true" Placeholder="@RouterPlaceholder" />
+                            </SettingsField>
+                        }
+                        @if (!isNew && IsZoneCategory)
+                        {
+                            var zone = configurationsService.Target.ZoneManager?.GetMemberZone(TrakHound.Zones.TrakHoundZoneResources.GetMemberId(category.PackageCategory, model.Id));
+                            <SettingsField Label="Zone" Description="A Zone limits what its Members can reach. Zones are edited in Configuration > Access > Zones">
+                                @if (zone != null)
+                                {
+                                    <a href="@configurationsService.GetLink($"_admin/configuration/zones/{Uri.EscapeDataString(zone.Id)}")">@(string.IsNullOrEmpty(zone.Name) ? zone.Id : zone.Name)</a>
+                                    <span class="muted">(@zone.Mode)@(!string.IsNullOrEmpty(zone.RouterId) ? $" · Service calls use the Router \"{zone.RouterId}\"" : "")</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">Not in a Zone (not restricted)</span>
+                                }
+                            </SettingsField>
+                        }
+                    </SettingsSection>
+
+                    @* Parameters *@
+                    <SettingsSection Title="Parameters" Description="Values passed to the Package" Icon="fa-solid fa-sharp fa-list">
+                        @if (templateParameters.Count == 0 && model.Parameters.Count == 0)
+                        {
+                            <p class="muted no-parameters">This Package doesn't define any parameters. Add one below if needed.</p>
+                        }
+                        else
+                        {
+                            <div class="parameters-list">
+                                @foreach (var name in GetParameterNames())
+                                {
+                                    var isTemplate = templateParameters.Contains(name);
+                                    var isSecret = IsSecret(name);
+                                    var shown = shownSecrets.Contains(name);
+                                    var value = GetParameter(name);
+                                    var isEncrypted = TrakHoundSecrets.IsEncrypted(value);
+
+                                    <div class="parameter-row">
+                                        <div class="parameter-name">
+                                            <code>@name</code>
+                                            @if (isTemplate)
+                                            {
+                                                <span class="parameter-badge" title="Defined by the Package">Package</span>
+                                            }
+                                        </div>
+                                        <div class="parameter-value">
+                                            @* Saved secrets are encrypted and never shown : a new value replaces it *@
+                                            <input class="rz-textbox" type="@(isSecret && (isEncrypted || !shown) ? "password" : "text")" value="@(isEncrypted ? "" : value)" placeholder="@(isEncrypted ? GetEncryptedPlaceholder(value) : null)" @oninput="e => SetParameter(name, e.Value?.ToString())" autocomplete="@(isSecret ? "new-password" : "off")" spellcheck="false" />
+                                            @if (isEncrypted)
+                                            {
+                                                <button class="admin-write btn btn-link btn-icon" type="button" title="Clear the saved value" @onclick="() => ClearSecret(name)"><span class="fa-solid fa-sharp fa-eraser"></span></button>
+                                            }
+                                            else if (isSecret)
+                                            {
+                                                <button class="btn btn-link btn-icon" type="button" title="@(shown ? "Hide" : "Show")" @onclick="() => ToggleSecret(name)"><span class="fa-solid fa-sharp @(shown ? "fa-eye-slash" : "fa-eye")"></span></button>
+                                            }
+                                            @if (isTemplate)
+                                            {
+                                                <span class="btn-icon-spacer"></span>
+                                            }
+                                            else
+                                            {
+                                                <button class="admin-write btn btn-link btn-icon btn-remove-parameter" type="button" title="Remove @name" @onclick="() => model.Parameters.Remove(name)"><span class="fa-regular fa-sharp fa-trash-can"></span></button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        <div class="parameter-row parameter-add">
+                            <div class="parameter-name">
+                                <input class="rz-textbox" placeholder="Name" @bind="newParameterName" @bind:event="oninput" spellcheck="false" />
+                            </div>
+                            <div class="parameter-value">
+                                <input class="rz-textbox" type="@(IsSecret(newParameterName) ? "password" : "text")" placeholder="Value" @bind="newParameterValue" @bind:event="oninput" autocomplete="@(IsSecret(newParameterName) ? "new-password" : "off")" spellcheck="false" />
+                                <button class="admin-write btn btn-light btn-add" type="button" @onclick="AddParameter" disabled="@string.IsNullOrWhiteSpace(newParameterName)"><span class="icon fa-solid fa-sharp fa-plus"></span>Add</button>
+                            </div>
+                        </div>
+                    </SettingsSection>
+
+                    @if (!isNew)
+                    {
+                        <SettingsSection Title="Details" Icon="fa-solid fa-sharp fa-circle-info">
+                            <SettingsField Label="Configuration ID" Description="Identifies this configuration (read only)">
+                                <span class="id-value">
+                                    <code>@model.Id</code>
+                                    <button class="btn btn-link btn-copy" title="Copy" @onclick="CopyId"><span class="fa-solid fa-sharp @(idCopied ? "fa-check" : "fa-copy")"></span></button>
+                                </span>
+                            </SettingsField>
+                        </SettingsSection>
+                    }
+                </div>
+            }
+
+        </div>
+    </div>
+
+    @* Unsaved changes *@
+    <Modal Class="packages-modal" Visible="@(leaveTarget != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+            <span class="modal-header-title">Discard unsaved changes?</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="modal-description">This @category.SingularTitle has changes that haven't been saved. Leave and discard them?</p>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => leaveTarget = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Keep Editing</button>
+            <button class="btn btn-danger" @onclick="ConfirmLeave"><span class="icon fa-solid fa-sharp fa-right-from-bracket"></span>Discard Changes</button>
+        </FooterContent>
+    </Modal>
+}
+else
+{
+    <div class="edit-page">
+        <Loading Message="Loading.." />
+    </div>
+}
+
+@code {
+
+    // Set by the Workspace route ("_admin/workspaces/{WorkspaceId}/..."). ConfigurationsService reads the Workspace from the URL
+    [Parameter]
+    public string WorkspaceId { get; set; }
+
+    // "/_admin/configuration/{category}/new" adds a Configuration
+    private const string NewConfigurationId = "new";
+
+    private static readonly TrakHoundApiMcpToolsMode[] _mcpToolsModes = Enum.GetValues<TrakHoundApiMcpToolsMode>();
+
+    private enum PackageMode { Source, Installed }
+
+    private record VersionOption(string Version, string Text);
+
+    private ConfigurationCategoryDefinition category;
+    private ConfigurationModel model;
+    private string savedSnapshot;
+    private bool isNew;
+    private bool notFound;
+    private bool choosingPackage;
+    private PackageMode packageMode;
+    private string packageQuery;
+
+    private TrakHoundPackage selectedPackage;
+    private TrakHoundPackage resolvedPackage;
+    private List<string> templateParameters = new List<string>();
+    private List<string> routerIds = new List<string>();
+    private List<GroupOption> groupOptions = new List<GroupOption>();
+    private List<VersionOption> versionOptions = new List<VersionOption>();
+    private bool versionsLoading;
+
+    private readonly HashSet<string> shownSecrets = new HashSet<string>();
+    private readonly Dictionary<string, string> savedSecrets = new Dictionary<string, string>();
+    private string newParameterName;
+    private string newParameterValue;
+
+    private readonly List<string> errors = new List<string>();
+    private bool saving;
+    private string savingMessage;
+    private bool idCopied;
+    private string leaveTarget;
+    private bool leaveConfirmed;
+    private string lastKey;
+
+
+    [Parameter]
+    public string CategoryKey { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+
+    private bool IsDirty => model != null && !leaveConfirmed && (choosingPackage ? false : model.GetSnapshot() != savedSnapshot);
+
+    private record GroupOption(string Id, string Name);
+
+    // The Router used when the Configuration doesn't name one : its Group's, else the default Router
+    private string RouterPlaceholder
+    {
+        get
+        {
+            var groupRouterId = category?.HasGroup == true ? TrakHound.Groups.TrakHoundGroups.GetRouterId(configurationsService.ConfigurationProfile, null, model?.GroupId) : null;
+            return groupRouterId != null ? $"{groupRouterId} (from the Group)" : TrakHoundServiceRouter.Default;
+        }
+    }
+
+    // Apis, Apps, Functions, Workers and Services can be Zone Members (or the target of a Zone's Rules)
+    private bool IsZoneCategory => category?.PackageCategory is "api" or "app" or "function" or "worker" or "service";
+
+
+    protected override void OnInitialized()
+    {
+        configurationsService.Packages.Changed += PackagesChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{CategoryKey}/{ConfigurationId}";
+        if (key == lastKey) return;
+        lastKey = key;
+
+        category = ConfigurationCategories.Get(CategoryKey);
+        notFound = false;
+        model = null;
+        leaveConfirmed = false;
+        leaveTarget = null;
+        errors.Clear();
+        savedSecrets.Clear();
+        if (category == null) return;
+
+        // Configurations reference Routers by Name
+        routerIds = configurationsService.ConfigurationProfile.Get<TrakHoundServiceRouterConfiguration>(TrakHoundServiceRouterConfiguration.ConfigurationCategory)?
+            .Select(o => !string.IsNullOrEmpty(o.Name) ? o.Name : o.Id).Where(o => !string.IsNullOrEmpty(o)).Distinct().OrderBy(o => o).ToList() ?? new List<string>();
+        if (!routerIds.Contains(TrakHoundServiceRouter.Default)) routerIds.Insert(0, TrakHoundServiceRouter.Default);
+
+        groupOptions = GroupModules.GetGroups(configurationsService.ConfigurationProfile).Select(o => new GroupOption(o.Id, GroupModules.GetName(o))).ToList();
+
+        if (string.IsNullOrEmpty(ConfigurationId) || string.Equals(ConfigurationId, NewConfigurationId, StringComparison.OrdinalIgnoreCase))
+        {
+            // New : choose a Package first
+            isNew = true;
+            choosingPackage = true;
+            packageMode = configurationsService.PackageClient != null ? PackageMode.Source : PackageMode.Installed;
+            model = new ConfigurationModel
+            {
+                PackageVersion = TrakHoundPackage.WilcardVersion
+            };
+            savedSnapshot = model.GetSnapshot();
+        }
+        else
+        {
+            isNew = false;
+            choosingPackage = false;
+
+            var configuration = category.Get(configurationsService.ConfigurationProfile, ConfigurationId);
+            if (configuration == null)
+            {
+                notFound = true;
+                return;
+            }
+
+            model = configuration.Clone();
+            savedSnapshot = model.GetSnapshot();
+
+            // Encrypted secrets are kept unless a new value is entered
+            foreach (var parameter in model.Parameters)
+            {
+                if (parameter.Value is string text && TrakHoundSecrets.IsEncrypted(text)) savedSecrets[parameter.Key] = text;
+            }
+
+            // The installed Package (or the Source's latest) provides the parameter templates
+            resolvedPackage = configurationsService.ResolvePackage(model);
+            selectedPackage = resolvedPackage ?? configurationsService.PackageManager.GetLatest(model.PackageId);
+            ApplyPackageMetadata(selectedPackage);
+            if (!model.UseLatest) await LoadVersions();
+        }
+    }
+
+    public void Dispose()
+    {
+        configurationsService.Packages.Changed -= PackagesChanged;
+    }
+
+    private void PackagesChanged()
+    {
+        // The Source may have finished loading (enables 'From Source')
+        if (isNew && choosingPackage && configurationsService.PackageClient != null && selectedPackage == null) packageMode = PackageMode.Source;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+
+    #region "Package"
+
+    // Selecting a Package in the browser only shows its details (the browser auto-selects a single result)
+    private void PackageSelected(TrakHoundPackage package)
+    {
+        selectedPackage = package;
+    }
+
+    private async Task ContinueWithPackage()
+    {
+        var package = selectedPackage;
+        if (package == null) return;
+
+        model.PackageId = package.Id;
+        if (!model.UseLatest) model.PackageVersion = package.Version;
+
+        // Defaults from the Package
+        if (category.HasName && string.IsNullOrWhiteSpace(model.Name)) model.Name = GetMetadata(package, ".name") ?? GetMetadata(package, ".defaultName");
+        if (category.HasRoute && string.IsNullOrWhiteSpace(model.Route)) model.Route = GetMetadata(package, ".defaultRoute");
+        if (category.HasFunctionId && string.IsNullOrWhiteSpace(model.FunctionId)) model.FunctionId = package.Id;
+        if (string.IsNullOrWhiteSpace(model.VolumeId)) model.VolumeId = GetMetadata(package, ".defaultVolumeId");
+
+        resolvedPackage = configurationsService.ResolvePackage(model);
+        choosingPackage = false;
+        ApplyPackageMetadata(package);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ChangePackage()
+    {
+        choosingPackage = true;
+    }
+
+    private void ApplyPackageMetadata(TrakHoundPackage package)
+    {
+        templateParameters = GetMetadata(package, ".configurationParameters")?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList() ?? new List<string>();
+    }
+
+    private async Task SetUseLatest(bool useLatest)
+    {
+        if (useLatest)
+        {
+            model.PackageVersion = TrakHoundPackage.WilcardVersion;
+        }
+        else
+        {
+            model.PackageVersion = resolvedPackage?.Version ?? selectedPackage?.Version;
+            await LoadVersions();
+        }
+
+        resolvedPackage = configurationsService.ResolvePackage(model) ?? resolvedPackage;
+    }
+
+    // Adds or removes "-*" (ex. "*" and "*-*", or "1.*" and "1.*-*"), so a pattern that limits the version is kept
+    private void SetIncludePrereleases(bool includePrereleases)
+    {
+        var pattern = string.IsNullOrEmpty(model.PackageVersion) ? TrakHoundPackage.WilcardVersion : model.PackageVersion;
+        if (pattern.EndsWith(TrakHoundPackage.PrereleaseWildcardSuffix)) pattern = pattern.Substring(0, pattern.Length - TrakHoundPackage.PrereleaseWildcardSuffix.Length);
+
+        model.PackageVersion = includePrereleases ? pattern + TrakHoundPackage.PrereleaseWildcardSuffix : pattern;
+
+        // The installed version the Configuration will use with the new setting
+        resolvedPackage = configurationsService.ResolvePackage(model) ?? resolvedPackage;
+    }
+
+    private async Task LoadVersions()
+    {
+        versionsLoading = true;
+        await InvokeAsync(StateHasChanged);
+
+        var versions = await configurationsService.GetPackageVersions(model.PackageId);
+        versionOptions = versions.Select(o => new VersionOption(o.Version, $"v{o.Version}{(o.Installed ? " (installed)" : "")}")).ToList();
+
+        // Keep the current version selectable even if it isn't installed or available
+        if (!string.IsNullOrEmpty(model.PackageVersion) && !model.UseLatest && !versionOptions.Any(o => o.Version == model.PackageVersion))
+        {
+            versionOptions.Insert(0, new VersionOption(model.PackageVersion, $"v{model.PackageVersion} (not available)"));
+        }
+
+        versionsLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetMetadata(TrakHoundPackage package, string key)
+    {
+        if (package?.Metadata == null) return null;
+        var value = package.Metadata.FirstOrDefault(o => string.Equals(o.Key, key, StringComparison.OrdinalIgnoreCase)).Value?.ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    #endregion
+
+    #region "Parameters"
+
+    private IEnumerable<string> GetParameterNames()
+    {
+        return templateParameters.Concat(model.Parameters.Keys.Where(o => !templateParameters.Contains(o)).OrderBy(o => o));
+    }
+
+    private string GetParameter(string name) => model.Parameters.GetValueOrDefault(name)?.ToString();
+
+    private void SetParameter(string name, string value)
+    {
+        // Erasing a new value for a saved secret keeps the saved value (use Clear to remove it)
+        if (string.IsNullOrEmpty(value) && savedSecrets.TryGetValue(name, out var saved)) model.Parameters[name] = saved;
+        else if (string.IsNullOrEmpty(value)) model.Parameters.Remove(name);
+        else model.Parameters[name] = value;
+    }
+
+    private void ClearSecret(string name)
+    {
+        savedSecrets.Remove(name);
+        model.Parameters.Remove(name);
+    }
+
+    private static string GetEncryptedPlaceholder(string value)
+    {
+        return TrakHoundSecrets.Decrypt(value) != null
+            ? "Saved (encrypted). Type to replace it."
+            : "Saved by a different Instance and can't be decrypted. Enter it again.";
+    }
+
+    private void AddParameter()
+    {
+        var name = newParameterName?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+
+        model.Parameters[name] = newParameterValue ?? "";
+        newParameterName = null;
+        newParameterValue = null;
+    }
+
+    // Parameters such as "password", "apiToken", "client_secret" or "apiKey" are masked (and encrypted when saved)
+    private static bool IsSecret(string name) => TrakHoundSecrets.IsSecretKey(name);
+
+    private void ToggleSecret(string name)
+    {
+        if (!shownSecrets.Remove(name)) shownSecrets.Add(name);
+    }
+
+    #endregion
+
+    #region "Save"
+
+    private List<string> Validate()
+    {
+        var result = new List<string>();
+
+        if (string.IsNullOrEmpty(model.PackageId)) result.Add("Choose a Package");
+        if (!model.UseLatest && string.IsNullOrWhiteSpace(model.PackageVersion)) result.Add("Choose a Package version (or use the latest)");
+
+        var others = category.Load(configurationsService.ConfigurationProfile)?.Where(o => o.Id != model.Id).ToList() ?? new List<ConfigurationModel>();
+
+        if (category.HasRoute)
+        {
+            if (string.IsNullOrWhiteSpace(model.Route))
+            {
+                result.Add("Route is required");
+            }
+            else
+            {
+                var route = ConfigurationCategoryDefinition.NormalizeRoute(model.Route);
+                var duplicate = others.FirstOrDefault(o => string.Equals(ConfigurationCategoryDefinition.NormalizeRoute(o.Route), route, StringComparison.OrdinalIgnoreCase));
+                if (duplicate != null) result.Add($"The route {route} is already used by '{category.GetDisplayName(duplicate)}'");
+            }
+        }
+
+        if (category.HasFunctionId)
+        {
+            if (string.IsNullOrWhiteSpace(model.FunctionId))
+            {
+                result.Add("Function ID is required");
+            }
+            else
+            {
+                var duplicate = others.FirstOrDefault(o => string.Equals(o.FunctionId, model.FunctionId.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (duplicate != null) result.Add($"The Function ID '{model.FunctionId.Trim()}' is already used by '{category.GetDisplayName(duplicate)}'");
+            }
+        }
+
+        return result;
+    }
+
+    private async Task Save()
+    {
+        errors.Clear();
+        errors.AddRange(Validate());
+        if (errors.Count > 0) return;
+
+        saving = true;
+        savingMessage = "Installing Package..";
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Install the Package version first (so a configuration is never saved for a Package that can't be installed).
+            // A Workspace isn't run here, so nothing is installed for it
+            var installError = configurationsService.Target.IsLive ? await configurationsService.EnsurePackageInstalled(model.PackageId, model.PackageVersion) : null;
+            if (installError != null)
+            {
+                errors.Add(installError);
+                return;
+            }
+
+            savingMessage = "Saving..";
+            await InvokeAsync(StateHasChanged);
+
+            if (isNew) model.Id = Guid.NewGuid().ToString();
+            await Task.Run(() => configurationsService.Save(category, model));
+
+            var name = category.GetDisplayName(model);
+            configurationsService.Packages.Notify(PackageNotificationType.Success, isNew ? $"Added {name}" : $"Saved {name}", $"{model.PackageId} {model.VersionText}");
+
+            // Saved : leave without the unsaved changes prompt
+            savedSnapshot = model.GetSnapshot();
+            navigationManager.NavigateTo(configurationsService.GetLink($"_admin/configuration/{category.Key}"));
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Save failed : {ex.Message}");
+            if (isNew) model.Id = null;
+        }
+        finally
+        {
+            saving = false;
+            savingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Cancel()
+    {
+        navigationManager.NavigateTo(configurationsService.GetLink($"_admin/configuration/{category.Key}"));
+    }
+
+    private void BeforeNavigation(LocationChangingContext context)
+    {
+        if (IsDirty && !saving)
+        {
+            leaveTarget = context.TargetLocation;
+            context.PreventNavigation();
+        }
+    }
+
+    private void ConfirmLeave()
+    {
+        var target = leaveTarget;
+        leaveTarget = null;
+        leaveConfirmed = true;
+        navigationManager.NavigateTo(target);
+    }
+
+    private async Task CopyId()
+    {
+        await javascriptService.CopyClipboard(model.Id);
+        idCopied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        idCopied = false;
+        StateHasChanged();
+    }
+
+    #endregion
+
+}

@@ -1,0 +1,423 @@
+﻿.instance-header {
+    grid-row: 1;
+    grid-column-start: 1;
+    grid-column-end: 3;
+    background-color: #004890;
+    background: linear-gradient(180deg, #2464a8 0%, #1b4b7e 100%);
+    height: 51px;
+    z-index: 0;
+}
+
+    .instance-header .instance-header-container {
+        display: grid;
+        /* The Instance's name and URL are cut short before the buttons are pushed off the window */
+        grid-template-columns: max-content max-content minmax(0, max-content) max-content max-content max-content 1fr max-content;
+        z-index: 3;
+    }
+
+
+    .instance-header .instance-header-logo-container {
+        grid-column: 1;
+        z-index: 5;
+        padding: 10px 15px;
+        border-right: 1px solid var(--accentDark);
+    }
+
+    .instance-header .instance-header-logo {
+        height: 26px;
+    }
+
+    .instance-header .instance-header-title-container {
+        grid-column: 2;
+        text-align: center;
+        line-height: 48px;
+        color: #fff;
+        z-index: 7;
+        padding-left: 15px;
+        padding-right: 30px;
+        border-right: 1px solid var(--accentDark);
+    }
+
+    .instance-header .instance-header-title {
+        font-size: var(--fontSize2xl);
+        font-weight: 500;
+        font-family: var(--fontSans);
+    }
+
+    .instance-header .instance-header-subtitle {
+        font-size: var(--fontSize2xl);
+        font-weight: 100;
+        font-family: var(--fontSans);
+        margin-left: 3px;
+    }
+
+    .instance-header .instance-header-information-container {
+        grid-column: 3;
+        text-align: left;
+        color: var(--accentPale);
+        z-index: 7;
+        padding-top: 9px;
+        padding-left: 20px;
+        padding-right: 30px;
+        border-right: 1px solid var(--accentDark);
+    }
+
+        .instance-header .instance-header-information-container div {
+            display: block;
+            font-size: var(--fontSizeXs);
+            line-height: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    .instance-header .instance-header-application-container {
+        grid-column: 4;
+        text-align: left;
+        color: var(--accentPale);
+        z-index: 7;
+        padding-top: 9px;
+        padding-left: 20px;
+        padding-right: 30px;
+        border-right: 1px solid var(--accentDark);
+        min-width: 120px;
+    }
+
+        .instance-header .instance-header-application-container div {
+            display: block;
+            font-size: var(--fontSizeXs);
+            line-height: 14px;
+            white-space: nowrap;
+        }
+
+        .instance-header .instance-header-application-container span {
+            display: inline;
+        }
+
+    .instance-header .instance-header-status-container {
+        grid-column: 5;
+        text-align: left;
+        color: var(--accentPale);
+        z-index: 7;
+        padding-top: 9px;
+        padding-left: 20px;
+        padding-right: 30px;
+        border-right: 1px solid var(--accentDark);
+    }
+
+        .instance-header .instance-header-status-container div {
+            display: block;
+            font-size: var(--fontSizeXs);
+            line-height: 14px;
+        }
+
+        .instance-header .instance-header-status-container .instance-header-status {
+            display: block;
+            font-size: var(--fontSizeXs);
+            line-height: 14px;
+        }
+
+        .instance-header .instance-header-status-container .instance-header-status-icon {
+            display: inline-block;
+            font-size: var(--fontSizeXs);
+            line-height: 11px;
+            margin-right: 6px;
+        }
+
+        .instance-header .instance-header-status-container .instance-header-status-icon.spin {
+            animation: fa-spin 1s linear infinite;
+        }
+
+    .instance-header .instance-header-health-container {
+        grid-column: 6;
+        display: block;
+        color: var(--accentPale);
+        text-decoration: none;
+        z-index: 7;
+        padding-top: 9px;
+        padding-left: 20px;
+        padding-right: 25px;
+        border-right: 1px solid var(--accentDark);
+    }
+
+        .instance-header .instance-header-health-container:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .instance-header .instance-header-health-container div {
+            display: block;
+            font-size: var(--fontSizeXs);
+            line-height: 14px;
+        }
+
+        .instance-header .instance-header-health-container .instance-header-health {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .instance-header .instance-header-health-container .health-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accentLight);
+        }
+
+        .instance-header .instance-header-health-container.health-healthy .health-dot {
+            background: var(--colorGreen, #19b419);
+        }
+
+        .instance-header .instance-header-health-container.health-degraded .health-dot {
+            background: var(--colorOrange, #ff8b00);
+        }
+
+        .instance-header .instance-header-health-container.health-unhealthy .health-dot {
+            background: var(--colorRed, #d92b2b);
+        }
+
+    .instance-header .instance-header-buttons {
+        display: grid;
+        grid-auto-columns: max-content;
+        grid-auto-flow: column;
+        grid-column: 8;
+        z-index: 7;
+        height: 100%;
+    }
+
+        .instance-header .instance-header-buttons .btn {
+            display: block;
+            height: 100%;
+            border: none;
+            border-radius: 0;
+            padding: 0px 20px;
+            color: #fff;
+            font-size: var(--fontSizeBase);
+            font-weight: 400;
+            line-height: 48px;
+            vertical-align: middle;
+            border-left: 1px solid var(--accentDark);
+            margin: 0;
+        }
+
+            .instance-header .instance-header-buttons .btn:hover {
+                background: var(--accent);
+            }
+
+            .instance-header .instance-header-buttons .btn:focus {
+                outline: none;
+                box-shadow: none;
+            }
+
+            /* Keyboard focus : inside the bar, so the ring isn't cut off at its edges */
+            .instance-header .instance-header-buttons .btn:focus-visible,
+            .instance-header .instance-header-health-container:focus-visible {
+                outline: 2px solid #fff;
+                outline-offset: -3px;
+            }
+
+        .instance-header .instance-header-buttons .btn-account {
+            line-height: 48px;
+            text-decoration: none;
+        }
+
+            .instance-header .instance-header-buttons .btn-account .icon {
+                color: var(--accentPale);
+                margin-right: 8px;
+            }
+
+        .instance-header .instance-header-buttons .btn-help .icon {
+            color: var(--accentPale);
+            font-size: 1.25rem;
+            line-height: 48px;
+            margin-right: 0;
+            margin-left: 0;
+            width: 20px;
+        }
+
+        .instance-header .instance-header-buttons .btn-help:hover .icon,
+        .instance-header .instance-header-buttons .btn-help.active .icon {
+            color: #fff;
+        }
+
+        .instance-header .instance-header-buttons .btn-help.active {
+            background: var(--accent);
+        }
+
+    /* The Help menu opens under its button, over the page */
+    .instance-header .help-menu-container {
+        position: relative;
+        height: 100%;
+    }
+
+    .instance-header .help-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+    }
+
+    .instance-header .help-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 1001;
+        display: flex;
+        flex-direction: column;
+        min-width: 210px;
+        padding: 6px 0;
+        background: var(--panelBackground);
+        border: 1px solid var(--borderColor);
+        border-radius: 4px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    }
+
+        .instance-header .help-menu a {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            color: var(--textDark);
+            font-size: var(--fontSizeBase);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+            .instance-header .help-menu a:hover {
+                background: var(--panelItemBackgroundHover);
+            }
+
+            .instance-header .help-menu a .icon {
+                width: 16px;
+                text-align: center;
+                color: var(--accent);
+            }
+
+        .instance-header .help-menu .help-menu-divider {
+            margin: 6px 0;
+            border-top: 1px solid var(--borderColorLight);
+        }
+
+        .instance-header .instance-header-buttons .btn-theme .icon {
+            color: var(--accentPale);
+            font-size: 1.25rem;
+            line-height: 48px;
+            margin-right: 0;
+            margin-left: 0;
+            width: 20px;
+        }
+
+        .instance-header .instance-header-buttons .btn-theme:hover .icon {
+            color: #fff;
+        }
+
+        .instance-header .instance-header-buttons .btn-logout {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+            .instance-header .instance-header-buttons .btn-logout .icon {
+                color: #fff;
+                font-size: var(--fontSizeXl);
+                line-height: 18px;
+                margin-right: 0;
+                margin-left: 15px;
+            }
+
+            .instance-header .instance-header-buttons .btn-logout:hover .icon {
+                color: #fff;
+            }
+
+        .instance-header .instance-header-buttons .btn-notifications {
+            position: relative;
+        }
+
+            .instance-header .instance-header-buttons .btn-notifications.active {
+                background: var(--accent);
+            }
+
+            .instance-header .instance-header-buttons .btn-notifications .icon {
+                color: var(--accentPale);
+                font-size: 1.25rem;
+                line-height: 48px;
+                margin-right: 0;
+                margin-left: 0;
+                width: 20px;
+            }
+
+            .instance-header .instance-header-buttons .btn-notifications:hover .icon,
+            .instance-header .instance-header-buttons .btn-notifications.active .icon {
+                color: #fff;
+            }
+
+            .instance-header .instance-header-buttons .btn-notifications .notifications-badge {
+                position: absolute;
+                top: 8px;
+                right: 10px;
+                min-width: 17px;
+                height: 17px;
+                padding: 0 4px;
+                border-radius: 9px;
+                background: var(--colorRed, #dc3545);
+                color: #fff;
+                font-size: 10px;
+                font-weight: 700;
+                line-height: 17px;
+                text-align: center;
+            }
+
+/* A narrow window drops the details one at a time, so the buttons always fit */
+
+@media (max-width: 1400px) {
+    .instance-header .instance-header-application-container {
+        display: none;
+    }
+}
+
+@media (max-width: 1280px) {
+    .instance-header .instance-header-title-container {
+        display: none;
+    }
+}
+
+@media (max-width: 1030px) {
+    .instance-header .instance-header-status-container {
+        display: none;
+    }
+}
+
+@media (max-width: 830px) {
+    .instance-header .instance-header-buttons .btn-account .text,
+    .instance-header .instance-header-buttons .btn-logout .text {
+        display: none;
+    }
+
+    .instance-header .instance-header-buttons .btn-account .icon,
+    .instance-header .instance-header-buttons .btn-logout .icon {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 660px) {
+    .instance-header .instance-header-information-container {
+        display: none;
+    }
+}
+
+@media (max-width: 500px) {
+    .instance-header .instance-header-buttons .btn {
+        padding: 0 10px;
+    }
+
+    .instance-header .instance-header-health-container .instance-header-label {
+        display: none;
+    }
+
+    .instance-header .instance-header-health-container {
+        padding: 18px 10px 0 10px;
+    }
+
+        .instance-header .instance-header-health-container .instance-header-health span:last-child {
+            display: none;
+        }
+}

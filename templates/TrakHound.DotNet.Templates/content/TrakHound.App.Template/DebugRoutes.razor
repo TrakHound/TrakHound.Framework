@@ -1,0 +1,10 @@
+﻿@rendermode InteractiveServer
+@using TrakHound.Blazor.Apps
+
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        @* Cascades what the Instance gives App pages: Client, Volume, Variables, Logger and the "parameters" in trakhound.debug.json *@
+        <TrakHoundDebugApp RouteData="@routeData" DefaultLayout="typeof(Layout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+</Router>

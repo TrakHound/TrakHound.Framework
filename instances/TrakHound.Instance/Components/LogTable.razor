@@ -1,0 +1,49 @@
+@using TrakHound.Logging
+
+@* A list of Log Lines (ex. Log History), in the Admin interface's log style (LogRows). ChildContent is shown after the lines (ex. Load More) *@
+<div class="log-table">
+    <LogRows Rows="@rows" ShowSource="true" SourceSelected="@SourceSelected" ShowAround="@ShowAround" />
+    @ChildContent
+</div>
+
+@code {
+
+    private IEnumerable<TrakHoundLogItem> previousLogLines;
+    private int previousCount;
+    private List<LogRow> rows;
+
+
+    [Parameter]
+    public IEnumerable<TrakHoundLogItem> LogLines { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    /// <summary>
+    /// A line's Source was clicked (see LogRows.SourceSelected)
+    /// </summary>
+    [Parameter]
+    public EventCallback<LogRow> SourceSelected { get; set; }
+
+    /// <summary>
+    /// A line's "around this time" button was clicked (see LogRows.ShowAround)
+    /// </summary>
+    [Parameter]
+    public EventCallback<LogRow> ShowAround { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // Only rebuild the Rows when the Lines change (the parent can re-render for other reasons, or add a page to the same List)
+        var count = LogLines?.Count() ?? 0;
+        if (!ReferenceEquals(LogLines, previousLogLines) || count != previousCount)
+        {
+            previousLogLines = LogLines;
+            previousCount = count;
+
+            long key = 0;
+            rows = LogLines?.Select(o => LogRow.Create(o, ++key)).ToList();
+        }
+    }
+
+}

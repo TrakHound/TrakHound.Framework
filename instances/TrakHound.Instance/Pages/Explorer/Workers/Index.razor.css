@@ -1,0 +1,224 @@
+﻿.workers-page {
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-panel .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+    .header-panel .header-icon .header-type {
+        display: inline-block;
+        font-size: var(--fontSizeBase);
+        font-weight: bold;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 3px;
+        padding: 5px 8px;
+        vertical-align: top;
+    }
+
+.header-panel .header-text {
+    grid-column: 2;
+}
+
+    .header-panel .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.toolbar-panel {
+    grid-row: 2;
+    padding: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-panel {
+    grid-row: 3;
+    padding: 0 10px 10px;
+    height: 100%;
+    overflow: hidden;
+}
+
+    .status-panel ::deep .rz-data-grid {
+        height: 100%;
+        overflow: auto;
+    }
+
+        .status-panel ::deep .rz-data-grid td {
+            padding: 3px 10px;
+        }
+
+        .status-panel ::deep .rz-data-grid td:last-child {
+            border-right: none;
+        }
+
+    .status-panel ::deep .rz-cell-data {
+        font-size: var(--fontSizeSm);
+    }
+
+        .status-panel ::deep td {
+            vertical-align: middle;
+        }
+
+
+/* Worker (Name + Description) */
+
+.status-panel ::deep .name-cell .rz-cell-data {
+    white-space: normal;
+}
+
+.status-panel ::deep .worker-name {
+    display: block;
+    font-weight: bold;
+    color: var(--textDark);
+    text-decoration: none;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+    .status-panel ::deep .worker-name:hover {
+        color: var(--accent);
+        text-decoration: underline;
+    }
+
+.status-panel ::deep .worker-description {
+    display: block;
+    color: var(--textMild);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+
+/* Status */
+
+.status-panel ::deep .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--textDark);
+}
+
+.status-panel ::deep .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--textLight);
+}
+
+.status-panel ::deep .status-badge.started .status-dot {
+    background: var(--colorGreen, #19b419);
+}
+
+.status-panel ::deep .status-badge.starting .status-dot,
+.status-panel ::deep .status-badge.stopping .status-dot {
+    background: var(--colorOrange, #ff8b00);
+}
+
+.status-panel ::deep .status-badge.error .status-dot {
+    background: var(--colorRed, #d92b2b);
+}
+
+.status-panel ::deep .status-uptime {
+    display: block;
+    padding-left: 14px; /* Align with the text after the dot */
+    color: var(--textMild);
+    font-variant-numeric: tabular-nums;
+}
+
+
+/* Actions */
+
+.status-panel ::deep .actions-cell .rz-cell-data {
+    display: flex;
+    gap: 6px;
+}
+
+.status-panel ::deep .btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    padding: 0;
+}
+
+    .status-panel ::deep .btn-action:focus {
+        box-shadow: none;
+    }
+
+    .status-panel ::deep .btn-action:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+
+.status-panel ::deep .btn-start:not(:disabled) {
+    color: var(--colorGreen, #19b419);
+}
+
+.status-panel ::deep .btn-stop:not(:disabled) {
+    color: var(--colorRed, #d92b2b);
+}
+
+
+/* Empty State */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+.empty-state-icon {
+    font-size: 36px;
+    margin-bottom: 6px;
+    color: var(--textLight);
+}
+
+.empty-state-title {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.empty-state-description {
+    font-size: var(--fontSizeSm);
+}

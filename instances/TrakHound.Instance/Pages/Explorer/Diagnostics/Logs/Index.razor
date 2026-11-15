@@ -1,0 +1,389 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/logs"
+@inject ExplorerService explorerService
+@inject NavigationManager navigationManager
+@using TrakHound.Logging
+
+<TrakHoundPageTitle Text="Logs - Diagnostics" />
+
+<div class="logs-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-code"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Logs</span>
+                <span class="header-description">Errors, Warnings and Lines logged by each Logger (from Log History)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <RadzenDropDown TValue="int" Data="@ranges" TextProperty="Text" ValueProperty="Hours" Value="@rangeHours" ValueChanged="@((int value) => RangeChanged(value))" class="range-select dropdown-sm" />
+
+        <div class="filter-input">
+            <span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" class="form-control" placeholder="Filter by Logger" spellcheck="false" autocomplete="off" @bind="filterText" @bind:event="oninput" />
+        </div>
+
+        <a class="btn btn-light" href="@GetViewLink(null, false)"><span class="icon fa-solid fa-sharp fa-list"></span>All Loggers</a>
+
+        <div class="toolbar-status">
+            <LogHistoryStatus />
+        </div>
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (loadError != null)
+            {
+                <div class="empty-panel">
+                    <span class="icon error fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <span class="empty-title">Unable to load Logs</span>
+                    <span class="empty-description">@loadError</span>
+                </div>
+            }
+            else if (!items.IsNullOrEmpty())
+            {
+                var errorCount = items.Sum(o => o.Errors);
+                var warningCount = items.Sum(o => o.Warnings);
+
+                @* Summary : Errors and Warnings filter the table *@
+                <div class="summary-tiles">
+                    <button class="summary-tile error @(errorCount > 0 ? null : "zero") @(levelFilter == LevelFilter.Errors ? "selected" : null)" title="Show Loggers with Errors" @onclick="() => ToggleLevelFilter(LevelFilter.Errors)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-circle-xmark"></span>Errors</span>
+                        <span class="tile-value">@errorCount.ToString("N0")</span>
+                        <span class="tile-detail">@Plural(items.Count(o => o.Errors > 0), "Logger")</span>
+                    </button>
+                    <button class="summary-tile warning @(warningCount > 0 ? null : "zero") @(levelFilter == LevelFilter.Warnings ? "selected" : null)" title="Show Loggers with Warnings" @onclick="() => ToggleLevelFilter(LevelFilter.Warnings)">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Warnings</span>
+                        <span class="tile-value">@warningCount.ToString("N0")</span>
+                        <span class="tile-detail">@Plural(items.Count(o => o.Warnings > 0), "Logger")</span>
+                    </button>
+                    <div class="summary-tile static">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-bars-staggered"></span>Lines</span>
+                        <span class="tile-value">@items.Sum(o => o.Total).ToString("N0")</span>
+                        <span class="tile-detail">@ranges.FirstOrDefault(o => o.Hours == rangeHours)?.Text</span>
+                    </div>
+                    <div class="summary-tile static">
+                        <span class="tile-label"><span class="icon fa-solid fa-sharp fa-folder-tree"></span>Loggers</span>
+                        <span class="tile-value">@items.Sum(o => o.LoggerCount).ToString("N0")</span>
+                        <span class="tile-detail">in @Plural(items.Count, "group")</span>
+                    </div>
+                </div>
+
+                var filteredItems = GetFilteredItems().ToList();
+
+                <div class="table-panel">
+                    @if (filteredItems.Count > 0)
+                    {
+                        <RadzenDataGrid Data="@filteredItems"
+                                        TItem="TableItem"
+                                        Density="Density.Compact"
+                                        AllowSorting="true"
+                                        AllowColumnResize="true"
+                                        RowClick="@RowClicked">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="TableItem" Property="Key" Title="Logger" MinWidth="260px">
+                                    <Template Context="item">
+                                        <a class="value logger-link" href="@GetViewLink(item.Key, true)" title="@item.Key" @onclick:stopPropagation="true">@item.Key</a>
+                                        <span class="sub-value">@Plural(item.LoggerCount, "Logger")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="Errors" Title="Errors" Width="100px" TextAlign="TextAlign.Right" SortOrder="SortOrder.Descending">
+                                    <Template Context="item">
+                                        <span class="number @(item.Errors > 0 ? "error" : "zero")">@item.Errors.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="Warnings" Title="Warnings" Width="100px" TextAlign="TextAlign.Right">
+                                    <Template Context="item">
+                                        <span class="number @(item.Warnings > 0 ? "warning" : "zero")">@item.Warnings.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="Total" Title="Lines" Width="110px" TextAlign="TextAlign.Right">
+                                    <Template Context="item">
+                                        <span class="number">@item.Total.ToString("N0")</span>
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="TableItem" Property="LastSeen" Title="Last Line" Width="150px">
+                                    <Template Context="item">
+                                        @if (item.LastSeen != null)
+                                        {
+                                            <span class="value" title="@FormatTimestamp(item.LastSeen.Value)">@FormatAge(item.LastSeen.Value)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="value loading">..</span>
+                                        }
+                                    </Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    }
+                    else
+                    {
+                        <div class="empty-panel compact">
+                            <span class="empty-title">No matching Loggers</span>
+                            <span class="empty-description">Change or clear the filters to see more Loggers</span>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-code"></span>
+                    <span class="empty-title">No Log Lines</span>
+                    <span class="empty-description">Log History has no lines from the @(ranges.FirstOrDefault(o => o.Hours == rangeHours)?.Text.ToLower())</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Logs.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private static readonly IEnumerable<RangeItem> ranges = new[]
+    {
+        new RangeItem(1, "Last hour"),
+        new RangeItem(24, "Last 24 hours"),
+        new RangeItem(24 * 7, "Last 7 days")
+    };
+
+    private List<TableItem> items;
+    private int rangeHours = 24;
+    private string filterText;
+    private LevelFilter levelFilter;
+    private string previousInstanceId;
+    private int loadVersion;
+    private bool loading = true;
+    private string loadError;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    record RangeItem(int Hours, string Text);
+
+    enum LevelFilter
+    {
+        None,
+        Errors,
+        Warnings
+    }
+
+    class TableItem
+    {
+        public string Key { get; set; }
+        public int LoggerCount { get; set; }
+        public long Errors { get; set; }
+        public long Warnings { get; set; }
+        public long Total { get; set; }
+        public DateTime? LastSeen { get; set; } // Loaded after the table is shown
+    }
+
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadError = null;
+            await InvokeAsync(StateHasChanged);
+
+            if (explorerService.SelectedInstanceId != previousInstanceId)
+            {
+                levelFilter = LevelFilter.None;
+            }
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Logs", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            try
+            {
+                var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+                if (client != null)
+                {
+                    var to = DateTime.UtcNow;
+                    var query = new TrakHoundLogQuery { Patterns = new[] { "**" }, From = to.AddHours(-rangeHours), To = to, MinimumLevel = TrakHoundLogLevel.Trace };
+
+                    var counts = await client.Logs.QueryCounts(query);
+
+                    items = counts?
+                        .Where(o => o.LoggerName != null && o.Total > 0)
+                        .GroupBy(o => GetGroupKey(o.LoggerName))
+                        .Select(group => new TableItem
+                        {
+                            Key = group.Key,
+                            LoggerCount = group.Select(o => o.LoggerName).Distinct().Count(),
+                            Errors = group.Sum(o => GetCount(o, TrakHoundLogLevel.Critical) + GetCount(o, TrakHoundLogLevel.Error)),
+                            Warnings = group.Sum(o => GetCount(o, TrakHoundLogLevel.Warning)),
+                            Total = group.Sum(o => o.Total)
+                        })
+                        .OrderByDescending(o => o.Errors)
+                        .ThenByDescending(o => o.Warnings)
+                        .ThenByDescending(o => o.Total)
+                        .ToList();
+
+                    if (items != null) _ = LoadLastLines(client, items, query.From, query.To, ++loadVersion);
+                }
+                else
+                {
+                    items = null;
+                    loadError = "The Instance could not be reached";
+                }
+            }
+            catch (Exception ex)
+            {
+                items = null;
+                loadError = ex.Message;
+            }
+
+            loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// The time of each group's newest line (the Logger index's Last Seen isn't kept for every Logger, so Query it)
+    /// </summary>
+    private async Task LoadLastLines(TrakHound.Clients.ITrakHoundClient client, List<TableItem> tableItems, DateTime from, DateTime to, int version)
+    {
+        await Task.WhenAll(tableItems.Select(async item =>
+        {
+            try
+            {
+                var query = new TrakHoundLogQuery { Patterns = new[] { $"{item.Key}/**" }, From = from, To = to, MinimumLevel = TrakHoundLogLevel.Trace, SortOrder = TrakHoundSortOrder.Descending, Take = 1 };
+                var result = await client.Logs.Query(query);
+                var timestamp = result?.Items?.Select(o => o.Timestamp).FirstOrDefault() ?? 0;
+                item.LastSeen = timestamp > 0 ? timestamp.ToDateTime() : DateTime.MinValue;
+            }
+            catch
+            {
+                item.LastSeen = DateTime.MinValue;
+            }
+        }));
+
+        if (version == loadVersion) await InvokeAsync(StateHasChanged);
+    }
+
+    // Group by the first two segments (ex. "api/TrakHound.Functions.Api", "workers/TrakHound.ScheduledTasks.Worker"),
+    // which is the Package (or System area) that logged it
+    private static string GetGroupKey(string loggerName)
+    {
+        var segments = loggerName.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length > 1 ? $"{segments[0]}/{segments[1]}" : loggerName;
+    }
+
+    private static long GetCount(TrakHoundLoggerLogCount count, TrakHoundLogLevel level)
+    {
+        return count.Counts != null && count.Counts.TryGetValue(level, out var value) ? value : 0;
+    }
+
+    private IEnumerable<TableItem> GetFilteredItems()
+    {
+        IEnumerable<TableItem> results = items;
+
+        switch (levelFilter)
+        {
+            case LevelFilter.Errors: results = results.Where(o => o.Errors > 0); break;
+            case LevelFilter.Warnings: results = results.Where(o => o.Warnings > 0); break;
+        }
+
+        var filter = filterText?.Trim();
+        if (!string.IsNullOrEmpty(filter))
+        {
+            results = results.Where(o => o.Key.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return results;
+    }
+
+    // The View page for a group (its Logger and every Logger under it, the same Pattern as its item in the Tree),
+    // opened on History so the counted lines show
+    private string GetViewLink(string key, bool history)
+    {
+        var link = Url.Combine("_admin/explorer", explorerService.SelectedInstanceId, "diagnostics/logs/view");
+        if (key != null) link = Url.AddQueryParameter(link, "pattern", $"{key}/**");
+        if (history) link = Url.AddQueryParameter(link, "view", "history");
+        return link;
+    }
+
+    private void ToggleLevelFilter(LevelFilter filter)
+    {
+        levelFilter = levelFilter == filter ? LevelFilter.None : filter;
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        if (args.Data != null) navigationManager.NavigateTo(GetViewLink(args.Data.Key, true));
+    }
+
+    private async Task RangeChanged(int hours)
+    {
+        rangeHours = hours;
+        await Load(true);
+    }
+
+    private async Task RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    // Formatting
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        return timestamp > DateTime.MinValue ? timestamp.ToLocalTime().ToString("g") : "-";
+    }
+
+    private static string FormatAge(DateTime timestamp)
+    {
+        if (timestamp <= DateTime.MinValue) return "-";
+
+        var age = DateTime.UtcNow - timestamp;
+        if (age.TotalMinutes < 1) return "just now";
+        if (age.TotalHours < 1) return $"{Plural((int)age.TotalMinutes, "minute")} ago";
+        if (age.TotalDays < 1) return $"{Plural((int)age.TotalHours, "hour")} ago";
+        return $"{Plural((int)age.TotalDays, "day")} ago";
+    }
+
+    private static string Plural(int value, string unit) => $"{value:N0} {unit}{(value == 1 ? "" : "s")}";
+
+}

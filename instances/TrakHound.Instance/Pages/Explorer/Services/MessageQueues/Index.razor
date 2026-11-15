@@ -1,0 +1,942 @@
+@page "/_admin/explorer/{instanceId}/services/message-queues/{configurationId}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject JavascriptService javascriptService
+@using System.Collections.Concurrent
+@using TrakHound.Blazor.Services
+@using TrakHound.Services
+@using TrakHound.Services.MessageQueues
+
+<TrakHoundPageTitle Text="@($"{GetServiceName()} - MessageQueues")" />
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="message-queues-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-inbox"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">@GetServiceName()</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="view-tabs" role="tablist">
+        <button class="view-tab @(view == MessagesView ? "active" : "")" role="tab" aria-selected="@(view == MessagesView)" @onclick="() => SetView(MessagesView)">
+            <span class="icon fa-solid fa-sharp fa-envelope"></span>Messages
+            @if (stream != null)
+            {
+                <span class="tab-badge subscribed" title="Subscribed to @subscribedQueue"></span>
+            }
+        </button>
+        <button class="view-tab @(view == MetricsView ? "active" : "")" role="tab" aria-selected="@(view == MetricsView)" @onclick="() => SetView(MetricsView)">
+            <span class="icon fa-solid fa-sharp fa-chart-line"></span>Metrics
+        </button>
+    </div>
+
+    @if (view == MetricsView)
+    {
+        <div class="view-panel">
+            <MetricsPanel InstanceId="@InstanceId" ConfigurationId="@ConfigurationId" Queue="@queue?.Trim()" ViewMessages="ViewQueueMessages" />
+        </div>
+    }
+    else
+    {
+    <div class="view-panel messages-view">
+
+    <div class="toolbar-panel">
+
+        <div class="queue-input">
+            <span class="queue-icon fa-solid fa-sharp fa-inbox"></span>
+            <input type="text" placeholder="Queue" aria-label="Queue" list="@queueListId" value="@queue" @oninput="QueueChanged" @onkeydown="QueueKeyDown" disabled="@(stream != null)" />
+            <datalist id="@queueListId">
+                @foreach (var recentQueue in recentQueues)
+                {
+                    <option value="@recentQueue" />
+                }
+            </datalist>
+        </div>
+
+        <div class="option" title="Maximum number of Messages to Pull">
+            <label for="@($"{queueListId}-count")">Count</label>
+            <input id="@($"{queueListId}-count")" type="number" min="1" max="@_maxPullCount" @bind="@pullCount" disabled="@(pulling)" />
+        </div>
+
+        <label class="option option-check" title="Auto Acknowledge removes each Message from the Queue as it is delivered. Otherwise Messages stay on the Queue until they are Acknowledged, and Rejected or unacknowledged Messages are returned to it.">
+            <input type="checkbox" @bind="@autoAcknowledge" disabled="@(stream != null)" />
+            <span>Auto Acknowledge</span>
+        </label>
+
+        @if (!pulling)
+        {
+            <button class="btn btn-light" @onclick="Pull" disabled="@(!HasQueue)" title="Read up to @pullCount Messages from the Queue"><span class="icon fa-solid fa-sharp fa-download"></span>Pull</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Pulling..</button>
+        }
+
+        @if (subscribing)
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Subscribing..</button>
+        }
+        else if (stream != null)
+        {
+            <button class="btn btn-secondary" @onclick="Unsubscribe" title="Stop the Subscription"><span class="icon fa-solid fa-sharp fa-stop"></span>Unsubscribe</button>
+        }
+        else
+        {
+            <button class="btn btn-light" @onclick="Subscribe" disabled="@(!HasQueue)" title="Receive Messages from the Queue as they are Published"><span class="icon fa-solid fa-sharp fa-satellite-dish"></span>Subscribe</button>
+        }
+
+        <button class="admin-write btn @(showPublish ? "btn-secondary" : "btn-light")" @onclick="TogglePublish"><span class="icon fa-solid fa-sharp fa-plus"></span>Publish</button>
+
+        <div class="filter">
+            <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" placeholder="Filter by queue or content" aria-label="Filter Messages" value="@filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+            @if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            }
+        </div>
+
+    </div>
+
+    <div class="publish-container">
+        @if (showPublish)
+        {
+            <PublishPanel InstanceId="@InstanceId" ConfigurationId="@ConfigurationId" Queue="@queue?.Trim()" Published="MessagePublished" PublishFailed="MessagePublishFailed" Cancelled="() => showPublish = false" />
+        }
+    </div>
+
+    <div class="status-panel">
+        @if (stream != null)
+        {
+            <span class="status subscribed" title="@(subscribedAutoAcknowledge ? "Auto Acknowledge" : "Manual Acknowledge")">
+                <span class="status-dot"></span>
+                Subscribed to <span class="status-queue">@subscribedQueue</span>
+                <span class="status-mode">@(subscribedAutoAcknowledge ? "Auto Acknowledge" : "Manual Acknowledge")</span>
+            </span>
+        }
+
+        @if (messages.Count > 0)
+        {
+            var pendingCount = messages.Count(o => o.IsPending);
+
+            <span class="status-count">@(messages.Count == 1 ? "1 Message" : $"{messages.Count:N0} Messages")</span>
+
+            @if (pendingCount > 0)
+            {
+                <span class="status-pending">@(pendingCount == 1 ? "1 Pending" : $"{pendingCount:N0} Pending")</span>
+                <button class="admin-write btn btn-sm btn-light" @onclick="AcknowledgeAll" disabled="@(processing)"><span class="icon fa-solid fa-sharp fa-check"></span>Acknowledge All</button>
+                <button class="admin-write btn btn-sm btn-light" @onclick="RejectAll" disabled="@(processing)"><span class="icon fa-solid fa-sharp fa-rotate-left"></span>Reject All</button>
+            }
+
+            <div class="format-buttons" role="group" aria-label="Format">
+                @foreach (var format in _formats)
+                {
+                    <button class="btn btn-format @(selectedFormat == format.Format ? "active" : "")" title="@format.Title" @onclick="() => selectedFormat = format.Format">@format.Name</button>
+                }
+            </div>
+
+            <button class="btn btn-sm btn-light btn-clear" @onclick="ClearMessages" disabled="@(processing)" title="Remove the Messages from this list (Pending Messages are Rejected and returned to the Queue)"><span class="icon fa-solid fa-sharp fa-eraser"></span>Clear</button>
+        }
+    </div>
+
+    <div class="content-panel">
+
+        @if (messages.Count > 0)
+        {
+            var items = GetItems();
+            if (!items.IsNullOrEmpty())
+            {
+                <div class="table-panel">
+                    <RadzenDataGrid Data="@items" TItem="QueueMessage" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true" AllowVirtualization="@(expandedIds.Count < 1)">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="QueueMessage" Property="Received" Title="Received" Width="120px" SortOrder="SortOrder.Descending">
+                                <Template Context="item">
+                                    <span class="timestamp" title="@GetDetailsTitle(item)">@FormatTimestamp(item.Received)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="QueueMessage" Property="Queue" Title="Queue" Width="200px">
+                                <Template Context="item">
+                                    <span class="queue" title="@item.Queue">@item.Queue</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="QueueMessage" Property="Source" Title="Source" Width="95px">
+                                <Template Context="item">
+                                    <span class="source"><span class="icon fa-solid fa-sharp @(item.Source == "Pull" ? "fa-download" : "fa-satellite-dish")"></span>@item.Source</span>
+                                    @if (item.Redelivered)
+                                    {
+                                        <span class="redelivered" title="Redelivered (it was delivered before and was Rejected or not Acknowledged)"><span class="icon fa-solid fa-sharp fa-repeat"></span></span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="QueueMessage" Property="Preview" Title="Content" MinWidth="240px" CssClass="value-cell">
+                                <Template Context="item">
+                                    @if (item.Size == 0)
+                                    {
+                                        <span class="value-null">(empty)</span>
+                                    }
+                                    else if (expandedIds.Contains(item.Id))
+                                    {
+                                        <div class="value-expanded">
+                                            <button class="btn-expand" title="Collapse" @onclick="() => ToggleExpanded(item)"><span class="fa-solid fa-sharp fa-chevron-down"></span></button>
+                                            <pre>@item.Format(selectedFormat)</pre>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="value-collapsed">
+                                            @if (item.IsExpandable || selectedFormat == QueueMessageFormat.Bytes)
+                                            {
+                                                <button class="btn-expand" title="Expand" @onclick="() => ToggleExpanded(item)"><span class="fa-solid fa-sharp fa-chevron-right"></span></button>
+                                            }
+                                            <span class="value">@item.Preview</span>
+                                        </div>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="QueueMessage" Property="Size" Title="Size" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number" title="@item.Size.ToString("N0") bytes">@(((long)item.Size).ToFileSize())</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="QueueMessage" Property="Status" Title="Status" Width="150px">
+                                <Template Context="item">
+                                    <span class="status-badge @GetStatusClass(item.Status)" title="@GetStatusTitle(item)">@GetStatusText(item.Status)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="QueueMessage" CssClass="buttons actions-cell" Width="250px" Sortable="false">
+                                <Template Context="item">
+                                    @if (processingIds.TryGetValue(item.Id, out var processingText))
+                                    {
+                                        <span class="processing"><span class="icon fa-regular fa-sharp fa-loader spin"></span>@processingText</span>
+                                    }
+                                    else
+                                    {
+                                        @if (item.IsPending)
+                                        {
+                                            <button class="admin-write btn btn-sm btn-link" title="Acknowledge (remove from the Queue)" @onclick="() => Acknowledge(new[] { item })"><span class="icon fa-solid fa-sharp fa-check"></span>Ack</button>
+                                            <button class="admin-write btn btn-sm btn-link" title="Reject (return to the Queue)" @onclick="() => Reject(new[] { item })"><span class="icon fa-solid fa-sharp fa-rotate-left"></span>Reject</button>
+                                        }
+                                        <button class="btn btn-sm btn-link" title="Copy Content" @onclick="() => CopyContent(item)">
+                                            @if (copiedId == item.Id)
+                                            {
+                                                <span class="icon fa-solid fa-sharp fa-check copied"></span><span>Copied</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="icon fa-regular fa-sharp fa-copy"></span><span>Copy</span>
+                                            }
+                                        </button>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="empty-title">No matching Messages</span>
+                    <span class="empty-description">No Messages match "@filter?.Trim()"</span>
+                </div>
+            }
+        }
+        else if (stream != null)
+        {
+            <div class="empty-panel">
+                <span class="icon fa-solid fa-sharp fa-satellite-dish"></span>
+                <span class="empty-title">Waiting for Messages</span>
+                <span class="empty-description">Messages Published to @subscribedQueue are shown here as they are received</span>
+            </div>
+        }
+        else if (lastPullQueue != null)
+        {
+            <div class="empty-panel">
+                <span class="icon fa-solid fa-sharp fa-inbox"></span>
+                <span class="empty-title">No Messages</span>
+                <span class="empty-description">The @lastPullQueue Queue is empty</span>
+            </div>
+        }
+        else
+        {
+            <div class="empty-panel">
+                <span class="icon fa-solid fa-sharp fa-inbox"></span>
+                <span class="empty-title">Select a Queue</span>
+                <span class="empty-description">Enter a Queue, then Pull its Messages or Subscribe to receive them as they are Published</span>
+                @if (!showPublish)
+                {
+                    <button class="admin-write btn btn-light btn-empty-action" @onclick="() => showPublish = true"><span class="icon fa-solid fa-sharp fa-plus"></span>Publish</button>
+                }
+            </div>
+        }
+
+    </div>
+
+    </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _defaultPullCount = 10;
+    private const int _maxPullCount = 1000;
+    private const int _maxMessages = 5000;
+    private const int _maxRecentQueues = 20;
+    private const string MessagesView = "messages";
+    private const string MetricsView = "metrics";
+
+    private static readonly (string Name, string Title, QueueMessageFormat Format)[] _formats = new (string, string, QueueMessageFormat)[]
+    {
+        ("Auto", "Format JSON, otherwise show Text", QueueMessageFormat.Auto),
+        ("Text", "Show the Content as UTF-8 Text", QueueMessageFormat.Text),
+        ("JSON", "Format the Content as JSON", QueueMessageFormat.Json),
+        ("Bytes", "Show the Content as Hex", QueueMessageFormat.Bytes)
+    };
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+    private readonly string queueListId = $"queues-{Guid.NewGuid():N}";
+    private readonly ConcurrentQueue<QueueMessage> incoming = new ConcurrentQueue<QueueMessage>();
+
+    private List<QueueMessage> messages = new List<QueueMessage>();
+    private List<string> recentQueues = new List<string>();
+    private HashSet<long> expandedIds = new HashSet<long>();
+    private Dictionary<long, string> processingIds = new Dictionary<long, string>();
+    private TrakHoundServiceInformation service;
+    private ITrakHoundStream<TrakHoundQueueMessage> stream;
+    private CancellationTokenSource flushStop;
+    private CancellationTokenSource copiedReset;
+    private QueueMessageFormat selectedFormat;
+    private string previousKey;
+    private string loadedInstanceId;
+    private string loadedConfigurationId;
+    private string queue;
+    private string filter;
+    private string subscribedQueue;
+    private string subscriptionId;
+    private string lastPullQueue;
+    private long nextId;
+    private long? copiedId;
+    private int pullCount = _defaultPullCount;
+    private bool autoAcknowledge;
+    private bool subscribedAutoAcknowledge;
+    private bool showPublish;
+    private bool pulling;
+    private bool subscribing;
+    private bool processing;
+    private string view = MessagesView;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    /// <summary>
+    /// Selects a Queue when the page is opened (ex. ?queue=orders)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "queue")]
+    public string QueueParameter { get; set; }
+
+    /// <summary>
+    /// Opens the Metrics view (?view=metrics)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "view")]
+    public string ViewParameter { get; set; }
+
+
+    private bool HasQueue => !string.IsNullOrWhiteSpace(queue);
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        copiedReset?.Cancel();
+        StopSubscription();
+        ReturnPendingPulled();
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        // Only reset when navigating to a different Service
+        var key = $"{InstanceId}:{ConfigurationId}";
+        if (key != previousKey)
+        {
+            previousKey = key;
+
+            // Leave the previous Service cleanly (stop its Subscription and return its Pending Messages)
+            StopSubscription();
+            ReturnPendingPulled();
+
+            messages = new List<QueueMessage>();
+            expandedIds = new HashSet<long>();
+            processingIds = new Dictionary<long, string>();
+            recentQueues = new List<string>();
+            filter = null;
+            showPublish = false;
+            lastPullQueue = null;
+            queue = !string.IsNullOrWhiteSpace(QueueParameter) ? QueueParameter.Trim() : null;
+            view = ViewParameter == MetricsView ? MetricsView : MessagesView;
+            loadedInstanceId = InstanceId;
+            loadedConfigurationId = ConfigurationId;
+
+            await explorerService.LoadInstance(InstanceId);
+            service = explorerService.GetServices(InstanceId, ConfigurationId);
+
+            SetBreadcrumbs();
+        }
+    }
+
+    private void SetBreadcrumbs()
+    {
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+        breadcrumbItems.Add(new BreadcrumbItem("MessageQueues", Url.Combine("_admin/explorer", InstanceId, "services", "message-queues")));
+        breadcrumbItems.Add(new BreadcrumbItem(GetServiceName(), null));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+    }
+
+
+    #region "Pull"
+
+    private async Task Pull()
+    {
+        if (!HasQueue || pulling) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Pull Failed", $"Instance {InstanceId} is not available");
+            return;
+        }
+
+        var pullQueue = queue.Trim();
+        var count = Math.Clamp(pullCount, 1, _maxPullCount);
+        var pullAutoAcknowledge = autoAcknowledge;
+        pullCount = count;
+
+        pulling = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await client.Services.MessageQueues.Pull(pullQueue, count, pullAutoAcknowledge, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                AddRecentQueue(pullQueue);
+                lastPullQueue = pullQueue;
+
+                var pulled = response.Result?.Select(o => CreateMessage(o, "Pull", null, pullAutoAcknowledge)).ToList() ?? new List<QueueMessage>();
+                AddMessages(pulled);
+
+                if (pulled.Count > 0)
+                {
+                    var text = pulled.Count == 1 ? "1 Message" : $"{pulled.Count:N0} Messages";
+                    notificationService.AddNotification(NotificationType.Success, "Pulled", $"{text} from {pullQueue}{(pullAutoAcknowledge ? " (removed from the Queue)" : "")}");
+                }
+                else
+                {
+                    notificationService.AddNotification(NotificationType.Information, "No Messages", $"The {pullQueue} Queue is empty");
+                }
+            }
+            else
+            {
+                notificationService.AddNotification(NotificationType.Error, "Pull Failed", $"{pullQueue} : {GetErrorMessage(response.StatusCode, response.Message)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Pull Failed", $"{pullQueue} : {ex.Message}");
+        }
+
+        pulling = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    #endregion
+
+    #region "Subscribe"
+
+    private async Task Subscribe()
+    {
+        if (!HasQueue || subscribing || stream != null) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Subscribe Failed", $"Instance {InstanceId} is not available");
+            return;
+        }
+
+        var subscribeQueue = queue.Trim();
+        var subscribeAutoAcknowledge = autoAcknowledge;
+
+        subscribing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await client.Services.MessageQueues.Subscribe(subscribeQueue, subscribeAutoAcknowledge, routerId: ConfigurationId);
+            if (response.Success && response.Result != null)
+            {
+                AddRecentQueue(subscribeQueue);
+
+                subscribedQueue = subscribeQueue;
+                subscribedAutoAcknowledge = subscribeAutoAcknowledge;
+                subscriptionId = Guid.NewGuid().ToString();
+
+                stream = response.Result;
+                stream.Received += StreamReceived;
+                stream.Start();
+
+                // Add received Messages in batches (so a busy Queue doesn't render once per Message)
+                flushStop = new CancellationTokenSource();
+                _ = FlushWorker(flushStop.Token);
+            }
+            else
+            {
+                notificationService.AddNotification(NotificationType.Error, "Subscribe Failed", $"{subscribeQueue} : {GetErrorMessage(response.StatusCode, response.Message)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Subscribe Failed", $"{subscribeQueue} : {ex.Message}");
+        }
+
+        subscribing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Unsubscribe()
+    {
+        StopSubscription();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void StopSubscription()
+    {
+        // Detach first so the Stream can't add Messages after it is stopped
+        var currentStream = stream;
+        stream = null;
+        if (currentStream != null)
+        {
+            currentStream.Received -= StreamReceived;
+            try { currentStream.Dispose(); } catch { }
+        }
+
+        flushStop?.Cancel();
+        flushStop = null;
+
+        FlushIncoming();
+
+        // The Subscription's Channel is closed, so the Broker returns its unacknowledged Messages to the Queue
+        if (subscriptionId != null)
+        {
+            foreach (var message in messages.Where(o => o.IsPending && o.SubscriptionId == subscriptionId))
+            {
+                message.Status = QueueMessageStatus.Returned;
+            }
+        }
+
+        subscriptionId = null;
+    }
+
+    private void StreamReceived(object sender, TrakHoundQueueMessage response)
+    {
+        if (sender == stream && response != null && response.IsValid)
+        {
+            incoming.Enqueue(CreateMessage(response, "Subscribe", subscriptionId, subscribedAutoAcknowledge));
+        }
+    }
+
+    private async Task FlushWorker(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (!incoming.IsEmpty)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        FlushIncoming();
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void FlushIncoming()
+    {
+        var received = new List<QueueMessage>();
+        while (incoming.TryDequeue(out var message)) received.Add(message);
+        if (received.Count > 0) AddMessages(received);
+    }
+
+    #endregion
+
+    #region "Acknowledge / Reject"
+
+    private Task AcknowledgeAll() => Acknowledge(messages.Where(o => o.IsPending).ToList());
+
+    private Task RejectAll() => Reject(messages.Where(o => o.IsPending).ToList());
+
+    private Task Acknowledge(IEnumerable<QueueMessage> items)
+    {
+        return Process(items, "Acknowledge", QueueMessageStatus.Acknowledged, (client, queueName, deliveryIds) => client.Services.MessageQueues.Acknowledge(queueName, deliveryIds, routerId: ConfigurationId));
+    }
+
+    private Task Reject(IEnumerable<QueueMessage> items)
+    {
+        return Process(items, "Reject", QueueMessageStatus.Rejected, (client, queueName, deliveryIds) => client.Services.MessageQueues.Reject(queueName, deliveryIds, routerId: ConfigurationId));
+    }
+
+    private async Task Process(IEnumerable<QueueMessage> items, string operation, QueueMessageStatus successStatus, Func<TrakHound.Clients.ITrakHoundClient, string, IEnumerable<string>, Task<TrakHoundServiceResponse<IEnumerable<TrakHoundQueueDeliveryResult>>>> send)
+    {
+        var pending = items?.Where(o => o.IsPending && !processingIds.ContainsKey(o.Id)).ToList();
+        if (pending.IsNullOrEmpty()) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null)
+        {
+            notificationService.AddNotification(NotificationType.Error, $"{operation} Failed", $"Instance {InstanceId} is not available");
+            return;
+        }
+
+        processing = true;
+        foreach (var item in pending) processingIds[item.Id] = operation == "Reject" ? "Rejecting.." : "Acknowledging..";
+        await InvokeAsync(StateHasChanged);
+
+        var succeeded = 0;
+        var failed = 0;
+
+        // One request per Queue (the Service returns a Result for each Delivery ID)
+        foreach (var group in pending.GroupBy(o => o.Queue))
+        {
+            var groupItems = group.ToList();
+
+            try
+            {
+                var response = await send(client, group.Key, groupItems.Select(o => o.DeliveryId).ToList());
+                var results = response.Success ? response.Result?.Where(o => o.DeliveryId != null).GroupBy(o => o.DeliveryId).ToDictionary(o => o.Key, o => o.First()) : null;
+
+                foreach (var item in groupItems)
+                {
+                    TrakHoundQueueDeliveryResult result = null;
+                    if (results != null && results.TryGetValue(item.DeliveryId, out result) && result.Success)
+                    {
+                        item.Status = successStatus;
+                        item.StatusMessage = null;
+                        succeeded++;
+                    }
+                    else
+                    {
+                        item.Status = QueueMessageStatus.Failed;
+                        item.StatusMessage = results != null ? result?.Message ?? "No Result was returned for this Delivery ID" : GetErrorMessage(response.StatusCode, response.Message);
+                        failed++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                foreach (var item in groupItems)
+                {
+                    item.Status = QueueMessageStatus.Failed;
+                    item.StatusMessage = ex.Message;
+                    failed++;
+                }
+            }
+
+            foreach (var item in groupItems) processingIds.Remove(item.Id);
+        }
+
+        if (failed > 0)
+        {
+            notificationService.AddNotification(NotificationType.Error, $"{operation} Failed", $"{failed:N0} of {pending.Count:N0} Messages could not be {(operation == "Reject" ? "Rejected" : "Acknowledged")}");
+        }
+        else
+        {
+            var text = succeeded == 1 ? "1 Message" : $"{succeeded:N0} Messages";
+            notificationService.AddNotification(NotificationType.Success, operation == "Reject" ? "Rejected" : "Acknowledged", operation == "Reject" ? $"{text} returned to the Queue" : $"{text} removed from the Queue");
+        }
+
+        processing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Rejects Pending Messages that were Pulled (they are held on the Service's shared Channel until Acknowledged or Rejected)
+    /// </summary>
+    private void ReturnPendingPulled()
+    {
+        var pending = messages.Where(o => o.IsPending && o.SubscriptionId == null).ToList();
+        if (pending.Count < 1) return;
+
+        foreach (var message in pending) message.Status = QueueMessageStatus.Returned;
+
+        // Use the Service the Messages were Pulled from (ConfigurationId may already be the next Service)
+        var configurationId = loadedConfigurationId;
+        var client = explorerService.GetClient(loadedInstanceId, configurationId);
+        if (client == null) return;
+
+        _ = Task.Run(async () =>
+        {
+            foreach (var group in pending.GroupBy(o => o.Queue))
+            {
+                try { await client.Services.MessageQueues.Reject(group.Key, group.Select(o => o.DeliveryId).ToList(), routerId: configurationId); } catch { }
+            }
+        });
+    }
+
+    #endregion
+
+
+    private QueueMessage CreateMessage(TrakHoundQueueMessage response, string source, string fromSubscriptionId, bool autoAcknowledged)
+    {
+        return new QueueMessage
+        {
+            Id = Interlocked.Increment(ref nextId),
+            Queue = response.Queue,
+            DeliveryId = response.DeliveryId,
+            MessageId = response.MessageId,
+            ContentType = response.ContentType,
+            Headers = response.Headers,
+            Redelivered = response.Redelivered,
+            Content = response.Content ?? Array.Empty<byte>(),
+            Published = response.PublishedTimestamp > 0 ? response.PublishedTimestamp.ToLocalDateTime() : null,
+            Received = response.ReceivedTimestamp > 0 ? response.ReceivedTimestamp.ToLocalDateTime() : DateTime.Now,
+            Source = source,
+            SubscriptionId = fromSubscriptionId,
+            Status = autoAcknowledged ? QueueMessageStatus.AutoAcknowledged : QueueMessageStatus.Pending
+        };
+    }
+
+    private void AddMessages(IEnumerable<QueueMessage> added)
+    {
+        messages.AddRange(added);
+
+        // Limit the list (remove the oldest Messages that don't need an action)
+        var excess = messages.Count - _maxMessages;
+        if (excess > 0)
+        {
+            var removable = messages.Where(o => !o.IsPending).OrderBy(o => o.Id).Take(excess).ToHashSet();
+            messages.RemoveAll(o => removable.Contains(o));
+            expandedIds.RemoveWhere(id => !messages.Any(o => o.Id == id));
+        }
+    }
+
+    private IEnumerable<QueueMessage> GetItems()
+    {
+        var items = messages.OrderByDescending(o => o.Id);
+        if (string.IsNullOrWhiteSpace(filter)) return items.ToList();
+
+        var value = filter.Trim();
+        return items.Where(o => (o.Queue?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            o.Preview.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    private async Task ClearMessages()
+    {
+        // Pending Pulled Messages are returned to the Queue. Pending Subscribed Messages stay on the
+        // Subscription's Channel, so Reject them as well (otherwise they are held until it closes).
+        var pendingSubscribed = messages.Where(o => o.IsPending && o.SubscriptionId != null).ToList();
+        if (pendingSubscribed.Count > 0) await Reject(pendingSubscribed);
+
+        ReturnPendingPulled();
+
+        messages = new List<QueueMessage>();
+        expandedIds = new HashSet<long>();
+        lastPullQueue = null;
+    }
+
+    private void AddRecentQueue(string queueName)
+    {
+        recentQueues.Remove(queueName);
+        recentQueues.Insert(0, queueName);
+        if (recentQueues.Count > _maxRecentQueues) recentQueues.RemoveAt(recentQueues.Count - 1);
+    }
+
+    private async Task CopyContent(QueueMessage item)
+    {
+        await javascriptService.CopyClipboard(item.Format(selectedFormat) ?? "");
+
+        // Show the "Copied" check briefly, then return to the Copy icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copiedId = item.Id;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            copiedId = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void ToggleExpanded(QueueMessage item)
+    {
+        if (!expandedIds.Remove(item.Id)) expandedIds.Add(item.Id);
+    }
+
+    private void QueueChanged(ChangeEventArgs args)
+    {
+        queue = args.Value?.ToString();
+    }
+
+    private async Task QueueKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await Pull();
+    }
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        filter = null;
+    }
+
+    private void SetView(string selectedView)
+    {
+        view = selectedView;
+    }
+
+    private void ViewQueueMessages(string queueName)
+    {
+        // Select the Queue on the Messages view (unless a Subscription is holding the current Queue)
+        if (stream == null && !string.IsNullOrEmpty(queueName)) queue = queueName;
+        view = MessagesView;
+    }
+
+    private void TogglePublish()
+    {
+        showPublish = !showPublish;
+    }
+
+    private void MessagePublished(PublishPanel.PublishResult result)
+    {
+        AddRecentQueue(result.Queue);
+        notificationService.AddNotification(NotificationType.Success, "Message Published", $"{result.Queue} · {((long)result.Size).ToFileSize()}{(!string.IsNullOrEmpty(result.MessageId) ? $" · {result.MessageId}" : "")}");
+    }
+
+    private void MessagePublishFailed(PublishPanel.PublishResult result)
+    {
+        notificationService.AddNotification(NotificationType.Error, "Publish Failed", $"{result.Queue} : {result.Message}");
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    private string GetServiceName()
+    {
+        return !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+    }
+
+    private string GetDescription()
+    {
+        var description = !string.IsNullOrEmpty(service?.Description) ? service.Description : "MessageQueue Service";
+        if (!string.IsNullOrEmpty(service?.PackageId)) description += $" · {service.PackageId}";
+        return description;
+    }
+
+    private static string GetStatusText(QueueMessageStatus status)
+    {
+        switch (status)
+        {
+            case QueueMessageStatus.Pending: return "Pending";
+            case QueueMessageStatus.AutoAcknowledged: return "Auto Acknowledged";
+            case QueueMessageStatus.Acknowledged: return "Acknowledged";
+            case QueueMessageStatus.Rejected: return "Rejected";
+            case QueueMessageStatus.Returned: return "Returned";
+            default: return "Failed";
+        }
+    }
+
+    private static string GetStatusTitle(QueueMessage item)
+    {
+        if (!string.IsNullOrEmpty(item.StatusMessage)) return item.StatusMessage;
+
+        switch (item.Status)
+        {
+            case QueueMessageStatus.Pending: return "Still on the Queue until it is Acknowledged or Rejected";
+            case QueueMessageStatus.AutoAcknowledged: return "Removed from the Queue when it was delivered";
+            case QueueMessageStatus.Acknowledged: return "Removed from the Queue";
+            case QueueMessageStatus.Rejected: return "Returned to the Queue";
+            case QueueMessageStatus.Returned: return "Not Acknowledged before its Channel closed, so it was returned to the Queue";
+            default: return null;
+        }
+    }
+
+    private static string GetStatusClass(QueueMessageStatus status)
+    {
+        switch (status)
+        {
+            case QueueMessageStatus.Pending: return "pending";
+            case QueueMessageStatus.Failed: return "failed";
+            case QueueMessageStatus.Rejected:
+            case QueueMessageStatus.Returned: return "returned";
+            default: return "done";
+        }
+    }
+
+    private static string GetDetailsTitle(QueueMessage item)
+    {
+        var lines = new List<string>();
+        lines.Add($"Received : {item.Received:o}");
+        if (item.Published.HasValue) lines.Add($"Published : {item.Published.Value:o}");
+        if (!string.IsNullOrEmpty(item.MessageId)) lines.Add($"Message ID : {item.MessageId}");
+        if (!string.IsNullOrEmpty(item.ContentType)) lines.Add($"Content Type : {item.ContentType}");
+        if (item.Headers != null)
+        {
+            foreach (var header in item.Headers) lines.Add($"{header.Key} : {header.Value}");
+        }
+        return string.Join("\n", lines);
+    }
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        return timestamp.Date == DateTime.Now.Date ? timestamp.ToString("HH:mm:ss.fff") : timestamp.ToString("yyyy-MM-dd HH:mm:ss.fff");
+    }
+
+    internal static string GetErrorMessage(int statusCode, string message)
+    {
+        if (!string.IsNullOrEmpty(message)) return message;
+        return statusCode > 0 ? $"Status Code {statusCode}" : "Service Not Available";
+    }
+
+}

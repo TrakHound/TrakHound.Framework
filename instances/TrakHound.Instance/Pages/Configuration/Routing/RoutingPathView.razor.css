@@ -1,0 +1,60 @@
+.path-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding-left: 22px;
+}
+
+.path-step {
+    font-size: var(--fontSizeSm);
+}
+
+    .path-step::marker {
+        color: var(--textMild);
+    }
+
+    .path-step.skipped .step-title {
+        color: var(--textMild);
+        text-decoration: line-through;
+    }
+
+    .path-step .path-list {
+        margin-top: 6px;
+        padding-left: 18px;
+        border-left: 1px solid var(--borderColorLight);
+    }
+
+.step-heading {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.step-icon {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--accentLight);
+}
+
+.step-title {
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.step-fallback,
+.step-problem {
+    display: block;
+    padding-left: 20px;
+    color: var(--textMild);
+}
+
+.step-problem {
+    color: var(--bs-warning, #ffc107);
+}
+
+.path-empty {
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}

@@ -1,0 +1,220 @@
+.volume-panel {
+    --volume-toolbar-height: 42px;
+    --volume-success: var(--bs-success, #198754);
+    --volume-warning: var(--bs-warning, #ffc107);
+    --volume-danger: var(--bs-danger, #dc3545);
+    display: grid;
+    grid-template-rows: var(--volume-toolbar-height) 1fr;
+    grid-template-columns: 260px 1fr;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--borderColorLight);
+    border-top: none;
+    background: var(--panelBackground);
+}
+
+
+/* Toolbars (Sidebar and File share the same height so their borders line up) */
+
+.sidebar-toolbar-container,
+.toolbar-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--volume-toolbar-height);
+    padding: 0 8px;
+    background: var(--panelBackgroundMedium);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+        .sidebar-toolbar-container .btn:disabled,
+        .toolbar-container .btn:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+    /* The global '.btn .icon' style adds a right margin for the label, which pushes icon-only buttons off-center.
+       Spacing between the icon and label comes from the button's 'gap' instead */
+/* Sidebar */
+
+.sidebar-container {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    display: grid;
+    grid-template-rows: var(--volume-toolbar-height) 1fr;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--borderColorLight);
+}
+
+.sidebar-title {
+    flex: 1;
+    padding-left: 4px;
+    font-size: var(--fontSizeSm);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.sidebar-toolbar-container .btn-icon {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+}
+
+.sidebar-content-container {
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 0 40px;
+}
+
+
+/* File Toolbar */
+
+.toolbar-container {
+    grid-row: 1;
+    grid-column: 2;
+    justify-content: space-between;
+    min-width: 0;
+    container-type: inline-size; /* Lets the buttons respond to the toolbar's own width */
+}
+
+/* When the editor is narrow, show icon-only buttons so the file path stays visible */
+@container (max-width: 480px) {
+    .file-buttons .btn-label {
+        display: none;
+    }
+
+    .file-buttons .btn {
+        width: 28px;
+    }
+}
+
+.file-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0; /* Allow the path to truncate */
+    padding-left: 4px;
+}
+
+.file-icon {
+    color: var(--accent);
+}
+
+.file-path {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--fontSizeSm);
+    font-family: var(--fontMono, monospace);
+    color: var(--textDark);
+}
+
+    .file-path.empty {
+        font-family: inherit;
+        color: var(--textMild);
+    }
+
+.file-status {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--textDark);
+}
+
+    .file-status.dirty {
+        border-color: var(--volume-warning);
+        background: color-mix(in srgb, var(--volume-warning) 15%, transparent);
+    }
+
+    .file-status.success {
+        border-color: var(--volume-success);
+        background: color-mix(in srgb, var(--volume-success) 15%, transparent);
+    }
+
+    .file-status.error {
+        border-color: var(--volume-danger);
+        background: color-mix(in srgb, var(--volume-danger) 15%, transparent);
+    }
+
+.file-buttons {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+}
+
+    .file-buttons .btn-save:not(:disabled) .icon {
+        color: var(--accent);
+    }
+
+    .file-buttons .btn-delete:not(:disabled) .icon {
+        color: var(--volume-danger);
+    }
+
+
+/* Content */
+
+.content-container {
+    grid-row: 2;
+    grid-column: 2;
+    min-height: 0;
+    overflow: hidden;
+}
+
+    .content-container ::deep .rz-textarea {
+        height: 100%;
+        width: 100%;
+        padding: 12px 16px;
+        resize: none;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        background: var(--panelBackground);
+        color: var(--textDark);
+        font-size: var(--fontSizeSm);
+        font-family: var(--fontMono, monospace);
+        line-height: 1.6;
+        white-space: pre;
+        tab-size: 4;
+    }
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    padding: 20px;
+    text-align: center;
+    color: var(--textMild);
+}
+
+.empty-state-icon {
+    font-size: 36px;
+    margin-bottom: 6px;
+    color: var(--textLight);
+}
+
+.empty-state-title {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.empty-state-description {
+    font-size: var(--fontSizeSm);
+}
+
+
+/* New File Modal */
+
+.add-modal-error {
+    display: block;
+    margin-top: 8px;
+    font-size: var(--fontSizeSm);
+    color: var(--bs-danger, #dc3545); /* The Modal is outside .volume-panel, so its variables don't apply */
+}

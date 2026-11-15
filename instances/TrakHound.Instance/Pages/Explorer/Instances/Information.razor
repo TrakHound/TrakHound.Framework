@@ -1,0 +1,243 @@
+@inject ITrakHoundInstance localInstance
+@inject ExplorerService explorerService
+@inject TrakHoundProcessMonitor processMonitor
+@inject TrakHound.Instance.Logging.History.TrakHoundLogHistoryService logHistoryService
+@using System.Runtime.InteropServices
+@using TrakHound.Instances
+
+@if (InstanceInformation != null)
+{
+    var http = InstanceInformation.GetInterface("HTTP");
+    var baseUrl = http?.GetBaseUrl();
+
+    <div class="information-panel">
+
+        <div class="group">
+            <div class="group-title"><span class="icon fa-solid fa-sharp fa-id-card"></span>Identity</div>
+            <table class="table table-sm">
+                <tbody>
+                    <tr><td class="label">Instance ID</td><td class="value">@InstanceInformation.Id<CopyButton Value="@InstanceInformation.Id" Title="Copy Instance ID" /></td></tr>
+                    <tr><td class="label">Name</td><td class="value">@Value(InstanceInformation.Name, true)</td></tr>
+                    <tr><td class="label">Description</td><td class="value">@Value(InstanceInformation.Description, true)</td></tr>
+                    <tr><td class="label">Version</td><td class="value">@Value(InstanceInformation.Version)</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span class="icon fa-solid fa-sharp fa-network-wired"></span>Network</div>
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td class="label">Base URL</td>
+                        <td class="value">
+                            @if (!string.IsNullOrEmpty(baseUrl))
+                            {
+                                <a href="@baseUrl" target="_blank">@baseUrl</a><CopyButton Value="@baseUrl" Title="Copy Base URL" />
+                            }
+                            else
+                            {
+                                <span class="not-set">Not set</span>
+                            }
+                        </td>
+                    </tr>
+                    <tr><td class="label">HTTP Address</td><td class="value">@Value(http?.Address)</td></tr>
+                    <tr><td class="label">HTTP Port</td><td class="value">@Value(http?.Port.ToString())</td></tr>
+                    @if (IsLocal)
+                    {
+                        <tr><td class="label">Listening On</td><td class="value">@(!string.IsNullOrEmpty(localInstance.Configuration?.HttpAddress) ? localInstance.Configuration.HttpAddress : "All addresses")</td></tr>
+                        <tr><td class="label">Base Path</td><td class="value">@(!string.IsNullOrEmpty(localInstance.Configuration?.BasePath) ? localInstance.Configuration.BasePath : "/")</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (IsLocal)
+        {
+            var previousRun = TrakHound.Instance.TrakHoundInstanceLifetimeMonitor.PreviousRun;
+
+            <div class="group">
+                <div class="group-title"><span class="icon fa-solid fa-sharp fa-microchip"></span>Runtime</div>
+                <table class="table table-sm">
+                    <tbody>
+                        <tr><td class="label">Status</td><td class="value">@localInstance.Status since @FormatTimestamp(localInstance.LastUpdated)</td></tr>
+                        <tr><td class="label">Configuration Profile</td><td class="value">@GetConfigurationProfile()</td></tr>
+                        <tr><td class="label">Process ID</td><td class="value">@Environment.ProcessId</td></tr>
+                        <tr><td class="label">Process Started</td><td class="value">@FormatTimestamp(processMonitor.StartTime) (@((DateTime.UtcNow - processMonitor.StartTime).ToSimpleFormattedString()) ago)</td></tr>
+                        <tr><td class="label">.NET Runtime</td><td class="value">@RuntimeInformation.FrameworkDescription (@RuntimeInformation.ProcessArchitecture)</td></tr>
+                        <tr>
+                            <td class="label">Last Shutdown</td>
+                            <td class="value">
+                                @if (previousRun != null)
+                                {
+                                    <span class="warning">Not clean</span><span class="secondary"> · PID @previousRun.ProcessId stopped around @previousRun.LastModified.ToString("yyyy-MM-dd HH:mm:ss") · @previousRun.Reason</span>
+                                }
+                                else
+                                {
+                                    <span>Clean</span>
+                                }
+                            </td>
+                        </tr>
+                        @if (previousRun != null && (!string.IsNullOrEmpty(previousRun.Details) || previousRun.Events?.Count > 0 || !string.IsNullOrEmpty(previousRun.Output)))
+                        {
+                            <tr>
+                                <td class="label">Shutdown Details</td>
+                                <td class="value">
+                                    @if (!string.IsNullOrEmpty(previousRun.Details))
+                                    {
+                                        <details class="shutdown-details">
+                                            <summary>Exception</summary>
+                                            <pre>@previousRun.Details</pre>
+                                        </details>
+                                    }
+                                    @if (previousRun.Events != null)
+                                    {
+                                        foreach (var entry in previousRun.Events)
+                                        {
+                                            <details class="shutdown-details">
+                                                <summary>@entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss") · @entry.Source (Event @entry.EventId) · @entry.Summary</summary>
+                                                <pre>@entry.Message</pre>
+                                            </details>
+                                        }
+                                    }
+                                    @if (!string.IsNullOrEmpty(previousRun.Output))
+                                    {
+                                        <details class="shutdown-details">
+                                            <summary>stdout log · @previousRun.OutputPath</summary>
+                                            <pre>@previousRun.Output</pre>
+                                        </details>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="group">
+                <div class="group-title"><span class="icon fa-solid fa-sharp fa-shield-halved"></span>Security</div>
+                <table class="table table-sm">
+                    <tbody>
+                        <tr><td class="label">Admin Interface</td><td class="value">@EnabledText(localInstance.Configuration?.AdminInterfaceEnabled)</td></tr>
+                        <tr><td class="label">Admin Sign In</td><td class="value">@EnabledText(localInstance.Configuration?.AdminAuthenticationEnabled)</td></tr>
+                        <tr><td class="label">Admin Port</td><td class="value">@(TrakHound.Instance.Http.TrakHoundAdminPort.IsEnabled ? $"{TrakHound.Instance.Http.TrakHoundAdminPort.Port} (Admin Interface and System API only)" : "Same as HTTP")<a class="settings-link" href="_admin/configuration/settings?section=interfaces">Settings</a></td></tr>
+                        <tr><td class="label">Apps over HTTP</td><td class="value">@EnabledText(localInstance.Configuration?.AppsHttpEnabled)<a class="settings-link" href="_admin/configuration/settings?section=interfaces">Settings</a></td></tr>
+                        <tr><td class="label">APIs over HTTP</td><td class="value">@EnabledText(localInstance.Configuration?.ApiHttpEnabled)<a class="settings-link" href="_admin/configuration/settings?section=interfaces">Settings</a></td></tr>
+                        <tr><td class="label">System API</td><td class="value">@EnabledText(localInstance.Configuration?.SystemApiEnabled)<a class="settings-link" href="_admin/configuration/settings?section=interfaces">Settings</a></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (InstanceInformation.Environment != null)
+        {
+            <div class="group">
+                <div class="group-title"><span class="icon fa-solid fa-sharp fa-desktop"></span>Environment</div>
+                <table class="table table-sm">
+                    <tbody>
+                        <tr><td class="label">Host</td><td class="value">@Value(InstanceInformation.Environment.Sender)</td></tr>
+                        <tr><td class="label">User</td><td class="value">@Value(InstanceInformation.Environment.User)</td></tr>
+                        <tr><td class="label">Operating System</td><td class="value">@Value(InstanceInformation.Environment.OperatingSystem?.Name)</td></tr>
+                        <tr><td class="label">OS Type</td><td class="value">@Value(InstanceInformation.Environment.OperatingSystem?.Type)</td></tr>
+                        <tr><td class="label">OS Version</td><td class="value">@Value(InstanceInformation.Environment.OperatingSystem?.Version)</td></tr>
+                        @if (IsLocal)
+                        {
+                            <tr><td class="label">Processors</td><td class="value">@processMonitor.ProcessorCount logical processors</td></tr>
+                            <tr><td class="label">Memory</td><td class="value">@processMonitor.TotalAvailableMemory.ToFileSize() available to the Instance</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @* Last and full width, so long paths have room to stay on one line *@
+        @if (IsLocal)
+        {
+            <div class="group wide">
+                <div class="group-title"><span class="icon fa-solid fa-sharp fa-folder-open"></span>Directories</div>
+                <table class="table table-sm">
+                    <tbody>
+                        @foreach (var (name, path) in GetDirectories())
+                        {
+                            <tr><td class="label">@name</td><td class="value path">@PathValue(path)<CopyButton Value="@path" Title="@($"Copy {name} Path")" /></td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundInstanceInformation InstanceInformation { get; set; }
+
+
+    // Runtime, Directories and Security are only known for this Instance
+    private bool IsLocal => localInstance != null && explorerService.SelectedInstanceId == localInstance.Id;
+
+
+    private RenderFragment Value(string value, bool settingsLink = false) => __builder =>
+    {
+        if (!string.IsNullOrEmpty(value))
+        {
+            <span>@value</span>
+        }
+        else
+        {
+            <span class="not-set">Not set</span>
+            if (settingsLink && IsLocal)
+            {
+                <a class="settings-link" href="_admin/configuration/settings?section=general">Set in Settings</a>
+            }
+        }
+    };
+
+    // Long paths wrap after a separator instead of in the middle of a folder name
+    private RenderFragment PathValue(string path) => __builder =>
+    {
+        if (!string.IsNullOrEmpty(path))
+        {
+            foreach (var part in System.Text.RegularExpressions.Regex.Split(path, @"(?<=[\\/])"))
+            {
+                <text>@part<wbr /></text>
+            }
+        }
+        else
+        {
+            <span class="not-set">Not set</span>
+        }
+    };
+
+    private IEnumerable<(string Name, string Path)> GetDirectories()
+    {
+        return new[]
+        {
+            ("Instance", AppContext.BaseDirectory.TrimEnd('\\', '/')),
+            ("Configuration", localInstance.ConfigurationPath),
+            ("Packages", localInstance.PackagesPath),
+            ("Volumes", localInstance.VolumesPath),
+            ("Variables", localInstance.VariablesPath),
+            ("Logs", logHistoryService.RunningConfiguration?.GetDirectory())
+        };
+    }
+
+    private string GetConfigurationProfile()
+    {
+        var path = localInstance.ConfigurationPath;
+        return !string.IsNullOrEmpty(path) ? Path.GetFileName(path.TrimEnd('\\', '/')) : "-";
+    }
+
+    private static string EnabledText(bool? value) => value == true ? "Enabled" : "Disabled";
+
+    private static string FormatTimestamp(DateTime timestamp)
+    {
+        if (timestamp == default) return "-";
+
+        var local = timestamp.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+}

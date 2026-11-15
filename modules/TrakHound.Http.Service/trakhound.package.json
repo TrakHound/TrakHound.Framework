@@ -1,0 +1,13 @@
+﻿{
+  "id": "TrakHound.Http.Service",
+  "category": "service",
+  "version": "0.2",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "HTTP Service for the TrakHound Framework to route services to another TrakHound Instance",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Http.Service",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".configurationParameters": "hostname,port,path,useSsl,routerId"
+  }
+}

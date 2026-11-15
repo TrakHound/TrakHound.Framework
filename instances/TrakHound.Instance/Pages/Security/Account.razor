@@ -1,0 +1,145 @@
+@page "/_admin/security/account"
+@* For every signed in Admin, whatever their Roles (the Layout still requires signing in) *@
+@attribute [TrakHound.Instance.Security.AdminResourcePublic]
+@layout SecurityLayout
+@inject TrakHound.Instance.Security.TrakHoundAdminAccountStore store
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@inject TrakHound.Instances.ITrakHoundInstance instance
+@inject NavigationManager navigationManager
+@using TrakHound.Instance.Security
+
+<TrakHoundPageTitle Text="Your Account" />
+<AreaBreadcrumbs Items="@([new("Your Account")])" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-user"></span>
+        <div class="page-title">
+            <span class="title">Your Account</span>
+            <span class="description">The Admin Account you are signed in with, what its Roles let you do, and your Password</span>
+        </div>
+    </div>
+
+    <div class="table-container">
+
+        @if (account == null)
+        {
+            <div class="section callout-section">
+                <div class="callout">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    <div>Admin Authentication is disabled, so nobody is signed in and everyone who can reach the Admin interface is an Owner.</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="section">
+                <span class="section-title">@account.DisplayName<span class="section-description">Signed in as <code>@account.Username</code></span></span>
+
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>What it allows</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var roleId in account.RoleIds)
+                        {
+                            var role = TrakHoundAdminSecurity.GetRole(roleId);
+                            <tr>
+                                <td><span class="item-name">@(role?.Name ?? roleId)</span></td>
+                                <td>@(role?.Description ?? "This Role no longer exists, so it gives no Permissions")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="section">
+                <span class="section-title">Change Password<span class="section-description">You are signed out everywhere and sign in again with the new Password</span></span>
+
+                <form class="form-grid account-password" @onsubmit="ChangePasswordClicked">
+                    <div class="form-field wide">
+                        <label for="account-current-password">Current Password</label>
+                        <input id="account-current-password" class="form-control" type="password" @bind="currentPassword" @bind:event="oninput" autocomplete="current-password" />
+                    </div>
+                    <div class="form-field">
+                        <label for="account-new-password">New Password</label>
+                        <input id="account-new-password" class="form-control" type="password" @bind="newPassword" @bind:event="oninput" autocomplete="new-password" />
+                        <span class="hint">At least @TrakHoundAdminAccountStore.PasswordMinLength characters</span>
+                    </div>
+                    <div class="form-field">
+                        <label for="account-new-password-confirm">Confirm Password</label>
+                        <input id="account-new-password-confirm" class="form-control" type="password" @bind="newPasswordConfirm" @bind:event="oninput" autocomplete="new-password" />
+                    </div>
+                    <div class="form-field wide">
+                        <button type="submit" class="btn btn-primary" disabled="@(saving || string.IsNullOrEmpty(currentPassword) || string.IsNullOrEmpty(newPassword))"><span class="icon fa-solid fa-sharp fa-check"></span>Change Password</button>
+                    </div>
+                </form>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="callout danger account-error">
+                        <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                        <div>@errorMessage</div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@code {
+
+    private TrakHoundAdminAccount account;
+    private string currentPassword;
+    private string newPassword;
+    private string newPasswordConfirm;
+    private string errorMessage;
+    private bool saving;
+
+
+    protected override void OnInitialized()
+    {
+        account = adminAccess.Account;
+    }
+
+    private async Task ChangePasswordClicked()
+    {
+        if (account == null || saving) return;
+
+        errorMessage = newPassword != newPasswordConfirm ? "The Passwords don't match" : TrakHoundAdminAccountStore.ValidatePassword(newPassword);
+        if (errorMessage != null) return;
+
+        saving = true;
+        try
+        {
+            // PBKDF2 is CPU bound, so it isn't run on the Circuit's thread
+            var username = account.Username;
+            var password = currentPassword;
+            var verified = await Task.Run(() => store.Verify(username, password));
+            if (verified == null || verified.Id != account.Id)
+            {
+                errorMessage = "The Current Password isn't correct";
+                return;
+            }
+
+            errorMessage = store.SetPassword(account.Id, newPassword);
+            if (errorMessage != null) return;
+
+            instance.AuditMonitor?.RecordFile(store.GetAccountPath(account.Id));
+
+            // The Session ended with the old Password, so remove its Cookie and show the Login page
+            navigationManager.NavigateTo("_admin/session/signout", forceLoad: true);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+}

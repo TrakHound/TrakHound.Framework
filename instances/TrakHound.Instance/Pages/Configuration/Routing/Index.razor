@@ -1,0 +1,548 @@
+﻿@page "/_admin/configuration/routing"
+@page "/_admin/workspaces/{WorkspaceId}/configuration/routing"
+@inject ConfigurationsService configurationsService
+@inject NavigationManager navigationManager
+@using TrakHound.Blazor.Diagrams
+@using TrakHound.Blazor.Diagrams.Components
+@using TrakHound.Blazor.Diagrams.Components.Widgets
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="Routers" />
+<AreaBreadcrumbs Items="@([new("Routers")])" />
+
+<NavigationLock OnBeforeInternalNavigation="BeforeNavigation" ConfirmExternalNavigation="@IsDirty" />
+
+<div class="routing-page">
+
+    @* Header : Title and Actions *@
+    <div class="routing-header">
+        <div class="routing-title">
+            <span class="title">Routers</span>
+            <span class="description">Route Requests to Services (and to other Routers). Requests that don't name a Router use the one named <code>default</code></span>
+        </div>
+        <div class="routing-actions">
+            @if (IsDirty && !saving)
+            {
+                <span class="save-status"><span class="status-dot"></span>Unsaved changes</span>
+            }
+            else if (saved)
+            {
+                <span class="save-status saved"><span class="icon fa-solid fa-sharp fa-check"></span>Saved</span>
+            }
+            <button class="btn btn-light" title="Load the saved Routers (your changes are lost)" @onclick="Discard" disabled="@(saving || !IsDirty)"><span class="icon fa-solid fa-sharp fa-xmark"></span>Discard</button>
+            <button class="admin-write btn btn-primary" @onclick="Save" disabled="@(saving || !IsDirty)"><span class="icon fa-solid fa-sharp @(saving ? "fa-loader spin" : "fa-floppy-disk")"></span>@(saving ? "Saving.." : "Save")</button>
+        </div>
+    </div>
+
+    @if (saveErrors.Count > 0)
+    {
+        <div class="routing-errors">
+            <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+            <div>
+                <span class="errors-title">The Routers weren't saved</span>
+                <ul>
+                    @foreach (var error in saveErrors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </div>
+            <button class="errors-close" title="Close" @onclick="() => saveErrors.Clear()"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+        </div>
+    }
+
+    @* Toolbar *@
+    <div class="routing-toolbar">
+        <button class="btn btn-command" title="Arrange the items in columns" @onclick="AutoArrange"><span class="icon fa-solid fa-sharp fa-table-columns"></span>Arrange</button>
+        <button class="btn btn-command" title="Zoom to show every item" @onclick="FitToNodes"><span class="icon fa-solid fa-sharp fa-expand"></span>Fit</button>
+        <button class="btn btn-command" title="Show the Modules that use each Router, and the Services their Requests go to" @onclick="OpenMap" disabled="@mapLoading"><span class="icon fa-solid fa-sharp @(mapLoading ? "fa-loader spin" : "fa-diagram-project")"></span>Map</button>
+        <button class="admin-write btn btn-command" title="Delete the selected items (or press Delete)" @onclick="DeleteSelected" disabled="@(selected == null)"><span class="icon fa-solid fa-sharp fa-trash"></span>Delete</button>
+
+        <div class="routing-summary">
+            @if (ErrorCount > 0)
+            {
+                <span class="summary-item error"><span class="fa-solid fa-sharp fa-circle-exclamation"></span>@ErrorCount Error@(ErrorCount != 1 ? "s" : "")</span>
+            }
+            @if (WarningCount > 0)
+            {
+                <span class="summary-item warning"><span class="fa-solid fa-sharp fa-triangle-exclamation"></span>@WarningCount Warning@(WarningCount != 1 ? "s" : "")</span>
+            }
+            <span class="summary-hint">Drag from a node's right edge to another node's left edge to connect them</span>
+        </div>
+    </div>
+
+    <div class="routing-body">
+
+        @* Palette : Items that can be added *@
+        <aside class="routing-palette">
+            <div class="palette-section">
+                <span class="palette-group">Add</span>
+                @foreach (var type in new[] { PaletteEntryType.Router, PaletteEntryType.Route })
+                {
+                    var entry = new PaletteEntry { Type = type };
+                    <div class="palette-item" draggable="true" title="@GetPaletteHint(entry)"
+                         @onclick="() => Add(entry)" @ondragstart="() => StartDrag(entry)">
+                        <span class="palette-icon @GetPaletteIcon(type)"></span>
+                        <span class="palette-title">@type</span>
+                    </div>
+                }
+            </div>
+
+            <div class="palette-search">
+                <span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>
+                <input type="search" placeholder="Search Targets" @bind="search" @bind:event="oninput" />
+            </div>
+
+            <div class="palette-list">
+                @{
+                    var serviceEntries = services.Values
+                        .Where(o => Matches(o.Name, o.Id))
+                        .OrderBy(o => o.Name ?? o.Id, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    var routerEntries = model.Routers
+                        .Where(o => Matches(o.Name, o.Id))
+                        .OrderBy(o => o.Name ?? o.Id, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                }
+
+                <span class="palette-group">Services</span>
+                @if (serviceEntries.Count == 0)
+                {
+                    <span class="palette-empty">@(string.IsNullOrEmpty(search) ? "No Services are configured" : "No matching Services")</span>
+                }
+                @foreach (var service in serviceEntries)
+                {
+                    var entry = new PaletteEntry { Type = PaletteEntryType.Service, Source = service.Id };
+                    var package = !string.IsNullOrEmpty(service.PackageId) ? $"{service.PackageId} {service.PackageVersion}".Trim() : null;
+                    <div class="palette-item" draggable="true" title="@($"{service.Id}{(package != null ? $"\nPackage : {package}" : "")}\n{GetPaletteHint(entry)}")"
+                         @onclick="() => Add(entry)" @ondragstart="() => StartDrag(entry)">
+                        <span class="palette-icon @GetPaletteIcon(PaletteEntryType.Service)"></span>
+                        <div class="palette-heading">
+                            <span class="palette-title">@(service.Name ?? service.Id)</span>
+                            @if (!string.IsNullOrEmpty(service.Description))
+                            {
+                                <span class="palette-description">@service.Description</span>
+                            }
+                            @if (!string.IsNullOrEmpty(service.PackageId))
+                            {
+                                <span class="palette-description"><span class="fa-solid fa-sharp fa-box"></span> @service.PackageId</span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <span class="palette-group">Routers</span>
+                @if (routerEntries.Count == 0)
+                {
+                    <span class="palette-empty">@(string.IsNullOrEmpty(search) ? "Add a Router first" : "No matching Routers")</span>
+                }
+                @foreach (var router in routerEntries)
+                {
+                    var entry = new PaletteEntry { Type = PaletteEntryType.RouterTarget, Source = router.Id };
+                    <div class="palette-item" draggable="true" title="@($"Send Requests on to the {router.Name} Router\n{GetPaletteHint(entry)}")"
+                         @onclick="() => Add(entry)" @ondragstart="() => StartDrag(entry)">
+                        <span class="palette-icon @GetPaletteIcon(PaletteEntryType.RouterTarget)"></span>
+                        <span class="palette-title">@(string.IsNullOrWhiteSpace(router.Name) ? "No Name" : router.Name)</span>
+                    </div>
+                }
+            </div>
+        </aside>
+
+        @* Diagram *@
+        <div class="routing-canvas" @ondragover="() => { }" @ondragover:preventDefault="true" @ondrop="Drop">
+            @if (!model.Items.Any())
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-regular fa-chart-network"></span>
+                    <span class="empty-title">No Routers</span>
+                    <span class="empty-description">A Router sends each Request to the Services whose Route Pattern matches it. Add a Router, then a Route, then the Services it sends Requests to.</span>
+                    <button class="admin-write btn btn-primary" @onclick="() => Add(new PaletteEntry { Type = PaletteEntryType.Router })"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Router</button>
+                </div>
+            }
+            <CascadingValue Value="context" IsFixed="true">
+                <CascadingValue Value="Diagram" IsFixed="true">
+                    <DiagramCanvas>
+                        <Widgets>
+                            <SelectionBoxWidget />
+                            <GridWidget Size="@RoutingLayout.GridSize" Mode="GridMode.Line" GridColor="var(--diagramGrid)" BackgroundColor="var(--diagramBackground)" ZoomThreshold="0.4" />
+                        </Widgets>
+                    </DiagramCanvas>
+                </CascadingValue>
+            </CascadingValue>
+        </div>
+
+        @* Inspector : The selected item (or the issues if nothing is selected) *@
+        @if (inspectorHidden && selected == null)
+        {
+            <button class="inspector-toggle" title="Show the Overview" @onclick="() => inspectorHidden = false">
+                <span class="icon fa-solid fa-sharp fa-list-check"></span>Overview
+                @if (ErrorCount > 0)
+                {
+                    <span class="toggle-count error">@ErrorCount</span>
+                }
+                @if (WarningCount > 0)
+                {
+                    <span class="toggle-count warning">@WarningCount</span>
+                }
+            </button>
+        }
+        else
+        {
+            <aside class="routing-inspector">
+                @if (selected == null)
+                {
+                    <div class="inspector-header">
+                        <span class="inspector-icon fa-solid fa-sharp fa-list-check"></span>
+                        <div class="inspector-heading">
+                            <span class="inspector-title">Overview</span>
+                            <span class="inspector-subtitle">@model.Routers.Count() Router@(model.Routers.Count() != 1 ? "s" : "") · @(model.Items.OfType<RouteItem>().Count()) Routes · @(model.Items.OfType<TargetItem>().Count()) Targets</span>
+                        </div>
+                        <button class="inspector-close" title="Hide (it is shown again when an item is selected)" @onclick="() => inspectorHidden = true"><span class="fa-solid fa-sharp fa-chevrons-right"></span></button>
+                    </div>
+                    <div class="inspector-content">
+                        @if (issues.Count == 0)
+                        {
+                            <span class="inspector-empty"><span class="fa-solid fa-sharp fa-check"></span>No problems found</span>
+                        }
+                        else
+                        {
+                            <span class="inspector-label">Problems</span>
+                            @foreach (var issue in issues)
+                            {
+                                var issueItem = model.Get(issue.ItemId);
+                                <button class="issue-item @issue.Severity.ToString().ToLowerInvariant()" title="Select the item" @onclick="() => SelectIssue(issue)">
+                                    <span class="issue-icon fa-solid fa-sharp @(issue.Severity == RoutingIssueSeverity.Error ? "fa-circle-exclamation" : "fa-triangle-exclamation")"></span>
+                                    <span class="issue-text">
+                                        <span class="issue-item-name">@(issueItem != null ? GetItemTitle(issueItem) : "Modules")</span>
+                                        <span class="issue-message">@issue.Message</span>
+                                    </span>
+                                </button>
+                            }
+                        }
+                        <p class="inspector-help">Select an item to edit it. Click an item in the list on the left to add it (connected to the selected item when it can be), or drag it onto the canvas.</p>
+                    </div>
+                }
+                else
+                {
+                    var item = selected;
+                    var itemIssues = issues.Where(o => o.ItemId == item.Id).ToList();
+
+                    <div class="inspector-header">
+                        <span class="inspector-icon @RoutingNodeWidget.GetIcon(item)"></span>
+                        <div class="inspector-heading">
+                            <span class="inspector-title">@RoutingNodeWidget.GetKindTitle(item)</span>
+                            <code class="inspector-subtitle" title="ID">@item.Id</code>
+                        </div>
+                        <button class="inspector-close" title="Close" @onclick="ClearSelection"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+                    </div>
+
+                    <div class="inspector-content">
+
+                        @foreach (var issue in itemIssues)
+                        {
+                            <div class="inspector-issue @issue.Severity.ToString().ToLowerInvariant()">
+                                <span class="fa-solid fa-sharp @(issue.Severity == RoutingIssueSeverity.Error ? "fa-circle-exclamation" : "fa-triangle-exclamation")"></span>
+                                <span>@issue.Message</span>
+                            </div>
+                        }
+
+                        @switch (item)
+                        {
+                            case RouterItem router:
+                                <label class="inspector-field">
+                                    <span class="inspector-label">Name</span>
+                                    <input class="rz-textbox" @bind="router.Name" @bind:event="oninput" @bind:after="ItemChanged" spellcheck="false" />
+                                    <span class="inspector-hint">Requests name the Router they are sent to. The <code>default</code> Router is used when they don't</span>
+                                </label>
+                                <label class="inspector-field">
+                                    <span class="inspector-label">Description</span>
+                                    <RadzenTextArea Immediate="true" Rows="3" @bind-Value="@router.Description" @bind-Value:after="ItemChanged" />
+                                </label>
+                                var users = GetModules(router);
+                                <div class="inspector-field">
+                                    <span class="inspector-label">Used By</span>
+                                    @if (users.Count == 0)
+                                    {
+                                        <span class="inspector-hint">No Module sends its Service calls through this Router</span>
+                                    }
+                                    @foreach (var user in usersExpanded ? users : users.Take(MaxUsers))
+                                    {
+                                        <a class="connection-link" href="@configurationsService.GetLink(user.Link)" title="@(user.IsZoneRouter ? $"Uses this Router because it is in the Zone {user.ZoneId}" : user.IsGroupRouter ? $"Uses this Router because it is in the Group {user.GroupId}" : "Open its Configuration")">
+                                            <span class="@user.Category?.Icon"></span>@user.Title@(user.IsZoneRouter ? $" (Zone {user.ZoneId})" : user.IsGroupRouter ? $" (Group {user.GroupId})" : "")
+                                        </a>
+                                    }
+                                    @if (users.Count > MaxUsers)
+                                    {
+                                        <button class="inspector-link" @onclick="() => usersExpanded = !usersExpanded">@(usersExpanded ? "Show fewer" : $"Show all {users.Count}")</button>
+                                    }
+                                    <span class="inspector-hint">Modules name the Router in their Configuration (or their Zone does). Renaming or deleting a Router they use by Name stops their Service calls</span>
+                                </div>
+                                break;
+
+                            case RouteItem route:
+                                <div class="inspector-field">
+                                    <span class="inspector-label">Patterns</span>
+                                    <RoutingListEditor Items="route.Patterns" Placeholder="Select or type a Pattern" Suggestions="patternSuggestions" Validate="RoutingModel.GetPatternWarning" Changed="ItemChanged" />
+                                    <span class="inspector-hint">The kinds of Services the Route handles: <code>Blobs</code>, <code>KeyValues</code>, <code>Messages</code>, <code>MessageQueues</code>, <code>Tables</code> or <code>TimeSeries</code> (a case-sensitive Regular Expression). <code>*</code> handles all of them</span>
+                                </div>
+                                <div class="inspector-field">
+                                    <span class="inspector-label">Filters</span>
+                                    <RoutingListEditor Items="route.Filters" Placeholder="Add a Filter" Changed="ItemChanged" />
+                                </div>
+                                break;
+
+                            case TargetItem target:
+                                var isRouter = target.IsRouter;
+                                <div class="inspector-field">
+                                    <span class="inspector-label">Type</span>
+                                    <div class="inspector-segments">
+                                        <button class="segment @(target.IsService ? "active" : "")" @onclick="() => SetTargetType(target, TargetItem.ServiceType)">Service</button>
+                                        <button class="segment @(isRouter ? "active" : "")" @onclick="() => SetTargetType(target, TargetItem.RouterType)">Router</button>
+                                    </div>
+                                </div>
+                                <label class="inspector-field">
+                                    <span class="inspector-label">@(isRouter ? "Router" : "Service")</span>
+                                    <RadzenDropDown TValue="string" Data="@GetSourceOptions(target)" TextProperty="Text" ValueProperty="Value"
+                                                    @bind-Value="@target.Source" @bind-Value:after="ItemChanged"
+                                                    Placeholder="@($"Select a {(isRouter ? "Router" : "Service")}")"
+                                                    AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
+                                </label>
+
+                                @if (target.IsService)
+                                {
+                                    var targetService = target.Source != null ? services.GetValueOrDefault(target.Source) : null;
+                                    @if (!string.IsNullOrEmpty(targetService?.PackageId))
+                                    {
+                                        <div class="inspector-field">
+                                            <span class="inspector-label">Package</span>
+                                            <span class="inspector-package"><code>@targetService.PackageId</code>@if (!string.IsNullOrEmpty(targetService.PackageVersion)) {<span class="inspector-hint">@targetService.PackageVersion</span>}</span>
+                                        </div>
+                                    }
+                                }
+
+                                @if (target.Parent != null)
+                                {
+                                    var siblings = target.Parent.Children.ToList();
+                                    var order = siblings.IndexOf(target);
+                                    <div class="inspector-field">
+                                        <span class="inspector-label">Order</span>
+                                        <div class="inspector-order">
+                                            <span>Tried @RoutingNodeWidget.GetOrdinal(order + 1) of @siblings.Count</span>
+                                            <button class="btn btn-sm btn-command" title="Try this Target earlier" disabled="@(order <= 0)" @onclick="() => MoveTarget(target, -1)"><span class="icon fa-solid fa-sharp fa-arrow-up"></span>Earlier</button>
+                                            <button class="btn btn-sm btn-command" title="Try this Target later" disabled="@(order >= siblings.Count - 1)" @onclick="() => MoveTarget(target, 1)"><span class="icon fa-solid fa-sharp fa-arrow-down"></span>Later</button>
+                                        </div>
+                                    </div>
+                                }
+
+                                <div class="inspector-field">
+                                    <div class="inspector-label-row">
+                                        <span class="inspector-label">Fall Back On</span>
+                                        @if (target.FallbackOn != null)
+                                        {
+                                            <button class="inspector-link" title="Use the default results" @onclick="() => ResetFallback(target)">Use Default</button>
+                                        }
+                                        else
+                                        {
+                                            <span class="inspector-hint">Default</span>
+                                        }
+                                    </div>
+                                    <span class="inspector-hint">Results from this Target that send the Request on to the Route's next Target. A Target that doesn't handle the Request is always skipped</span>
+                                    <div class="inspector-checks">
+                                        @foreach (var option in GetFallbackOptions(target))
+                                        {
+                                            var value = option;
+                                            var isChecked = target.EffectiveFallbackOn.Contains(value, StringComparer.OrdinalIgnoreCase);
+                                            <label class="inspector-check" title="@GetFallbackHint(value)">
+                                                <input type="checkbox" checked="@isChecked" @onchange="args => ToggleFallback(target, value, args.Value is bool b && b)" />
+                                                <span>@value</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+                                break;
+                        }
+
+                        <div class="inspector-field">
+                            <span class="inspector-label">Connected To</span>
+                            @if (item.Parent != null)
+                            {
+                                <div class="inspector-connection">
+                                    <button class="connection-link" @onclick="() => Select(item.Parent, true)">
+                                        <span class="@RoutingNodeWidget.GetIcon(item.Parent)"></span>@GetItemTitle(item.Parent)
+                                    </button>
+                                    <button class="admin-write btn btn-sm btn-command" title="Disconnect from the item" @onclick="() => Disconnect(item)"><span class="icon fa-solid fa-sharp fa-link-slash"></span>Disconnect</button>
+                                </div>
+                            }
+                            else if (item.Kind == RoutingItemKind.Router)
+                            {
+                                <span class="inspector-hint">Routers receive Requests directly</span>
+                            }
+                            else
+                            {
+                                <span class="inspector-hint">Not connected. Drag from a @GetParentKinds(item) node's right edge to this node's left edge</span>
+                            }
+                        </div>
+
+                        <div class="inspector-actions">
+                            <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="DeleteSelected"><span class="icon fa-solid fa-sharp fa-trash"></span>Delete @RoutingNodeWidget.GetKindTitle(item)</button>
+                        </div>
+                    </div>
+                }
+            </aside>
+        }
+
+    </div>
+
+</div>
+
+@* Unsaved changes *@
+<Modal Class="packages-modal" Visible="@(leaveTarget != null)">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+        <span class="modal-header-title">Discard unsaved changes?</span>
+    </HeaderContent>
+    <BodyContent>
+        <p class="modal-description">The Routers have changes that haven't been saved. Leave and discard them?</p>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="() => leaveTarget = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Keep Editing</button>
+        <button class="btn btn-danger" @onclick="ConfirmLeave"><span class="icon fa-solid fa-sharp fa-right-from-bracket"></span>Discard Changes</button>
+    </FooterContent>
+</Modal>
+
+@* Map *@
+<div class="routing-map-host">
+    <Modal Visible="@(mapServices != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-diagram-project"></span>
+            <span class="modal-header-title">Routing Map</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (mapServices != null)
+            {
+                <RoutingMap Model="model" Modules="modules" Services="mapServices" EditItem="EditFromMap" />
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseMap"><span class="icon fa-solid fa-sharp fa-xmark"></span>Close</button>
+        </FooterContent>
+    </Modal>
+</div>
+
+@code {
+
+    private const int MaxUsers = 8;
+    private bool usersExpanded;
+
+    // The Patterns offered for a Route : every Route, then each Route by name
+    private static readonly RoutingListEditor.Suggestion[] patternSuggestions = new[] { new RoutingListEditor.Suggestion(TrakHoundServiceRoutes.Wildcard, "Every Service") }
+        .Concat(TrakHoundServiceRoutes.Names.Select(o => new RoutingListEditor.Suggestion(o, null)))
+        .ToArray();
+
+    private bool Matches(params string[] values)
+    {
+        return string.IsNullOrWhiteSpace(search) || values.Any(o => o != null && o.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string GetPaletteIcon(PaletteEntryType type)
+    {
+        switch (type)
+        {
+            case PaletteEntryType.Router: return RoutingNodeWidget.GetIcon(new RouterItem());
+            case PaletteEntryType.Route: return RoutingNodeWidget.GetIcon(new RouteItem());
+            case PaletteEntryType.RouterTarget: return RoutingNodeWidget.GetIcon(new TargetItem { Type = TargetItem.RouterType });
+            default: return RoutingNodeWidget.GetIcon(new TargetItem { Type = TargetItem.ServiceType });
+        }
+    }
+
+    private string GetPaletteHint(PaletteEntry entry)
+    {
+        var item = CreateHintItem(entry.Type);
+        if (selected != null && RoutingModel.IsAllowed(selected.Kind, item.Kind))
+        {
+            return $"Click to add it to the selected {RoutingNodeWidget.GetKindTitle(selected)}, or drag it onto the canvas";
+        }
+        return "Click to add it, or drag it onto the canvas";
+    }
+
+    private static RoutingItem CreateHintItem(PaletteEntryType type)
+    {
+        switch (type)
+        {
+            case PaletteEntryType.Router: return new RouterItem();
+            case PaletteEntryType.Route: return new RouteItem();
+            default: return new TargetItem();
+        }
+    }
+
+    private string GetItemTitle(RoutingItem item)
+    {
+        switch (item)
+        {
+            case RouterItem router: return $"Router : {(string.IsNullOrWhiteSpace(router.Name) ? "No Name" : router.Name)}";
+            case RouteItem route: return $"Route : {(route.Patterns.Count > 0 ? string.Join(", ", route.Patterns) : "No Patterns")}";
+            case TargetItem target: return $"{RoutingNodeWidget.GetKindTitle(target)} : {GetTargetName(target) ?? target.Source ?? "Not Selected"}";
+            default: return null;
+        }
+    }
+
+    private static string GetParentKinds(RoutingItem item)
+    {
+        switch (item.Kind)
+        {
+            case RoutingItemKind.Route: return "Router";
+            case RoutingItemKind.Target: return "Route";
+            default: return null;
+        }
+    }
+
+    private record SourceOption(string Value, string Text);
+
+    // The Routers (other than its own) or Services a Target can send Requests to (and its current one, if it doesn't exist)
+    private List<SourceOption> GetSourceOptions(TargetItem target)
+    {
+        List<SourceOption> options;
+        if (target.IsRouter)
+        {
+            var ownRouter = target.GetRouter();
+            options = model.Routers
+                .Where(o => o != ownRouter)
+                .Select(o => new SourceOption(o.Id, !string.IsNullOrWhiteSpace(o.Name) ? o.Name : o.Id))
+                .ToList();
+        }
+        else
+        {
+            options = services.Values.Select(o => new SourceOption(o.Id, o.Name ?? o.Id)).ToList();
+        }
+
+        options = options.OrderBy(o => o.Text, StringComparer.OrdinalIgnoreCase).ToList();
+        if (!string.IsNullOrEmpty(target.Source) && GetTargetName(target) == null)
+        {
+            options.Add(new SourceOption(target.Source, $"{target.Source} (missing)"));
+        }
+        return options;
+    }
+
+    // The results a Target can fall back on (and any others it already has, ex. a Status Code)
+    private static IEnumerable<string> GetFallbackOptions(TargetItem target)
+    {
+        var options = TrakHoundServiceFallback.Options.Select(o => o.ToString()).ToList();
+        options.AddRange(target.EffectiveFallbackOn.Where(o => !options.Contains(o, StringComparer.OrdinalIgnoreCase)));
+        return options;
+    }
+
+    private static string GetFallbackHint(string resultType)
+    {
+        switch (resultType)
+        {
+            case nameof(TrakHoundServiceResultType.NotFound): return "The Service doesn't have what was requested (404)";
+            case nameof(TrakHoundServiceResultType.NotAvailable): return "The Service, or what it connects to, isn't available (503)";
+            case nameof(TrakHoundServiceResultType.Timeout): return "The Service didn't respond in time (504)";
+            case nameof(TrakHoundServiceResultType.InternalError): return "The Service failed (500)";
+            case nameof(TrakHoundServiceResultType.BadRequest): return "The Service rejected the Request (400)";
+            case nameof(TrakHoundServiceResultType.Empty): return "The Service returned no results (the empty result is returned if no later Target has any)";
+            default: return null;
+        }
+    }
+
+}

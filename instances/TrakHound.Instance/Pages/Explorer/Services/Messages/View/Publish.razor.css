@@ -1,0 +1,100 @@
+.event-publish-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 15px 15px;
+}
+
+.title-panel {
+    font-size: var(--fontSizeBase);
+    font-weight: 400;
+    color: var(--textDark);
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+    .field label {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+        .field label .required {
+            margin-left: 3px;
+            color: var(--colorRed);
+        }
+
+    .field input,
+    .field textarea {
+        width: 100%;
+        padding: 5px 8px;
+        font-family: var(--fontMono);
+        font-size: var(--fontSizeXs);
+        color: var(--textDark);
+        background: var(--inputBackground);
+        border: 1px solid var(--borderColorLight);
+        border-radius: 3px;
+        outline: none;
+    }
+
+    .field input {
+        height: 30px;
+    }
+
+    .field textarea {
+        min-height: 160px;
+        line-height: 1.5;
+        resize: vertical;
+    }
+
+        .field input:focus,
+        .field textarea:focus {
+            border-color: var(--accent);
+        }
+
+        .field input:disabled,
+        .field textarea:disabled {
+            opacity: 0.6;
+        }
+
+.options {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+    .options .option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        cursor: pointer;
+    }
+
+.buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+    .buttons .publish-status {
+        font-size: var(--fontSizeSm);
+    }
+
+        .buttons .publish-status .icon {
+            margin-right: 6px;
+        }
+
+        .buttons .publish-status.success {
+            color: var(--colorGreen);
+        }
+
+        .buttons .publish-status.error {
+            color: var(--colorRed);
+        }

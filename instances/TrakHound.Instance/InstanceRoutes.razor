@@ -1,0 +1,86 @@
+﻿@using System.Reflection
+@inject TrakHound.Instances.TrakHoundInstanceConfiguration instanceConfiguration
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@inject TrakHound.Instance.Security.AdminAuthenticationService authenticationService
+
+<TrakHoundTheme Key="@AdminThemes.Key" />
+
+@* Every Page Title ends with the Instance (Layouts add to it, ex. "Explorer") *@
+<TrakHoundPageTitleSuffix Text="TrakHound Instance">
+    @if (ErrorStatusCode.HasValue && instanceConfiguration.ErrorPageEnabled)
+    {
+        @* An unhandled error re-executed to the Error Page : the browser's URL is the failed Path, so it is not routed *@
+        <LayoutView Layout="@typeof(BlankLayout)">
+            <TrakHound.Instance.Pages.InstanceErrorPage StatusCode="@ErrorStatusCode" RequestId="@ErrorRequestId" />
+        </LayoutView>
+    }
+    else
+    {
+        <TrakHoundInstanceRouter>
+            <Found Context="routeData">
+                @* A new Layout and Page for each target (the running Instance or a Workspace), so a Page never keeps the previous target *@
+                @if (CanOpen(routeData.Data))
+                {
+                    <RouteView @key="GetTargetKey(routeData.Data)" RouteData="@routeData.Data" DefaultLayout="@typeof(BlankLayout)" />
+                    <FocusOnNavigate RouteData="@routeData.Data" Selector="h1" />
+                }
+                else
+                {
+                    @* The signed in Admin's Roles don't allow the Page. Inside the Layout, so the navigation they can use is still there *@
+                    <LayoutView Layout="@typeof(TrakHound.Instance.Pages.InstanceLayout)">
+                        <TrakHound.Instance.Pages.AdminNoAccess />
+                    </LayoutView>
+                }
+            </Found>
+            <NotFound>
+                @if (instanceConfiguration.ErrorPageEnabled)
+                {
+                    <LayoutView Layout="@typeof(BlankLayout)">
+                        <TrakHound.Instance.Pages.InstanceErrorPage StatusCode="404" />
+                    </LayoutView>
+                }
+                else
+                {
+                    <TrakHoundPageTitle Text="404 Not Found" />
+                    <main class="not-found">404 · Not Found</main>
+                }
+            </NotFound>
+        </TrakHoundInstanceRouter>
+    }
+</TrakHoundPageTitleSuffix>
+
+@code {
+
+    /// <summary>
+    /// The Status Code of an unhandled error re-executed to the Error Page (set by InstanceApp, which has the Request)
+    /// </summary>
+    [Parameter]
+    public int? ErrorStatusCode { get; set; }
+
+    /// <summary>
+    /// The ID of the Request that failed with an unhandled error
+    /// </summary>
+    [Parameter]
+    public string ErrorRequestId { get; set; }
+
+
+    // An Admin who isn't signed in gets the Page's Layout, which sends them to the Login page
+    private bool CanOpen(RouteData routeData)
+    {
+        adminAccess.IsViewOnly = false;
+        if (!adminAccess.IsAuthenticationEnabled || adminAccess.Account == null) return true;
+
+        if (!adminAccess.CanOpen(routeData.PageType, routeData.RouteValues)) return false;
+
+        // The Layout hides the actions that change something on a Page the Admin can only view
+        adminAccess.IsViewOnly = adminAccess.IsPageViewOnly(routeData.PageType, routeData.RouteValues);
+        return true;
+    }
+
+    // The Workspace the Page edits ("" for the running Instance)
+    private static string GetTargetKey(RouteData routeData)
+    {
+        return routeData?.RouteValues != null && routeData.RouteValues.TryGetValue("WorkspaceId", out var workspaceId) ? workspaceId?.ToString() ?? "" : "";
+    }
+
+}

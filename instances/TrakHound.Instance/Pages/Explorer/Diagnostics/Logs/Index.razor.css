@@ -1,0 +1,276 @@
+.logs-page {
+    --status-warning: var(--colorOrange, #ff8b00);
+    --status-error: var(--colorRed, #d92b2b);
+    display: grid;
+    grid-template-rows: max-content max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+.header-panel .header-content {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    padding-top: 15px;
+    padding-left: 25px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.header-panel .header-icon {
+    grid-column: 1;
+    padding-right: 20px;
+    width: 50px;
+}
+
+    .header-panel .header-icon .icon {
+        font-size: var(--fontSize2xl);
+        color: var(--accent);
+        margin-top: 2px;
+    }
+
+.header-panel .header-text {
+    grid-column: 2;
+}
+
+    .header-panel .header-text .header-name {
+        display: block;
+        font-size: var(--fontSizeXl);
+        font-weight: bold;
+        line-height: 20px;
+        color: var(--textDark);
+    }
+
+    .header-panel .header-text .header-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+/* Toolbar : Refresh, Range, Filter, All Loggers, Log History status */
+.toolbar-panel {
+    grid-row: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+}
+
+    .toolbar-panel ::deep .range-select {
+        width: 160px;
+    }
+
+.toolbar-status {
+    margin-left: auto;
+    padding-right: 5px;
+}
+
+.filter-input {
+    position: relative;
+    width: 280px;
+    max-width: 100%;
+}
+
+    .filter-input .icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        pointer-events: none;
+    }
+
+    .filter-input .form-control {
+        height: 30px;
+        padding: 4px 10px 4px 30px;
+        font-size: var(--fontSizeSm);
+    }
+
+.content-panel {
+    grid-row: 3;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 10px 20px;
+}
+
+.loading-panel {
+    grid-row: 3;
+}
+
+/* Summary Tiles (Errors and Warnings filter the table) */
+.summary-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    max-width: 900px;
+    margin: 2px 0 12px;
+}
+
+.summary-tile {
+    --statusColor: var(--borderColorLight);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    padding: 10px 14px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 4px solid var(--statusColor);
+    border-radius: 3px;
+    color: var(--textDark);
+    text-align: left;
+}
+
+button.summary-tile {
+    cursor: pointer;
+}
+
+    button.summary-tile:hover,
+    .summary-tile.selected {
+        border-color: var(--accent);
+        border-left-color: var(--statusColor);
+    }
+
+    .summary-tile.selected {
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .summary-tile.warning { --statusColor: var(--status-warning); }
+    .summary-tile.error { --statusColor: var(--status-error); }
+    .summary-tile.zero { --statusColor: var(--borderColorLight); }
+
+    .summary-tile .tile-label {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+        .summary-tile .tile-label .icon {
+            margin-right: 7px;
+            color: var(--statusColor);
+        }
+
+    .summary-tile.static .tile-label .icon,
+    .summary-tile.zero .tile-label .icon {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-value {
+        font-size: var(--fontSize2xl);
+        font-weight: bold;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .summary-tile.zero .tile-value {
+        color: var(--textLight);
+    }
+
+    .summary-tile .tile-detail {
+        font-size: var(--fontSizeXs);
+        color: var(--textMild);
+    }
+
+/* Loggers Table (a row opens its History) */
+.table-panel ::deep .rz-data-grid {
+    overflow: hidden;
+}
+
+    .table-panel ::deep .rz-data-grid td {
+        border-right: 1px solid var(--tableBorderColor);
+        padding: 3px 10px;
+        cursor: pointer;
+    }
+
+        .table-panel ::deep .rz-data-grid td:last-child {
+            border-right: none;
+        }
+
+.table-panel ::deep .rz-cell-data {
+    font-size: var(--fontSizeSm);
+}
+
+.table-panel .value {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.table-panel .logger-link {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+    color: var(--textDark);
+    text-decoration: none;
+}
+
+    .table-panel .logger-link:hover {
+        color: var(--accent);
+        text-decoration: underline;
+    }
+
+.table-panel .sub-value {
+    display: block;
+    font-size: 11px;
+    line-height: 15px;
+    color: var(--textMild);
+}
+
+.table-panel .number {
+    font-variant-numeric: tabular-nums;
+}
+
+    .table-panel .number.error {
+        font-weight: bold;
+        color: var(--status-error);
+    }
+
+    .table-panel .number.warning {
+        font-weight: bold;
+        color: var(--status-warning);
+    }
+
+    .table-panel .number.zero {
+        color: var(--textLight);
+    }
+
+/* Empty State */
+.empty-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+    .empty-panel.compact {
+        padding: 30px 20px;
+        border: 1px solid var(--borderColorLight);
+    }
+
+    .empty-panel .icon {
+        font-size: var(--fontSize3xl);
+        color: var(--textVeryLight);
+        margin-bottom: 6px;
+    }
+
+        .empty-panel .icon.error {
+            color: var(--status-error);
+        }
+
+    .empty-panel .empty-title {
+        font-size: var(--fontSizeLg);
+        font-weight: bold;
+        color: var(--textDark);
+    }
+
+    .empty-panel .empty-description {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.table-panel .value.loading {
+    color: var(--textLight);
+}

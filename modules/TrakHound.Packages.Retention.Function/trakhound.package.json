@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Packages.Retention.Function",
+  "category": "function",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Delete Older Packages in the TrakHound Framework",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Packages.Retention.Function",
+    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png"
+  }
+}

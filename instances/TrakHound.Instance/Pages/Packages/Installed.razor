@@ -1,0 +1,1149 @@
+@using TrakHound.Instances
+@using TrakHound.Packages
+
+<div class="installed-panel">
+
+    @* Toolbar : Category filter, Search and Actions *@
+    <div class="toolbar-panel">
+        @{
+            var baseRows = GetBaseRows();
+        }
+        <div class="category-chips" role="group" aria-label="Category">
+            <button class="chip @(selectedCategory == null ? "active" : "")" @onclick="() => SelectCategory(null)">All <span class="chip-count">@baseRows.Count</span></button>
+            @foreach (var category in PackagesContext.Categories)
+            {
+                var count = baseRows.Count(o => o.Category == category);
+                if (count > 0 || selectedCategory == category)
+                {
+                    <button class="chip @(selectedCategory == category ? "active" : "")" @onclick="() => SelectCategory(category)">@category.ToTitleCase() <span class="chip-count">@count</span></button>
+                }
+            }
+        </div>
+        <div class="toolbar-search">
+            <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input class="form-control search-input" type="search" placeholder="Search by ID or description.." value="@search" @oninput="SearchChanged" spellcheck="false" />
+        </div>
+        <div class="toolbar-buttons">
+            @{
+                var refreshing = loading || (UpdatesOnly && Packages.SourceStatus == PackageSourceStatus.Checking);
+            }
+            <button class="btn btn-light" @onclick="Refresh" disabled="@refreshing" title="@(UpdatesOnly ? "Reload installed Packages and check the Source for updates" : "Reload installed Packages")"><span class="icon fa-solid fa-sharp fa-rotate-right @(refreshing ? "spin" : "")"></span>Refresh</button>
+            <button class="btn btn-light" @onclick="VerifyAll" disabled="@verifying" title="Check every Package's files against its Manifest and signature"><span class="icon fa-solid fa-sharp @(verifying ? "fa-loader spin" : "fa-shield-check")"></span>Verify All</button>
+            <button class="admin-write btn btn-light" @onclick="OpenClean" title="Remove Package versions not used by any Configuration"><span class="icon fa-solid fa-sharp fa-broom-wide"></span>Clean Unused</button>
+        </div>
+    </div>
+
+    @* Table *@
+    <div class="table-panel">
+        @if (loading && rows == null)
+        {
+            <Loading Message="Loading Installed Packages.." />
+        }
+        else if (rows.IsNullOrEmpty())
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-regular fa-sharp fa-box-open"></span>
+                <span class="empty-title">No Packages installed</span>
+                <span class="empty-description">Install Packages from a Package Source, or upload a package file.</span>
+                <div class="empty-actions">
+                    <a class="btn btn-primary" href="_admin/packages/browse"><span class="icon fa-solid fa-sharp fa-magnifying-glass"></span>Browse Packages</a>
+                    <a class="btn btn-light" href="_admin/packages/upload"><span class="icon fa-solid fa-sharp fa-upload"></span>Upload</a>
+                </div>
+            </div>
+        }
+        else if (UpdatesOnly && baseRows.Count == 0)
+        {
+            @* No Updates : depends on whether the Source could be checked *@
+            <div class="empty-state">
+                @switch (Packages.SourceStatus)
+                {
+                    case PackageSourceStatus.Checking:
+                        <Loading Message="@($"Checking {Packages.SelectedSource?.Name} for updates..")" />
+                        break;
+
+                    case PackageSourceStatus.None:
+                        <span class="empty-icon fa-regular fa-sharp fa-signal-slash"></span>
+                        <span class="empty-title">No Package Source</span>
+                        <span class="empty-description">Add a Package Source to check the installed Packages for updates.</span>
+                        <div class="empty-actions">
+                            <a class="btn btn-light" href="_admin/packages/sources"><span class="icon fa-solid fa-sharp fa-signal"></span>Sources</a>
+                        </div>
+                        break;
+
+                    case PackageSourceStatus.Offline:
+                        <span class="empty-icon fa-regular fa-sharp fa-cloud-slash"></span>
+                        <span class="empty-title">Couldn't check for updates</span>
+                        <span class="empty-description">@Packages.SelectedSource?.Name could not be reached@(!string.IsNullOrEmpty(Packages.SourceError) ? $" : {Packages.SourceError}" : "")</span>
+                        <div class="empty-actions">
+                            <button class="btn btn-light" @onclick="Packages.RefreshSource"><span class="icon fa-solid fa-sharp fa-rotate-right"></span>Try Again</button>
+                        </div>
+                        break;
+
+                    default:
+                        <span class="empty-icon fa-regular fa-sharp fa-circle-check"></span>
+                        <span class="empty-title">All Packages are up to date</span>
+                        <span class="empty-description">No newer versions of the installed Packages are available from @Packages.SelectedSource?.Name.</span>
+                        break;
+                }
+            </div>
+        }
+        else
+        {
+            var filtered = GetFilteredRows();
+
+            @if (filtered.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                    <span class="empty-title">No Packages match the filter</span>
+                    <button class="btn btn-light" @onclick="ClearFilter">Clear Filter</button>
+                </div>
+            }
+            else
+            {
+                <table class="packages-table">
+                    <thead>
+                        <tr>
+                            <th class="col-expand"></th>
+                            <th>Package</th>
+                            <th class="col-category">Category</th>
+                            <th class="col-versions">Installed</th>
+                            <th class="col-usage">Used by</th>
+                            <th class="col-available">Available</th>
+                            <th class="col-built">Built</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in filtered)
+                        {
+                            var expanded = expandedIds.Contains(row.Id);
+                            var update = Packages.GetUpdate(row.Id);
+                            var available = Packages.GetSourceLatest(row.Id);
+                            var updating = updatingIds.Contains(row.Id);
+
+                            <tr class="package-row @(expanded ? "expanded" : "")" @onclick="() => ToggleExpanded(row.Id)">
+                                <td class="col-expand"><span class="fa-solid fa-sharp @(expanded ? "fa-chevron-down" : "fa-chevron-right")"></span></td>
+                                <td class="col-package">
+                                    <div class="package-identity">
+                                    <div class="package-icon">
+                                        <PackageIcon Src="@row.Image" Lazy="true" />
+                                    </div>
+                                    <div class="package-text">
+                                    <span class="package-id">@row.Id</span>
+                                    @if (row.UnmetDependencyCount > 0)
+                                    {
+                                        <span class="unmet-dependencies" title="@string.Join(Environment.NewLine, row.Dependencies.Where(o => o.Issue != null).Select(o => $"{o.Text} : {o.Issue}"))"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@row.UnmetDependencyCount unmet @(row.UnmetDependencyCount == 1 ? "dependency" : "dependencies")</span>
+                                    }
+                                    @{
+                                        var rowVerification = GetWorstVerification(row);
+                                    }
+                                    @if (rowVerification != null)
+                                    {
+                                        <span class="verification @GetVerificationClass(rowVerification)" title="@rowVerification.Description">@GetVerificationText(rowVerification)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(row.Description))
+                                    {
+                                        <span class="package-description">@row.Description</span>
+                                    }
+                                    </div>
+                                    </div>
+                                </td>
+                                <td class="col-category"><span class="category-chip @row.Category">@row.Category.ToTitleCase()</span></td>
+                                <td class="col-versions">
+                                    @foreach (var version in row.Versions)
+                                    {
+                                        <span class="version-chip @(version.IsLatest ? "latest" : "") @(version.IsUsed ? "used" : "unused")" title="@GetVersionTitle(version)">v@(version.Version)</span>
+                                    }
+                                </td>
+                                <td class="col-usage">
+                                    @if (row.IsProfilePackage)
+                                    {
+                                        <span class="usage profile" title="Applied by the Configuration Profile">Profile</span>
+                                    }
+                                    else if (row.UsageCount > 0)
+                                    {
+                                        <span class="usage">@row.UsageCount @(row.UsageCount == 1 ? "configuration" : "configurations")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="usage none">Not used</span>
+                                    }
+                                </td>
+                                <td class="col-available" @onclick:stopPropagation="true">
+                                    @if (update != null)
+                                    {
+                                        @if (!updating)
+                                        {
+                                            <button class="admin-write btn btn-sm btn-primary btn-update" title="Install v@(update.Version) from @Packages.SelectedSource?.Name" @onclick="() => Update(row.Id, update)"><span class="icon fa-solid fa-sharp fa-up-to-line"></span>Update to v@(update.Version)</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="admin-write btn btn-sm btn-primary btn-update disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Updating..</button>
+                                        }
+                                    }
+                                    else if (available != null)
+                                    {
+                                        <span class="up-to-date" title="The installed version is the latest from @Packages.SelectedSource?.Name"><span class="icon fa-solid fa-sharp fa-check"></span>Latest</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">–</span>
+                                    }
+                                </td>
+                                <td class="col-built">@row.LatestBuildDate.ToLocalTime().ToString("g")</td>
+                                <td class="col-actions" @onclick:stopPropagation="true">
+                                    @if (row.Revert?.TargetVersion != null && !row.IsProfilePackage)
+                                    {
+                                        @* Wrapped so the reason shows on hover when disabled *@
+                                        <span class="revert-action" title="@GetRevertTitle(row.Revert)">
+                                            <button class="admin-write btn btn-sm btn-command btn-revert" disabled="@(!row.Revert.CanRevert)" @onclick="() => OpenRevert(row)"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Revert</button>
+                                        </span>
+                                    }
+                                    <button class="admin-write btn btn-sm btn-command btn-remove" title="Remove versions of @row.Id" @onclick="() => OpenRemove(row)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove</button>
+                                </td>
+                            </tr>
+
+                            @if (expanded)
+                            {
+                                <tr class="details-row">
+                                    <td></td>
+                                    <td colspan="7">
+                                        <table class="versions-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Version</th>
+                                                    <th>Built</th>
+                                                    <th>Size</th>
+                                                    <th>Used by</th>
+                                                    <th>Verification</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var version in row.Versions)
+                                                {
+                                                    <tr>
+                                                        <td>v@(version.Version)@(version.IsLatest ? " (latest)" : "")</td>
+                                                        <td>@version.BuildDate.ToLocalTime().ToString("g")</td>
+                                                        <td>@(version.Size.HasValue ? PackagesContext.FormatSize(version.Size.Value) : "–")</td>
+                                                        <td>
+                                                            @if (row.IsProfilePackage)
+                                                            {
+                                                                <span class="muted">Applied by the Configuration Profile</span>
+                                                            }
+                                                            else if (version.Usages.Count > 0)
+                                                            {
+                                                                @foreach (var usage in version.Usages)
+                                                                {
+                                                                    <a class="usage-link" href="@GetConfigurationLink(usage)" title="@usage.ConfigurationId">
+                                                                        <span class="usage-category">@usage.ConfigurationCategory.ToTitleCase()</span>@(usage.ConfigurationName ?? usage.ConfigurationId)@(usage.RequestedVersion?.Contains('*') == true ? " (latest)" : "")
+                                                                    </a>
+                                                                }
+                                                            }
+                                                            else if (version.IsRevertTarget)
+                                                            {
+                                                                <span class="muted" title="Kept so @row.Id can be reverted to it (not removed by Clean Unused)">Not used · Kept for revert</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="muted">Not used</span>
+                                                            }
+                                                        </td>
+                                                        <td class="col-verification">
+                                                            @{
+                                                                var verification = version.Verification;
+                                                                var commitLink = GetCommitLink(verification);
+                                                            }
+                                                            <span class="verification @GetVerificationClass(verification)">@GetVerificationText(verification)</span>
+                                                            <button class="btn btn-sm btn-command" disabled="@verifying" @onclick="() => Verify(row.Id, version.Version)" title="Check this version now"><span class="icon fa-solid fa-sharp fa-shield-check"></span>Verify</button>
+                                                            @* The signature only covers the Manifest, so a Modified Package isn't what the Publisher signed *@
+                                                            @if (verification?.Publisher != null && verification.State != TrakHoundPackageVerificationState.Modified)
+                                                            {
+                                                                <span class="verification-detail">Signed by @verification.Publisher</span>
+                                                            }
+                                                            else if (verification?.KeyId != null)
+                                                            {
+                                                                <span class="verification-detail">Key @verification.KeyId</span>
+                                                            }
+                                                            @if (verification?.RepositoryCommit != null)
+                                                            {
+                                                                <span class="verification-detail" title="@verification.RepositoryCommit">
+                                                                    Built from
+                                                                    @if (commitLink != null)
+                                                                    {
+                                                                        <a href="@commitLink" target="_blank" rel="noopener noreferrer"><code>@verification.RepositoryCommit.Substring(0, Math.Min(10, verification.RepositoryCommit.Length))</code></a>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <code>@verification.RepositoryCommit.Substring(0, Math.Min(10, verification.RepositoryCommit.Length))</code>
+                                                                    }
+                                                                    @(verification.RepositoryDirty == true ? " with uncommitted changes" : "")
+                                                                </span>
+                                                            }
+                                                            @if (verification?.Builder != null)
+                                                            {
+                                                                <span class="verification-detail">Built by @verification.Builder</span>
+                                                            }
+                                                            @if (verification?.BuildConfiguration != null)
+                                                            {
+                                                                <span class="verification-detail">@verification.BuildConfiguration build@(verification.DotnetSdkVersion != null ? $" · .NET SDK {verification.DotnetSdkVersion}" : "")</span>
+                                                            }
+                                                            @if (verification?.HasSbom == true)
+                                                            {
+                                                                <button class="btn btn-sm btn-command btn-sbom" @onclick="() => OpenSbom(row.Id, version.Version)" title="List the NuGet Packages in this version's SBOM"><span class="icon fa-solid fa-sharp fa-list"></span>SBOM</button>
+                                                            }
+                                                            @if (verification?.RepositoryCommit != null && verification.BuildConfiguration != null)
+                                                            {
+                                                                <span class="verification-detail" title="Building runs code from the repository, so it isn't done by the Instance. Run this on a build machine, with the Package file">To compare with its source : <code>th packages rebuild @(row.Id)-@(version.Version)@TrakHoundPackage.FileExtension</code></span>
+                                                            }
+                                                            @foreach (var problem in GetProblems(verification))
+                                                            {
+                                                                <span class="verification-problem">@problem</span>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                        @if (!row.Dependencies.IsNullOrEmpty())
+                                        {
+                                            <div class="dependencies">
+                                                <span class="muted">Dependencies :</span>
+                                                @foreach (var dependency in row.Dependencies)
+                                                {
+                                                    @if (dependency.Issue != null)
+                                                    {
+                                                        <span class="version-chip unmet" title="@dependency.Issue"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>@dependency.Text · @dependency.Issue</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="version-chip">@dependency.Text</span>
+                                                    }
+                                                }
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+
+    @* SBOM Dialog *@
+    <Modal Class="packages-modal" Visible="@(sbomTitle != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-list"></span>
+            <span class="modal-header-title">SBOM : @sbomTitle</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (sbomComponents.IsNullOrEmpty())
+            {
+                <p class="modal-description">The SBOM lists no NuGet Packages, or it couldn't be read.</p>
+            }
+            else
+            {
+                <p class="modal-description">This version lists <strong>@sbomComponents.Count NuGet @(sbomComponents.Count == 1 ? "Package" : "Packages")</strong>. The full file is <code>@TrakHoundPackage.SbomFilename</code> in the Package's folder.</p>
+                <div class="clean-list">
+                    @foreach (var component in sbomComponents)
+                    {
+                        <div class="sbom-item" title="@component.Purl">
+                            <span class="clean-id">@component.Name</span>
+                            <span class="version-chip">v@(component.Version)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseSbom"><span class="icon fa-solid fa-sharp fa-xmark"></span>Close</button>
+        </FooterContent>
+    </Modal>
+
+    @* Remove Dialog *@
+    <Modal Class="packages-modal" Visible="@(removeRow != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-regular fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Remove @removeRow?.Id</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (removeRow != null)
+            {
+                <p class="modal-description">Select the versions to remove. Versions used by a Configuration can't be removed until the Configuration is removed or changed to another version.</p>
+                <div class="remove-list">
+                    @foreach (var version in removeRow.Versions)
+                    {
+                        var blocked = version.IsUsed;
+
+                        <label class="remove-item @(blocked ? "blocked" : "")">
+                            <input type="checkbox" disabled="@blocked" checked="@removeSelection.Contains(version.Version)" @onchange="e => ToggleRemove(version.Version, (bool)e.Value)" />
+                            <span class="remove-version">v@(version.Version)</span>
+                            <span class="remove-detail">
+                                @if (blocked && removeRow.IsProfilePackage)
+                                {
+                                    <span><span class="icon fa-solid fa-sharp fa-lock"></span>Applied by the Configuration Profile</span>
+                                }
+                                else if (blocked)
+                                {
+                                    <span><span class="icon fa-solid fa-sharp fa-lock"></span>Used by @string.Join(", ", version.Usages.Select(o => $"{o.ConfigurationCategory.ToTitleCase()} '{o.ConfigurationName ?? o.ConfigurationId}'"))</span>
+                                }
+                                else
+                                {
+                                    <span>Not used@(version.Size.HasValue ? $" · {PackagesContext.FormatSize(version.Size.Value)}" : "")</span>
+                                }
+                            </span>
+                        </label>
+                    }
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseRemove" disabled="@removing"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            @if (!removing)
+            {
+                <button class="admin-write btn btn-danger @(removeSelection.Count == 0 ? "disabled" : "")" disabled="@(removeSelection.Count == 0)" @onclick="ConfirmRemove"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Remove @removeSelection.Count @(removeSelection.Count == 1 ? "Version" : "Versions")</button>
+            }
+            else
+            {
+                <button class="admin-write btn btn-danger disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Removing..</button>
+            }
+        </FooterContent>
+    </Modal>
+
+    @* Revert Dialog *@
+    <Modal Class="packages-modal" Visible="@(revertRow != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-clock-rotate-left"></span>
+            <span class="modal-header-title">Revert @revertRow?.Id</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (revertRow != null)
+            {
+                var revert = GetSelectedRevert();
+                if (revertOptions == null)
+                {
+                    <Loading Message="Checking versions.." />
+                }
+                else if (revert != null)
+                {
+                    var removed = string.Join(", ", revert.RemovedVersions.Select(o => $"v{o}"));
+                    <p class="modal-description">
+                        Revert <strong>@revertRow.Id</strong> from <strong>v@(revert.CurrentVersion)</strong> to <strong>v@(revert.TargetVersion)</strong>?
+                        @if (revert.RemovedVersions.Count == 1)
+                        {
+                            <span>v@(revert.CurrentVersion) will be removed, and</span>
+                        }
+                        else
+                        {
+                            <span><strong>@revert.RemovedVersions.Count versions</strong> will be removed (@removed), and</span>
+                        }
+                        @(" ")
+                        @if (revert.ConfigurationCount > 0)
+                        {
+                            <span><strong>@revert.ConfigurationCount @(revert.ConfigurationCount == 1 ? "configuration" : "configurations")</strong> using @(revert.RemovedVersions.Count == 1 ? "it" : "them") will reload with v@(revert.TargetVersion).</span>
+                        }
+                        else
+                        {
+                            <span>v@(revert.TargetVersion) will be the latest installed version.</span>
+                        }
+                    </p>
+                    @if (!revert.CanRevert)
+                    {
+                        <p class="modal-description revert-blocked"><span class="icon fa-solid fa-sharp fa-lock"></span>Can't revert to v@(revert.TargetVersion) : @revert.Message</p>
+                    }
+                    <p class="modal-description">Removed versions can be installed again later from a Package Source. Data written by @(revert.RemovedVersions.Count == 1 ? $"v{revert.CurrentVersion}" : "them") is not changed, so v@(revert.TargetVersion) must be able to read it.</p>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseRevert" disabled="@reverting"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            @if (!revertOptions.IsNullOrEmpty())
+            {
+                var selected = GetSelectedRevert();
+                <select class="form-select dropdown-sm revert-version-select" aria-label="Version to revert to" title="Version to revert to" value="@selectedRevertVersion" @onchange="RevertVersionChanged" disabled="@reverting">
+                    @foreach (var option in revertOptions)
+                    {
+                        <option value="@option.TargetVersion">v@(option.TargetVersion)@(option == revertOptions[0] ? " (previous)" : "")@(option.CanRevert ? "" : " (blocked)")</option>
+                    }
+                </select>
+                @if (!reverting)
+                {
+                    <button class="admin-write btn btn-primary" @onclick="ConfirmRevert" disabled="@(selected?.CanRevert != true)"><span class="icon fa-solid fa-sharp fa-clock-rotate-left"></span>Revert to v@(selected?.TargetVersion)</button>
+                }
+                else
+                {
+                    <button class="admin-write btn btn-primary disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Reverting..</button>
+                }
+            }
+        </FooterContent>
+    </Modal>
+
+    @* Clean Dialog *@
+    <Modal Class="packages-modal" Visible="@cleanVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-broom-wide"></span>
+            <span class="modal-header-title">Clean Unused Packages</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (cleanLoading)
+            {
+                <Loading Message="Finding unused Packages.." />
+            }
+            else if (cleanItems.IsNullOrEmpty())
+            {
+                <p class="modal-description"><span class="icon fa-solid fa-sharp fa-circle-check success-icon"></span>Every installed Package version is used by a Configuration (or kept for revert). Nothing to remove.</p>
+            }
+            else
+            {
+                <p class="modal-description">These versions are not used by any Configuration and will be removed : <strong>@cleanItems.Count @(cleanItems.Count == 1 ? "version" : "versions")</strong>, freeing <strong>@PackagesContext.FormatSize(cleanItems.Sum(o => o.Size ?? 0))</strong>. The previous version of each used Package is kept so it can be reverted to.</p>
+                <div class="clean-list">
+                    @foreach (var item in cleanItems)
+                    {
+                        <div class="clean-item">
+                            <span class="category-chip @item.Category">@item.Category.ToTitleCase()</span>
+                            <span class="clean-id">@item.Id</span>
+                            <span class="version-chip">v@(item.Version)</span>
+                            <span class="clean-size">@(item.Size.HasValue ? PackagesContext.FormatSize(item.Size.Value) : "")</span>
+                        </div>
+                    }
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="CloseClean" disabled="@cleaning"><span class="icon fa-solid fa-sharp fa-xmark"></span>@(cleanItems.IsNullOrEmpty() ? "Close" : "Cancel")</button>
+            @if (!cleanItems.IsNullOrEmpty())
+            {
+                @if (!cleaning)
+                {
+                    <button class="admin-write btn btn-danger" @onclick="ConfirmClean"><span class="icon fa-solid fa-sharp fa-broom-wide"></span>Remove @cleanItems.Count @(cleanItems.Count == 1 ? "Version" : "Versions")</button>
+                }
+                else
+                {
+                    <button class="admin-write btn btn-danger disabled" disabled><span class="icon fa-solid fa-sharp fa-loader spin"></span>Removing..</button>
+                }
+            }
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private class VersionItem
+    {
+        public string Uuid { get; set; }
+        public string Version { get; set; }
+        public DateTime BuildDate { get; set; }
+        public long? Size { get; set; }
+        public bool IsLatest { get; set; }
+        public bool IsUsed { get; set; }
+        public bool IsRevertTarget { get; set; } // Not used, but kept so the Package can be reverted to it
+        public List<TrakHoundPackageUsage> Usages { get; set; } = new List<TrakHoundPackageUsage>();
+        public TrakHoundPackageVerificationInformation Verification { get; set; }
+    }
+
+    private class PackageRow
+    {
+        public string Id { get; set; }
+        public string Category { get; set; }
+        public string Description { get; set; }
+        public string Image { get; set; }
+        public bool IsProfilePackage { get; set; }
+        public DateTime LatestBuildDate { get; set; }
+        public int UsageCount { get; set; }
+        public TrakHoundPackageRevert Revert { get; set; }
+        public List<VersionItem> Versions { get; set; } = new List<VersionItem>();
+        public List<DependencyItem> Dependencies { get; set; }
+        public int UnmetDependencyCount => Dependencies?.Count(o => o.Issue != null) ?? 0;
+    }
+
+    private class DependencyItem
+    {
+        public string Text { get; set; }
+        public string Issue { get; set; } // Why the installed Versions don't satisfy the Dependency (null if satisfied or not installed)
+    }
+
+    private class CleanItem
+    {
+        public string Id { get; set; }
+        public string Version { get; set; }
+        public string Category { get; set; }
+        public long? Size { get; set; }
+    }
+
+
+    // Installed Package Sizes by build Hash and Directory (an installed build's files don't change,
+    // so the directory only needs to be walked once instead of on every page load)
+    private const int MaxSizeCacheEntries = 2000;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, long> _sizeCache = new System.Collections.Concurrent.ConcurrentDictionary<string, long>();
+
+    private List<PackageRow> rows;
+    private readonly HashSet<string> expandedIds = new HashSet<string>();
+    private readonly HashSet<string> updatingIds = new HashSet<string>();
+    private string selectedCategory;
+    private string search;
+    private bool loading;
+    private bool verifying;
+
+    private string sbomTitle;
+    private List<TrakHoundPackageSbomComponent> sbomComponents;
+
+    private PackageRow removeRow;
+    private readonly HashSet<string> removeSelection = new HashSet<string>();
+    private bool removing;
+
+    private PackageRow revertRow;
+    private List<TrakHoundPackageRevert> revertOptions; // One per older installed Version (highest first)
+    private string selectedRevertVersion;
+    private bool reverting;
+
+    private bool cleanVisible;
+    private bool cleanLoading;
+    private bool cleaning;
+    private List<CleanItem> cleanItems;
+
+
+    [CascadingParameter]
+    public PackagesContext Packages { get; set; }
+
+    /// <summary>
+    /// Only show the Packages that have an Update available from the selected Source (the Updates tab)
+    /// </summary>
+    [Parameter]
+    public bool UpdatesOnly { get; set; }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+
+    private async Task Refresh()
+    {
+        // Updates come from the Source, so the Updates tab checks it again too
+        if (UpdatesOnly) await Task.WhenAll(Load(), Packages.RefreshSource());
+        else await Load();
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            rows = await Task.Run(CreateRows);
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, "Error Loading Installed Packages", ex.Message);
+            rows ??= new List<PackageRow>();
+        }
+        finally
+        {
+            loading = false;
+            Packages.NotifyChanged();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private List<PackageRow> CreateRows()
+    {
+        // Refused Packages are listed too, since they're on disk and can be removed
+        var packages = Packages.PackageManager?.Packages?.ToList() ?? new List<TrakHoundPackage>();
+        packages.AddRange(Packages.PackageManager?.RefusedPackages ?? Enumerable.Empty<TrakHoundPackage>());
+
+        var usages = Packages.Instance.GetPackageUsage()?.ToList() ?? new List<TrakHoundPackageUsage>();
+        var verifications = Packages.PackageManager?.GetVerificationReport().Packages.ToList() ?? new List<TrakHoundPackageVerificationInformation>();
+
+        var result = new List<PackageRow>();
+        foreach (var group in packages.GroupBy(o => o.Id))
+        {
+            // Newest first in Semantic Versioning order (ToVersion() can't read a Prerelease). The latest is the one "*" selects : the highest
+            // Stable Version, else the highest Prerelease
+            var versions = group.OrderByDescending(o => o.Version, TrakHound.Extensions.VersionComparer.Default).ToList();
+            var latest = group.OrderByDescending(o => o.Version, TrakHound.Extensions.VersionComparer.PreferStable).First();
+
+            var row = new PackageRow();
+            row.Id = group.Key;
+            row.Category = latest.Category?.ToLower() ?? "";
+            row.Description = PackagesContext.GetDescription(latest);
+            row.Image = PackagesContext.GetImage(latest);
+            row.IsProfilePackage = Packages.Instance.IsProfilePackage(latest);
+            row.LatestBuildDate = latest.BuildDate;
+            row.Dependencies = latest.Dependencies?.Select(o => new DependencyItem
+            {
+                Text = $"{o.Id} {TrakHoundPackageDependency.ToVersionString(o)}",
+                Issue = Packages.PackageManager?.GetDependencyIssue(o)
+            }).ToList();
+            row.Revert = versions.Count > 1 ? Packages.Instance.GetPackageRevert(row.Id) : null;
+
+            foreach (var package in versions)
+            {
+                var version = new VersionItem();
+                version.Uuid = package.Uuid;
+                version.Version = package.Version;
+                version.BuildDate = package.BuildDate;
+                version.IsLatest = package == latest;
+                version.Usages = usages.Where(o => o.PackageUuid == package.Uuid).ToList();
+                version.IsUsed = row.IsProfilePackage || version.Usages.Count > 0;
+                version.Size = GetSize(package);
+                version.Verification = verifications.FirstOrDefault(o => o.Id == package.Id && o.Version == package.Version);
+                row.Versions.Add(version);
+            }
+
+            // The previous Version of a used Package is kept by Clean Unused (see TrakHoundInstance.GetUnusedPackages)
+            var revertTarget = row.Versions.FirstOrDefault(o => o.Version == row.Revert?.TargetVersion);
+            if (revertTarget != null && !revertTarget.IsUsed && row.Versions[0].IsUsed) revertTarget.IsRevertTarget = true;
+
+            row.UsageCount = usages.Count(o => o.PackageId == row.Id);
+            result.Add(row);
+        }
+
+        return result.OrderBy(o => o.Id, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private long? GetSize(TrakHoundPackage package)
+    {
+        try
+        {
+            var directory = !string.IsNullOrEmpty(package.Location) && Directory.Exists(package.Location)
+                ? package.Location
+                : TrakHoundPackage.GetPackageVersionDirectory(Packages.PackageManager.Path, package.Category, package.Id, package.Version);
+
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+            {
+                var key = $"{package.Hash}:{directory}";
+                if (_sizeCache.TryGetValue(key, out var cachedSize)) return cachedSize;
+
+                var size = new DirectoryInfo(directory).EnumerateFiles("*", SearchOption.AllDirectories).Sum(o => o.Length);
+
+                // Bound the cache (entries for removed builds are never read again)
+                if (_sizeCache.Count >= MaxSizeCacheEntries) _sizeCache.Clear();
+                _sizeCache[key] = size;
+
+                return size;
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The rows before the Category and Search filters (only those with an Update on the Updates tab)
+    /// </summary>
+    private List<PackageRow> GetBaseRows()
+    {
+        if (rows == null) return new List<PackageRow>();
+        if (!UpdatesOnly) return rows;
+
+        return rows.Where(o => Packages.GetUpdate(o.Id) != null).ToList();
+    }
+
+    private List<PackageRow> GetFilteredRows()
+    {
+        IEnumerable<PackageRow> filtered = GetBaseRows();
+        if (selectedCategory != null) filtered = filtered.Where(o => o.Category == selectedCategory);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var query = search.Trim();
+            filtered = filtered.Where(o => o.Id.Contains(query, StringComparison.OrdinalIgnoreCase) || (o.Description?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return filtered.ToList();
+    }
+
+    private void SelectCategory(string category) => selectedCategory = category;
+
+    private void SearchChanged(ChangeEventArgs args) => search = args.Value?.ToString();
+
+    private void ClearFilter()
+    {
+        selectedCategory = null;
+        search = null;
+    }
+
+    private void ToggleExpanded(string packageId)
+    {
+        if (!expandedIds.Remove(packageId)) expandedIds.Add(packageId);
+    }
+
+    /// <summary>
+    /// The version most in need of attention, so that a problem with an older version isn't hidden. Null if nothing has been checked
+    /// </summary>
+    private static TrakHoundPackageVerificationInformation GetWorstVerification(PackageRow row)
+    {
+        var checkedVersions = row.Versions.Select(o => o.Verification).Where(o => o != null && o.State != TrakHoundPackageVerificationState.NotChecked).ToList();
+
+        return checkedVersions.OrderByDescending(o => o.Refused)
+            .ThenByDescending(o => o.State == TrakHoundPackageVerificationState.Modified)
+            .ThenBy(o => o.State == TrakHoundPackageVerificationState.Verified)
+            .FirstOrDefault();
+    }
+
+    private static string GetVerificationClass(TrakHoundPackageVerificationInformation verification)
+    {
+        if (verification == null) return "not-checked";
+        if (verification.Refused || verification.State == TrakHoundPackageVerificationState.Modified) return "problem";
+
+        switch (verification.State)
+        {
+            case TrakHoundPackageVerificationState.Verified: return "verified";
+            case TrakHoundPackageVerificationState.NotChecked: return "not-checked";
+            default: return "unverified";
+        }
+    }
+
+    private static string GetVerificationText(TrakHoundPackageVerificationInformation verification)
+    {
+        if (verification == null) return "Not Checked";
+
+        var state = TrakHoundPackageVerificationPolicy.GetStateText(verification.State);
+
+        return verification.Refused ? $"Refused : {state}" : state;
+    }
+
+    private void OpenSbom(string packageId, string version)
+    {
+        sbomComponents = Packages.PackageManager.GetSbom(packageId, version)?.ToList();
+        sbomTitle = $"{packageId} v{version}";
+    }
+
+    private void CloseSbom()
+    {
+        sbomTitle = null;
+        sbomComponents = null;
+    }
+
+    private static IEnumerable<string> GetProblems(TrakHoundPackageVerificationInformation verification)
+    {
+        if (verification == null) return Enumerable.Empty<string>();
+
+        return (verification.Errors ?? Enumerable.Empty<string>())
+            .Concat((verification.Changed ?? Enumerable.Empty<string>()).Select(o => $"Changed : {o}"))
+            .Concat((verification.Missing ?? Enumerable.Empty<string>()).Select(o => $"Missing : {o}"))
+            .Concat((verification.Added ?? Enumerable.Empty<string>()).Select(o => $"Added : {o}"));
+    }
+
+    /// <summary>
+    /// The link to the commit on the repository's site. Null unless the repository is a web address, since the value comes from the Package
+    /// </summary>
+    private static string GetCommitLink(TrakHoundPackageVerificationInformation verification)
+    {
+        if (string.IsNullOrEmpty(verification?.Repository) || string.IsNullOrEmpty(verification.RepositoryCommit)) return null;
+        if (!Uri.TryCreate(verification.Repository, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return null;
+
+        var repository = verification.Repository.TrimEnd('/');
+        if (repository.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) repository = repository.Substring(0, repository.Length - 4);
+
+        return $"{repository}/commit/{Uri.EscapeDataString(verification.RepositoryCommit)}";
+    }
+
+    private async Task VerifyAll()
+    {
+        verifying = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Run(() => Packages.PackageManager.VerifyAll());
+
+            var report = Packages.PackageManager.GetVerificationReport().Packages.ToList();
+            var problems = report.Count(o => o.Refused || o.State == TrakHoundPackageVerificationState.Modified);
+
+            if (problems > 0) Packages.Notify(PackageNotificationType.Warning, "Package Verification Complete", $"{problems} of {report.Count} Package version(s) changed or refused");
+            else Packages.Notify(PackageNotificationType.Success, "Package Verification Complete", $"{report.Count(o => o.State == TrakHoundPackageVerificationState.Verified)} of {report.Count} Package version(s) verified. None changed");
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, "Package Verification Failed", ex.Message);
+        }
+
+        verifying = false;
+        await Load();
+    }
+
+    private async Task Verify(string packageId, string version)
+    {
+        verifying = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Run(() => Packages.PackageManager.Verify(packageId, version));
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, $"Verifying {packageId} v{version} Failed", ex.Message);
+        }
+
+        verifying = false;
+        await Load();
+    }
+
+    private static string GetRevertTitle(TrakHoundPackageRevert revert)
+    {
+        if (revert.CanRevert) return $"Go back from v{revert.CurrentVersion} to an older installed version (previous : v{revert.TargetVersion})";
+        return $"Can't revert to v{revert.TargetVersion} : {revert.Message}";
+    }
+
+    private static string GetVersionTitle(VersionItem version)
+    {
+        var used = version.Usages.Count > 0 ? $"Used by {version.Usages.Count} configuration(s)" : version.IsUsed ? "Applied by the Configuration Profile" : version.IsRevertTarget ? "Not used · Kept for revert" : "Not used by any Configuration";
+        return $"v{version.Version}{(version.IsLatest ? " (latest)" : "")} : {used}";
+    }
+
+    private static string GetConfigurationLink(TrakHoundPackageUsage usage)
+    {
+        return TrakHound.Instance.Pages.Configuration.ConfigurationCategories.GetLink(usage.ConfigurationCategory, usage.ConfigurationId);
+    }
+
+
+    private async Task Update(string packageId, TrakHoundPackage update)
+    {
+        updatingIds.Add(packageId);
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            if (await Packages.InstallFromSource(update)) await Load();
+        }
+        finally
+        {
+            updatingIds.Remove(packageId);
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+    private async Task OpenRevert(PackageRow row)
+    {
+        if (row?.Revert?.CanRevert != true) return;
+
+        revertRow = row;
+        revertOptions = null;
+        selectedRevertVersion = row.Revert.TargetVersion;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            revertOptions = (await Task.Run(() => Packages.Instance.GetPackageRevertOptions(row.Id))).ToList();
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, $"Error Checking Versions of {row.Id}", ex.Message);
+            CloseRevert();
+        }
+    }
+
+    private void CloseRevert()
+    {
+        revertRow = null;
+        revertOptions = null;
+        selectedRevertVersion = null;
+    }
+
+    private TrakHoundPackageRevert GetSelectedRevert()
+    {
+        return revertOptions?.FirstOrDefault(o => o.TargetVersion == selectedRevertVersion) ?? revertOptions?.FirstOrDefault();
+    }
+
+    private void RevertVersionChanged(ChangeEventArgs args)
+    {
+        selectedRevertVersion = args.Value?.ToString();
+    }
+
+    private async Task ConfirmRevert()
+    {
+        var selected = GetSelectedRevert();
+        if (revertRow == null || selected?.CanRevert != true) return;
+
+        reverting = true;
+        await InvokeAsync(StateHasChanged);
+
+        var packageId = revertRow.Id;
+        var targetVersion = selected.TargetVersion;
+
+        try
+        {
+            // Checked again by the Instance (Configurations may have changed since the dialog was opened)
+            TrakHound.Instance.Security.TrakHoundAdminContext.DemandWrite(TrakHound.Instance.Security.TrakHoundAdminSecurity.Packages);
+            var result = await Task.Run(() => Packages.Instance.RevertPackage(packageId, targetVersion));
+            if (result.CanRevert)
+            {
+                var removed = string.Join(", ", result.RemovedVersions.Select(o => $"v{o}"));
+                Packages.Notify(PackageNotificationType.Success, $"Reverted {packageId}", $"Removed {removed}. Now using v{result.TargetVersion}");
+            }
+            else
+            {
+                Packages.Notify(PackageNotificationType.Error, $"Revert {packageId} Failed", result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, $"Revert {packageId} Failed", ex.Message);
+        }
+
+        reverting = false;
+        CloseRevert();
+        await Load();
+    }
+
+
+    private void OpenRemove(PackageRow row)
+    {
+        removeRow = row;
+        removeSelection.Clear();
+
+        // Preselect the versions that can be removed
+        foreach (var version in row.Versions.Where(o => !o.IsUsed)) removeSelection.Add(version.Version);
+    }
+
+    private void ToggleRemove(string version, bool selected)
+    {
+        if (selected) removeSelection.Add(version);
+        else removeSelection.Remove(version);
+    }
+
+    private void CloseRemove()
+    {
+        removeRow = null;
+        removeSelection.Clear();
+    }
+
+    private async Task ConfirmRemove()
+    {
+        if (removeRow == null || removeSelection.Count == 0) return;
+
+        removing = true;
+        await InvokeAsync(StateHasChanged);
+
+        var packageId = removeRow.Id;
+        var versions = removeSelection.ToList();
+
+        // Check again that the versions aren't used (Configurations may have changed since the dialog was opened)
+        var usedUuids = new HashSet<string>(Packages.Instance.GetPackageUsage().Select(o => o.PackageUuid).Where(o => o != null));
+
+        var removed = new List<string>();
+        var failed = new List<string>();
+
+        await Task.Run(() =>
+        {
+            foreach (var version in versions)
+            {
+                if (usedUuids.Contains(TrakHoundPackage.GenerateUuid(packageId, version)))
+                {
+                    failed.Add($"v{version} (now used by a Configuration)");
+                }
+                else if (Packages.Uninstall(packageId, version))
+                {
+                    removed.Add($"v{version}");
+                }
+                else
+                {
+                    failed.Add($"v{version}");
+                }
+            }
+        });
+
+        if (failed.Count == 0)
+        {
+            Packages.Notify(PackageNotificationType.Success, $"Removed {packageId}", string.Join(", ", removed));
+        }
+        else
+        {
+            Packages.Notify(removed.Count > 0 ? PackageNotificationType.Warning : PackageNotificationType.Error,
+                removed.Count > 0 ? $"Removed some versions of {packageId}" : $"Remove {packageId} Failed",
+                $"{(removed.Count > 0 ? $"Removed : {string.Join(", ", removed)}. " : "")}Not removed : {string.Join(", ", failed)}");
+        }
+
+        removing = false;
+        CloseRemove();
+        await Load();
+    }
+
+
+    private async Task OpenClean()
+    {
+        cleanVisible = true;
+        cleanLoading = true;
+        cleanItems = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            cleanItems = await Task.Run(() => Packages.Instance.GetUnusedPackages()
+                .Select(o => new CleanItem { Id = o.Id, Version = o.Version, Category = o.Category?.ToLower() ?? "", Size = GetSize(o) })
+                .OrderBy(o => o.Id, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(o => o.Version, TrakHound.Extensions.VersionComparer.Default)
+                .ToList());
+        }
+        catch (Exception ex)
+        {
+            Packages.Notify(PackageNotificationType.Error, "Error Finding Unused Packages", ex.Message);
+            cleanVisible = false;
+        }
+        finally
+        {
+            cleanLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CloseClean()
+    {
+        cleanVisible = false;
+        cleanItems = null;
+    }
+
+    private async Task ConfirmClean()
+    {
+        if (cleanItems.IsNullOrEmpty()) return;
+
+        cleaning = true;
+        await InvokeAsync(StateHasChanged);
+
+        var items = cleanItems.ToList();
+        var removedCount = 0;
+        long removedSize = 0;
+        var failed = new List<string>();
+
+        await Task.Run(() =>
+        {
+            // Only the versions shown are removed, and only if they are still unused
+            var usedUuids = new HashSet<string>(Packages.Instance.GetPackageUsage().Select(o => o.PackageUuid).Where(o => o != null));
+
+            foreach (var item in items)
+            {
+                if (!usedUuids.Contains(TrakHoundPackage.GenerateUuid(item.Id, item.Version)) && Packages.Uninstall(item.Id, item.Version))
+                {
+                    removedCount++;
+                    removedSize += item.Size ?? 0;
+                }
+                else
+                {
+                    failed.Add($"{item.Id} v{item.Version}");
+                }
+            }
+        });
+
+        if (failed.Count == 0)
+        {
+            Packages.Notify(PackageNotificationType.Success, "Unused Packages Removed", $"Removed {removedCount} {(removedCount == 1 ? "version" : "versions")}, freeing {PackagesContext.FormatSize(removedSize)}");
+        }
+        else
+        {
+            Packages.Notify(PackageNotificationType.Warning, "Some Packages were not Removed", $"Removed {removedCount}. Not removed : {string.Join(", ", failed)}");
+        }
+
+        cleaning = false;
+        CloseClean();
+        await Load();
+    }
+
+}

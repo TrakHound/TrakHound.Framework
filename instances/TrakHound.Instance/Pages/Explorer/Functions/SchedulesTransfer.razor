@@ -1,0 +1,556 @@
+@inject ExplorerService explorerService
+@inject IJSRuntime javascript
+@inject TrakHound.Blazor.Services.TrakHoundDownloadService downloadService
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using TrakHound.Blazor.Components
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+
+@*
+    Export and Import of the Jobs and Scheduled Tasks of Functions (TrakHound.Functions.Api : functions/schedules/export and functions/schedules/import).
+    The page shows its own buttons and calls Export() and ShowImport()
+*@
+
+@if (_downloadKey != null)
+{
+    <a id="@_downloadElementId" class="schedules-download" href="@($"_download/{_downloadKey}")" download="@_downloadFilename"></a>
+}
+
+<div class="schedules-transfer">
+    <Modal Class="schedules-import-modal" Visible="@_importVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-file-import"></span>
+            <span class="modal-header-title">Import Schedules</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="import-panel">
+
+                <div class="import-description">Import Jobs and Scheduled Tasks from a Schedules Export (or a Scheduled Tasks Export). Everything is checked first : nothing is imported if a Job or Task is invalid</div>
+
+                <div class="import-toolbar">
+                    <div class="import-file-button btn btn-light @(_importLoading || _imported ? "disabled" : null)">
+                        <span class="icon fa-solid fa-sharp fa-folder-open"></span>Open File
+                        <InputFile @key="@_fileInputKey" OnChange="FileSelected" accept=".json" title="" class="import-file-input" />
+                    </div>
+
+                    <div class="import-mode">
+                        <label>When a Job or Task already exists</label>
+                        <select class="form-select dropdown-sm" value="@_mode" @onchange="ModeChanged" disabled="@(_importLoading || _imported)">
+                            <option value="fail">Don't import (show the differences)</option>
+                            <option value="skip">Keep the existing one</option>
+                            <option value="overwrite">Replace it</option>
+                        </select>
+                    </div>
+                </div>
+
+                @if (_fileName != null)
+                {
+                    <div class="import-file">
+                        <span class="icon fa-regular fa-sharp fa-file-code"></span><span class="import-file-name">@_fileName</span>
+                        @if (_fileSummary != null)
+                        {
+                            <span class="import-file-summary">@_fileSummary</span>
+                        }
+                    </div>
+                }
+
+                @if (_importLoading)
+                {
+                    <div class="import-status"><span class="icon fa-regular fa-loader spin"></span>@(_importing ? "Importing.." : "Checking..")</div>
+                }
+                else if (_error != null)
+                {
+                    <div class="import-error"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@_error</div>
+                }
+                else if (_result != null)
+                {
+                    <div class="import-status @(_result.Success ? "success" : "failed")">
+                        <span class="icon fa-solid fa-sharp @(_result.Success ? "fa-circle-check" : "fa-circle-exclamation")"></span>@GetResultSummary()
+                    </div>
+                }
+
+                @if (!_importLoading && _rows.Count > 0)
+                {
+                    <div class="import-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Result</th>
+                                    <th>Type</th>
+                                    <th>Function</th>
+                                    <th>ID</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in _rows)
+                                {
+                                    <tr>
+                                        <td><span class="action-badge @row.Action">@GetActionText(row.Action)</span></td>
+                                        <td>@row.Type</td>
+                                        <td class="ellipsis" title="@row.FunctionId">@row.FunctionId</td>
+                                        <td class="ellipsis code" title="@row.Id">@row.Id@(row.Name != null ? $" ({row.Name})" : null)</td>
+                                        <td class="messages">
+                                            @if (row.Messages != null)
+                                            {
+                                                @foreach (var message in row.Messages)
+                                                {
+                                                    <span class="message">@message</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+            </div>
+        </BodyContent>
+        <FooterContent>
+            @if (_imported)
+            {
+                <button class="btn btn-primary" @onclick="CloseClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Close</button>
+            }
+            else
+            {
+                <button class="btn btn-secondary" @onclick="CloseClicked" disabled="@_importing"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+                <button class="admin-write btn btn-primary" @onclick="ImportClicked" disabled="@(!CanImport)"><span class="icon fa-solid fa-sharp @(_importing ? "fa-loader spin" : "fa-file-import")"></span>Import</button>
+            }
+        </FooterContent>
+    </Modal>
+</div>
+
+@code {
+
+    private const string _exportRoute = "functions/schedules/export";
+    private const string _importRoute = "functions/schedules/import";
+    private const long _maxFileSize = 10 * 1024 * 1024;
+
+    private readonly string _downloadElementId = $"schedules-download-{Guid.NewGuid():N}";
+    private string _downloadKey;
+    private string _downloadFilename;
+
+    private bool _importVisible;
+    private bool _importLoading;
+    private bool _importing;
+    private bool _imported;
+    private string _fileInputKey = Guid.NewGuid().ToString();
+    private string _fileName;
+    private string _fileSummary;
+    private byte[] _fileContent;
+    private string _mode = "fail";
+    private string _error;
+    private ImportResult _result;
+    private List<ImportRow> _rows = new List<ImportRow>();
+
+
+    /// <summary>
+    /// Export only this Function's Jobs and Tasks (all Functions when empty)
+    /// </summary>
+    [Parameter]
+    public string FunctionId { get; set; }
+
+    [Parameter]
+    public TrakHound.Instance.Components.NotificationService Notifications { get; set; }
+
+    /// <summary>
+    /// Raised after an Import wrote something (so the page can reload)
+    /// </summary>
+    [Parameter]
+    public EventCallback Imported { get; set; }
+
+
+    private bool CanImport => !_importLoading && !_imported && _result != null && _result.Success && _result.DryRun && GetWriteCount() > 0;
+
+
+    private class ImportResult
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("dryRun")]
+        public bool DryRun { get; set; }
+
+        [JsonPropertyName("message")]
+        public string Message { get; set; }
+
+        [JsonPropertyName("jobs")]
+        public List<ImportItem> Jobs { get; set; }
+
+        [JsonPropertyName("tasks")]
+        public TasksResult Tasks { get; set; }
+    }
+
+    private class TasksResult
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("tasks")]
+        public List<ImportItem> Tasks { get; set; }
+    }
+
+    private class ImportItem
+    {
+        [JsonPropertyName("functionId")]
+        public string FunctionId { get; set; }
+
+        [JsonPropertyName("id")]
+        public string Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("action")]
+        public string Action { get; set; }
+
+        [JsonPropertyName("messages")]
+        public List<string> Messages { get; set; }
+    }
+
+    private class ImportRow
+    {
+        public string Type { get; set; }
+        public string FunctionId { get; set; }
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Action { get; set; }
+        public List<string> Messages { get; set; }
+    }
+
+
+    #region "Export"
+
+    /// <summary>
+    /// Downloads the Schedules Export as a JSON File
+    /// </summary>
+    public async Task Export()
+    {
+        try
+        {
+            var client = GetClient();
+            if (client == null) return;
+
+            var queryParameters = new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(FunctionId)) queryParameters.Add("functionId", FunctionId);
+
+            var response = await client.Api.Get(_exportRoute, queryParameters);
+            var content = response.GetContentBytes();
+
+            if (!response.Success)
+            {
+                Notifications?.AddNotification(NotificationType.Error, "Error Exporting Schedules", GetErrorText(response, content));
+                return;
+            }
+
+            if (_downloadKey != null) downloadService.RemoveItem(_downloadKey);
+
+            _downloadFilename = $"schedules-{GetFileNamePart(FunctionId ?? "all")}-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            _downloadKey = downloadService.AddItem(new TrakHoundDownloadItem
+            {
+                Filename = _downloadFilename,
+                ContentType = "application/json",
+                Content = content
+            });
+
+            // Render the Link, then click it
+            await InvokeAsync(StateHasChanged);
+            await javascript.InvokeVoidAsync("JsFunctions.clickElement", _downloadElementId);
+        }
+        catch (Exception ex)
+        {
+            Notifications?.AddNotification(NotificationType.Error, "Error Exporting Schedules", ex.Message);
+        }
+    }
+
+    private static string GetFileNamePart(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        return new string(value.Select(c => invalid.Contains(c) || char.IsWhiteSpace(c) ? '-' : c).ToArray());
+    }
+
+    #endregion
+
+    #region "Import"
+
+    public void ShowImport()
+    {
+        _importLoading = false;
+        _importing = false;
+        _imported = false;
+        _fileInputKey = Guid.NewGuid().ToString(); // So the same File can be selected again
+        _fileName = null;
+        _fileSummary = null;
+        _fileContent = null;
+        _mode = "fail";
+        _error = null;
+        _result = null;
+        _rows = new List<ImportRow>();
+        _importVisible = true;
+        StateHasChanged();
+    }
+
+    private void CloseClicked()
+    {
+        _importVisible = false;
+        _fileContent = null;
+    }
+
+    private async Task FileSelected(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        if (file == null) return;
+
+        _fileName = file.Name;
+        _fileSummary = null;
+        _fileContent = null;
+        _result = null;
+        _rows = new List<ImportRow>();
+        _error = null;
+
+        if (file.Size > _maxFileSize)
+        {
+            _error = $"'{file.Name}' is too large to be a Schedules Export";
+            return;
+        }
+
+        try
+        {
+            using var stream = new MemoryStream();
+            await file.OpenReadStream(_maxFileSize).CopyToAsync(stream);
+            _fileContent = stream.ToArray();
+
+            _fileSummary = GetFileSummary(_fileContent, out var fileError);
+            if (fileError != null)
+            {
+                _error = fileError;
+                _fileContent = null;
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not read '{file.Name}' : {ex.Message}";
+            _fileContent = null;
+            return;
+        }
+
+        await RunImport(dryRun: true);
+    }
+
+    private async Task ModeChanged(ChangeEventArgs args)
+    {
+        _mode = args.Value?.ToString() ?? "fail";
+        if (_fileContent != null) await RunImport(dryRun: true);
+    }
+
+    private async Task ImportClicked()
+    {
+        if (CanImport) await RunImport(dryRun: false);
+    }
+
+    /// <summary>
+    /// Checks the File (Dry Run, nothing is written) or Imports it
+    /// </summary>
+    private async Task RunImport(bool dryRun)
+    {
+        if (_fileContent == null) return;
+
+        _importLoading = true;
+        _importing = !dryRun;
+        _error = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var client = GetClient();
+            if (client == null)
+            {
+                _error = "No Instance is selected";
+                return;
+            }
+
+            var queryParameters = new Dictionary<string, string>();
+            queryParameters.Add("mode", _mode);
+            queryParameters.Add("dryRun", dryRun ? "true" : "false");
+
+            var response = await client.Api.Post(_importRoute, _fileContent, "application/json", queryParameters);
+            var content = response.GetContentBytes();
+
+            // 400 and 500 also return a Result when the File was read (Invalid, Conflicts, Write Errors)
+            ImportResult result = null;
+            if (response.ContentType?.StartsWith("application/json", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                try { result = JsonSerializer.Deserialize<ImportResult>(content); }
+                catch { }
+            }
+
+            if (result == null)
+            {
+                _result = null;
+                _rows = new List<ImportRow>();
+                _error = GetErrorText(response, content);
+                return;
+            }
+
+            _result = result;
+            _rows = GetRows(result);
+            if (!string.IsNullOrEmpty(result.Message)) _error = result.Message;
+
+            if (!dryRun)
+            {
+                _imported = result.Success;
+
+                if (result.Success)
+                {
+                    Notifications?.AddNotification(NotificationType.Success, "Schedules Imported", GetResultSummary());
+                }
+
+                // Something may have been written even when it failed partway
+                await Imported.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _importLoading = false;
+            _importing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// The number of Jobs and Tasks in the File (an error when it isn't a JSON object)
+    /// </summary>
+    private static string GetFileSummary(byte[] content, out string error)
+    {
+        error = null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(content);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                error = "The File isn't a Schedules Export (expected a JSON object with \"jobs\" and \"tasks\")";
+                return null;
+            }
+
+            var jobCount = GetArrayLength(document.RootElement, "jobs");
+            var taskCount = GetArrayLength(document.RootElement, "tasks");
+            if (jobCount == 0 && taskCount == 0)
+            {
+                error = "The File has no Jobs or Tasks";
+                return null;
+            }
+
+            return $"{Plural(jobCount, "Job")} · {Plural(taskCount, "Task")}";
+        }
+        catch (JsonException ex)
+        {
+            error = $"The File isn't valid JSON : {ex.Message}";
+            return null;
+        }
+    }
+
+    private static int GetArrayLength(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.Array ? property.GetArrayLength() : 0;
+    }
+
+    private static List<ImportRow> GetRows(ImportResult result)
+    {
+        var rows = new List<ImportRow>();
+
+        foreach (var item in result.Jobs ?? new List<ImportItem>())
+        {
+            rows.Add(new ImportRow { Type = "Job", FunctionId = item.FunctionId, Id = item.Id, Name = item.Name, Action = item.Action, Messages = item.Messages });
+        }
+
+        foreach (var item in result.Tasks?.Tasks ?? new List<ImportItem>())
+        {
+            rows.Add(new ImportRow { Type = "Task", FunctionId = item.FunctionId, Id = item.Id, Action = item.Action, Messages = item.Messages });
+        }
+
+        // Problems first
+        return rows.OrderBy(o => GetActionOrder(o.Action)).ToList();
+    }
+
+    private static int GetActionOrder(string action)
+    {
+        switch (action)
+        {
+            case "error": return 0;
+            case "invalid": return 1;
+            case "conflict": return 2;
+            case "create": return 3;
+            case "update": return 4;
+            case "skip": return 5;
+            default: return 6;
+        }
+    }
+
+    private int GetWriteCount() => _rows.Count(o => o.Action == "create" || o.Action == "update");
+
+    private string GetResultSummary()
+    {
+        if (_result == null) return null;
+
+        var parts = new List<string>();
+        void Add(string action, string text)
+        {
+            var count = _rows.Count(o => o.Action == action);
+            if (count > 0) parts.Add($"{count} {text}");
+        }
+
+        var created = _result.DryRun ? "to add" : "added";
+        var updated = _result.DryRun ? "to replace" : "replaced";
+
+        Add("create", created);
+        Add("update", updated);
+        Add("unchanged", "unchanged");
+        Add("skip", "kept");
+        Add("conflict", "already exist and are different");
+        Add("invalid", "invalid");
+        Add("error", "failed");
+
+        var details = string.Join(" · ", parts);
+
+        if (!_result.Success) return $"Nothing was {(_result.DryRun ? "imported" : "fully imported")} : {details}";
+        if (_result.DryRun) return GetWriteCount() > 0 ? $"Ready to import : {details}" : $"Nothing to import : {details}";
+        return $"Imported : {details}";
+    }
+
+    private static string GetActionText(string action)
+    {
+        switch (action)
+        {
+            case "create": return "Add";
+            case "update": return "Replace";
+            case "unchanged": return "Unchanged";
+            case "skip": return "Keep";
+            case "conflict": return "Conflict";
+            case "invalid": return "Invalid";
+            case "error": return "Error";
+            default: return action;
+        }
+    }
+
+    #endregion
+
+    private ITrakHoundClient GetClient() => explorerService.GetClient(explorerService.SelectedInstanceId);
+
+    private static string GetErrorText(TrakHound.Api.TrakHoundApiResponse response, byte[] content)
+    {
+        var text = content != null && content.Length > 0 ? System.Text.Encoding.UTF8.GetString(content) : null;
+        if (response.StatusCode == 404 && string.IsNullOrWhiteSpace(text)) return "Not Found (is a version of the TrakHound.Functions.Api package with Schedules Export / Import installed?)";
+        return $"{response.StatusCode} : {text}";
+    }
+
+    private static string Plural(int count, string name) => $"{count} {name}{(count == 1 ? "" : "s")}";
+}

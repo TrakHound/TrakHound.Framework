@@ -1,0 +1,58 @@
+@using TrakHound.Blazor.Components
+@using TrakHound.Packages
+
+<div class="browse-panel">
+
+    @if (!Packages.Sources.Any())
+    {
+        <div class="empty-state">
+            <span class="empty-icon fa-solid fa-sharp fa-signal-slash"></span>
+            <span class="empty-title">No Package Source configured</span>
+            <span class="empty-description">Add a Package Source (a TrakHound Package Server and Organization) to browse and install Packages.</span>
+            <div class="empty-actions">
+                <a class="btn btn-primary" href="_admin/packages/sources"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Package Source</a>
+                <a class="btn btn-light" href="_admin/packages/upload"><span class="icon fa-solid fa-sharp fa-upload"></span>Upload a Package File</a>
+                <a class="btn btn-light" href="@TrakHoundWebsite.Docs(TrakHoundWebsite.Topics.SelfHostingPackages)" target="_blank" rel="noopener"><span class="icon fa-solid fa-sharp fa-book"></span>About Package Sources</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="toolbar-panel">
+            <div class="category-chips" role="group" aria-label="Category">
+                <button class="chip @(selectedCategory == null ? "active" : "")" @onclick="() => selectedCategory = null">All</button>
+                @foreach (var category in PackagesContext.Categories)
+                {
+                    <button class="chip @(selectedCategory == category ? "active" : "")" @onclick="() => selectedCategory = category">@category.ToTitleCase()</button>
+                }
+            </div>
+            @if (Packages.SourceStatus == PackageSourceStatus.Online && Packages.UpdateCount > 0)
+            {
+                <span class="updates-hint"><span class="icon fa-solid fa-sharp fa-up-to-line"></span>@Packages.UpdateCount.ToString("N0") installed @(Packages.UpdateCount == 1 ? "package has" : "packages have") an update · <a href="_admin/packages/updates">View Updates</a></span>
+            }
+        </div>
+        <div class="browser-panel">
+            <PackageInstallBrowser PackageManager="@Packages.PackageManager"
+                                   PackageClient="@Packages.PackageClient"
+                                   Category="@selectedCategory"
+                                   InstallHandler="Install" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private string selectedCategory;
+
+
+    [CascadingParameter]
+    public PackagesContext Packages { get; set; }
+
+
+    private async Task<bool> Install(TrakHoundPackage package)
+    {
+        return await Packages.InstallFromSource(package);
+    }
+
+}

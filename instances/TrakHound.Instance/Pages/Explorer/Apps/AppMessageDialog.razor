@@ -1,0 +1,108 @@
+@using TrakHound.Apps
+
+@* Composes a Message to show on open App pages (used by the Apps and App Connections pages) *@
+<Modal Class="packages-modal app-message-modal" Visible="@Visible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-message"></span>
+        <span class="modal-header-title">Send Message</span>
+    </HeaderContent>
+    <BodyContent>
+        <p class="modal-description">@Description Messages are not stored, so pages opened later (or reloaded) do not show it.</p>
+        <div class="form-field">
+            <label>From</label>
+            <RadzenTextBox @bind-Value="@from" MaxLength="@TrakHoundAppMessageRequest.MaxFromLength" Placeholder="@TrakHoundAppMessageRequest.DefaultFrom" />
+            <span class="field-hint">Shown as "Message from @(!string.IsNullOrWhiteSpace(from) ? from.Trim() : TrakHoundAppMessageRequest.DefaultFrom)"</span>
+        </div>
+        <div class="form-field">
+            <label>Message</label>
+            <RadzenTextArea @bind-Value="@message" Immediate="true" Rows="4" MaxLength="@TrakHoundAppMessageRequest.MaxLength" Placeholder="ex. Thanks for testing! Please try the new Export button and let me know how it goes" />
+            @if (submitted && string.IsNullOrWhiteSpace(message))
+            {
+                <span class="field-error">Message is required</span>
+            }
+            else
+            {
+                <span class="field-hint">@(message?.Length ?? 0) / @TrakHoundAppMessageRequest.MaxLength</span>
+            }
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label>Type</label>
+                <div class="app-message-choices" role="radiogroup" aria-label="Type">
+                    <button type="button" class="app-message-chip info @(severity == TrakHoundAppMessageSeverity.Information ? "active" : null)" role="radio" aria-checked="@(severity == TrakHoundAppMessageSeverity.Information ? "true" : "false")" @onclick="() => severity = TrakHoundAppMessageSeverity.Information"><span class="icon fa-solid fa-sharp fa-message"></span>Information</button>
+                    <button type="button" class="app-message-chip warning @(severity == TrakHoundAppMessageSeverity.Warning ? "active" : null)" role="radio" aria-checked="@(severity == TrakHoundAppMessageSeverity.Warning ? "true" : "false")" @onclick="() => severity = TrakHoundAppMessageSeverity.Warning"><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Warning</button>
+                </div>
+            </div>
+            <div class="form-field">
+                <label>Close</label>
+                <div class="app-message-choices" role="radiogroup" aria-label="Close">
+                    <button type="button" class="app-message-chip @(!autoHide ? "active" : null)" role="radio" aria-checked="@(!autoHide ? "true" : "false")" @onclick="() => autoHide = false"><span class="icon fa-solid fa-sharp fa-hand-pointer"></span>By the user</button>
+                    <button type="button" class="app-message-chip @(autoHide ? "active" : null)" role="radio" aria-checked="@(autoHide ? "true" : "false")" @onclick="() => autoHide = true"><span class="icon fa-solid fa-sharp fa-timer"></span>Automatically</button>
+                    @if (autoHide)
+                    {
+                        <span class="app-message-seconds">
+                            <input type="number" min="1" max="@TrakHoundAppMessageRequest.MaxSeconds" @bind="seconds" aria-label="Seconds" />
+                            <span>sec</span>
+                        </span>
+                    }
+                </div>
+                <span class="field-hint">@(autoHide ? $"Hidden after {Math.Clamp(seconds, 1, TrakHoundAppMessageRequest.MaxSeconds):N0} seconds (the user can still close it sooner)" : "Shown until the user clicks the close button")</span>
+            </div>
+        </div>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="CancelClicked"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+        <button class="admin-write btn btn-primary" @onclick="SendClicked"><span class="icon fa-solid fa-sharp fa-paper-plane"></span>Send</button>
+    </FooterContent>
+</Modal>
+
+@code {
+
+    private string message;
+    private string from = TrakHoundAppMessageRequest.DefaultFrom;
+    private TrakHoundAppMessageSeverity severity;
+    private bool autoHide;
+    private int seconds = TrakHoundAppMessageRequest.DefaultSeconds;
+    private bool submitted;
+    private bool wasVisible;
+
+
+    [Parameter]
+    public bool Visible { get; set; }
+
+    /// <summary>
+    /// Which pages receive the Message (ex. "Show a Message on the 3 open pages of Dashboard.")
+    /// </summary>
+    [Parameter]
+    public string Description { get; set; }
+
+    [Parameter]
+    public EventCallback<TrakHoundAppMessageRequest> Send { get; set; }
+
+    [Parameter]
+    public EventCallback Cancel { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        // Start with an empty form each time the Dialog opens
+        if (Visible && !wasVisible)
+        {
+            message = null;
+            severity = TrakHoundAppMessageSeverity.Information;
+            submitted = false;
+        }
+
+        wasVisible = Visible;
+    }
+
+    private async Task SendClicked()
+    {
+        submitted = true;
+        if (string.IsNullOrWhiteSpace(message)) return;
+
+        await Send.InvokeAsync(new TrakHoundAppMessageRequest { Message = message, Severity = severity, From = from, Seconds = autoHide ? Math.Clamp(seconds, 1, TrakHoundAppMessageRequest.MaxSeconds) : 0 });
+    }
+
+    private Task CancelClicked() => Cancel.InvokeAsync();
+}

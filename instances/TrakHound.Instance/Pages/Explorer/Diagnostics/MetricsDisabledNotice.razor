@@ -1,0 +1,61 @@
+@* Shown on a Metrics page when that Metrics area is disabled for this Instance (Settings > Metrics) *@
+@inject ITrakHoundInstance instance
+@inject ExplorerService explorerService
+@using TrakHound.Instances
+
+@if (IsDisabled)
+{
+    <a class="metrics-disabled-notice" href="_admin/configuration/settings?section=metrics" title="Change in Settings > Metrics (applied when the Instance is restarted)">
+        <span class="icon fa-solid fa-sharp fa-circle-pause"></span>
+        <span>@Message</span>
+    </a>
+}
+
+@code {
+
+    /// <summary>
+    /// Api, Services, Functions, Workers, Apps, Http, Streams, Mcp or Cpu
+    /// </summary>
+    [Parameter]
+    public string Area { get; set; }
+
+
+    // Only known for this Instance (the Explorer may be showing another Instance)
+    private bool IsLocal => instance != null && explorerService.SelectedInstanceId == instance.Id;
+
+    private bool IsDisabled
+    {
+        get
+        {
+            if (!IsLocal) return false;
+
+            var metrics = instance.Metrics;
+            if (metrics == null) return false;
+
+            switch (Area)
+            {
+                case "Api": return !metrics.ApiEnabled;
+                case "Services": return !metrics.ServicesEnabled;
+                case "Functions": return !metrics.FunctionsEnabled;
+                case "Workers": return !metrics.WorkersEnabled;
+                case "Apps": return !metrics.AppsEnabled;
+                case "Streams": return !metrics.StreamsEnabled;
+                case "Mcp": return !metrics.McpEnabled;
+                case "Http": return !metrics.HttpEnabled;
+                case "Cpu": return metrics.Enabled && !metrics.Cpu; // Covered by the area's own notice when all Metrics are disabled
+                default: return false;
+            }
+        }
+    }
+
+    private string Message
+    {
+        get
+        {
+            if (Area == "Cpu") return "CPU monitoring is disabled for this Instance";
+            if (instance?.Metrics != null && !instance.Metrics.Enabled) return "Metrics collection is disabled for this Instance";
+            return $"{(Area == "Api" ? "API" : Area == "Http" ? "HTTP" : Area == "Mcp" ? "MCP" : Area.TrimEnd('s'))} Metrics are disabled for this Instance";
+        }
+    }
+
+}

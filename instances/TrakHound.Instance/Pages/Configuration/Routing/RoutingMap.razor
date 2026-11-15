@@ -1,0 +1,240 @@
+@* The Routers as a map: the Modules that use each Router, its Routes, their Targets and the Services they send Requests to *@
+@implements IDisposable
+@using TrakHound.Blazor.Diagrams
+@using TrakHound.Blazor.Diagrams.Components
+@using TrakHound.Blazor.Diagrams.Components.Widgets
+@using TrakHound.Services
+@inject ConfigurationsService configurationsService
+
+<div class="routing-map">
+
+    <div class="map-toolbar">
+        <div class="map-kinds" title="Show where one kind of Request goes">
+            <button class="segment @(kind == null ? "active" : "")" @onclick="() => SetKind(null)">All kinds</button>
+            @foreach (var name in TrakHoundServiceRoutes.Names)
+            {
+                var value = name;
+                <button class="segment @(kind == value ? "active" : "")" @onclick="() => SetKind(value)">@value</button>
+            }
+        </div>
+        <button class="btn btn-command" title="Zoom to show the whole map" @onclick="FitToNodes"><span class="icon fa-solid fa-sharp fa-expand"></span>Fit</button>
+        <span class="map-hint">As configured, including unsaved changes. Click a node to follow its Requests</span>
+    </div>
+
+    <div class="map-body">
+        <div class="map-canvas">
+            <CascadingValue Value="context" IsFixed="true">
+                <CascadingValue Value="Diagram" IsFixed="true">
+                    <DiagramCanvas>
+                        <Widgets>
+                            <GridWidget Size="@GridSize" Mode="GridMode.Line" GridColor="var(--diagramGrid)" BackgroundColor="var(--diagramBackground)" ZoomThreshold="0.4" />
+                        </Widgets>
+                    </DiagramCanvas>
+                </CascadingValue>
+            </CascadingValue>
+        </div>
+
+        <aside class="map-panel">
+            @{
+                var node = graph.GetNode(selectedKey);
+            }
+            @if (node == null)
+            {
+                <span class="panel-title">Overview</span>
+                <span class="panel-subtitle">@modules.Count Module@(modules.Count != 1 ? "s" : "") · @graph.Nodes.Count(o => o.Kind == RoutingMapNodeKind.Router) Routers · @graph.Services.Count Services</span>
+
+                <div class="panel-section">
+                    <span class="panel-label">Reading the Map</span>
+                    <p class="panel-text">Modules on the left send their Service calls to a Router. Each Router sends a Request to the Targets of the Routes whose Patterns match its kind, in order, and on to the Services. Dashed lines go to another Router.</p>
+                </div>
+
+                @foreach (var group in GetAttention())
+                {
+                    <div class="panel-section">
+                        <span class="panel-label">@group.Title</span>
+                        @foreach (var item in group.Nodes)
+                        {
+                            <button class="panel-link" @onclick="() => Select(item.Key)"><span class="@RoutingMapNodeWidget.GetIcon(item)"></span>@item.Title</button>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="panel-heading">
+                    <span class="panel-icon @RoutingMapNodeWidget.GetIcon(node)"></span>
+                    <div class="panel-heading-text">
+                        <span class="panel-title">@node.Title</span>
+                        <span class="panel-subtitle">@RoutingMapNodeWidget.GetKindTitle(node)</span>
+                    </div>
+                    @if (node.Item != null)
+                    {
+                        <button class="admin-write btn btn-sm btn-command" title="Close the Map and select it in the editor" @onclick="() => EditItem.InvokeAsync(node.Item)"><span class="icon fa-solid fa-sharp fa-pen"></span>Edit</button>
+                    }
+                </div>
+
+                @if (node.Problem != null)
+                {
+                    <div class="panel-problem"><span class="fa-solid fa-sharp fa-triangle-exclamation"></span>@node.Problem</div>
+                }
+
+                @switch (node.Kind)
+                {
+                    case RoutingMapNodeKind.Modules:
+                        var toNode = graph.GetNode(graph.GetOutgoing(node.Key).FirstOrDefault()?.To);
+                        <div class="panel-section">
+                            <span class="panel-label">@node.Category?.Title</span>
+                            @foreach (var module in node.Modules)
+                            {
+                                <a class="panel-link" href="@configurationsService.GetLink(module.Link)" title="Open its Configuration">
+                                    <span class="@node.Category?.Icon"></span>@module.Name
+                                </a>
+                                @if (module.IsZoneRouter)
+                                {
+                                    <span class="panel-note">Uses this Router because it is in the Zone <code>@module.ZoneId</code>@(!string.IsNullOrEmpty(module.RouterId) ? $" (its Configuration names \"{module.RouterId}\")" : "")</span>
+                                }
+                                else if (module.IsGroupRouter)
+                                {
+                                    <span class="panel-note">Uses this Router because it is in the Group <code>@module.GroupId</code></span>
+                                }
+                            }
+                        </div>
+                        @if (toNode?.Kind == RoutingMapNodeKind.Service)
+                        {
+                            <div class="panel-section">
+                                <span class="panel-label">Service Calls</span>
+                                <p class="panel-text">They name the Service <strong>@toNode.Title</strong>, so its calls go straight to it (no Router).</p>
+                            </div>
+                        }
+                        else if (toNode?.Kind == RoutingMapNodeKind.Router)
+                        {
+                            @RenderPaths(toNode)
+                        }
+                        break;
+
+                    case RoutingMapNodeKind.Router:
+                    case RoutingMapNodeKind.MissingRouter:
+                        var users = graph.GetIncoming(node.Key).Select(o => graph.GetNode(o.From)).Where(o => o != null).ToList();
+                        @if (node.Kind == RoutingMapNodeKind.Router)
+                        {
+                            @RenderPaths(node)
+                        }
+                        <div class="panel-section">
+                            <span class="panel-label">Used By</span>
+                            @if (users.Count == 0)
+                            {
+                                <span class="panel-text">No Module or Router Target uses this Router</span>
+                            }
+                            @foreach (var user in users.Where(o => o.Kind == RoutingMapNodeKind.Modules))
+                            {
+                                <button class="panel-link" title="Show the Modules" @onclick="() => Select(user.Key)"><span class="@user.Category?.Icon"></span>@user.Subtitle</button>
+                            }
+                            @foreach (var user in users.Where(o => o.Kind == RoutingMapNodeKind.Target))
+                            {
+                                var fromRouter = (user.Item as TargetItem)?.GetRouter();
+                                <button class="panel-link" @onclick="() => Select(user.Key)"><span class="fa-regular fa-chart-network"></span>Router Target in @(fromRouter != null ? graph.GetNode(fromRouter.Id)?.Title : "another Router")</button>
+                            }
+                        </div>
+                        break;
+
+                    case RoutingMapNodeKind.Route:
+                        var route = (RouteItem)node.Item;
+                        var matched = TrakHoundServiceRoutes.Names.Where(o => TrakHoundServiceRouteResolver.IsRouteMatch(route.Patterns, o)).ToList();
+                        <div class="panel-section">
+                            <span class="panel-label">Handles</span>
+                            <span class="panel-text">@(matched.Count > 0 ? string.Join(", ", matched) : "No kind of Request (its Patterns match none)")</span>
+                        </div>
+                        break;
+
+                    case RoutingMapNodeKind.Lane:
+                        var laneTargets = graph.GetOutgoing(node.Key).Select(o => graph.GetNode(o.To)).Where(o => o != null).ToList();
+                        var laneRouter = node.Item.GetRouter();
+                        <div class="panel-section">
+                            <span class="panel-label">@node.Route Requests on this Route</span>
+                            @if (laneTargets.Count == 0)
+                            {
+                                <span class="panel-text">None of the Route's Targets handle them</span>
+                            }
+                            @foreach (var laneTarget in laneTargets)
+                            {
+                                var order = laneTarget.Item.Parent.Children.ToList().IndexOf(laneTarget.Item) + 1;
+                                <button class="panel-link" @onclick="() => Select(laneTarget.Key)"><span class="@RoutingMapNodeWidget.GetIcon(laneTarget)"></span>@RoutingNodeWidget.GetOrdinal(order) · @laneTarget.Title</button>
+                            }
+                        </div>
+                        @if (laneRouter != null)
+                        {
+                            @RenderPaths(graph.GetNode(laneRouter.Id), node.Route)
+                        }
+                        break;
+
+                    case RoutingMapNodeKind.Target:
+                        var target = (TargetItem)node.Item;
+                        <div class="panel-section">
+                            <span class="panel-label">Order</span>
+                            <span class="panel-text">Tried @RoutingNodeWidget.GetOrdinal(target.Parent.Children.ToList().IndexOf(target) + 1) of @target.Parent.Children.Count. Moves on after @string.Join(", ", target.EffectiveFallbackOn)</span>
+                        </div>
+                        <div class="panel-section">
+                            <span class="panel-label">Sends Requests To</span>
+                            @foreach (var edge in graph.GetOutgoing(node.Key))
+                            {
+                                var to = graph.GetNode(edge.To);
+                                <button class="panel-link" @onclick="() => Select(to.Key)"><span class="@RoutingMapNodeWidget.GetIcon(to)"></span>@to.Title</button>
+                            }
+                            @if (!graph.GetOutgoing(node.Key).Any())
+                            {
+                                <span class="panel-text">Nothing</span>
+                            }
+                        </div>
+                        break;
+
+                    case RoutingMapNodeKind.Service:
+                        var senders = graph.GetIncoming(node.Key).Select(o => graph.GetNode(o.From)).Where(o => o != null).ToList();
+                        <div class="panel-section">
+                            <span class="panel-label">Handles</span>
+                            <span class="panel-text">@(node.Service.Routes == null ? "Unknown: the Service isn't running, so it can't be asked" : node.Service.Routes.Count > 0 ? string.Join(", ", node.Service.Routes) : "No kind of Request")</span>
+                        </div>
+                        <div class="panel-section">
+                            <span class="panel-label">Sent Requests By</span>
+                            @if (senders.Count == 0)
+                            {
+                                <span class="panel-text">No Target sends Requests to this Service</span>
+                            }
+                            @foreach (var sender in senders)
+                            {
+                                if (sender.Kind == RoutingMapNodeKind.Modules)
+                                {
+                                    foreach (var module in sender.Modules)
+                                    {
+                                        <a class="panel-link" href="@configurationsService.GetLink(module.Link)" title="Open its Configuration"><span class="@module.Category?.Icon"></span>@module.Title (directly)</a>
+                                    }
+                                }
+                                else
+                                {
+                                    var senderRouter = sender.Item?.GetRouter();
+                                    <button class="panel-link" @onclick="() => Select(sender.Key)"><span class="@RoutingMapNodeWidget.GetIcon(sender)"></span>@(senderRouter != null ? graph.GetNode(senderRouter.Id)?.Title : "?") · @(((RouteItem)sender.Item.Parent).Patterns.FirstOrDefault())</button>
+                                }
+                            }
+                        </div>
+                        break;
+                }
+            }
+        </aside>
+    </div>
+</div>
+
+@code {
+
+    // Where a Request of each kind (or the one shown, or the one given) sent to the Router would go, through all of its Routes
+    private RenderFragment RenderPaths(RoutingMapNode router, string only = null) => __builder =>
+    {
+        foreach (var name in only != null ? new[] { only } : kind != null ? new[] { kind } : TrakHoundServiceRoutes.Names)
+        {
+            var path = TrakHoundServiceRouteResolver.Resolve(graph.Routers, router.Key, name, graph.Services);
+            <div class="panel-section">
+                <span class="panel-label">@name Requests @(only != null ? $"sent to {router.Title}" : "")</span>
+                <RoutingPathView Path="path" />
+            </div>
+        }
+    };
+
+}

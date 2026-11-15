@@ -1,0 +1,28 @@
+﻿/* Like the other list tables : a plain header and row borders only */
+th {
+    padding: 6px 12px;
+    font-size: var(--fontSizeSm);
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--textMild);
+    background: transparent;
+    border-bottom: 1px solid var(--borderColor);
+}
+
+td {
+    font-size: var(--fontSizeSm);
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.type-cell {
+    width: 100px;
+}
+
+.name-cell {
+    width: 200px;
+}
+
+.data-type-cell {
+    width: 150px;
+}

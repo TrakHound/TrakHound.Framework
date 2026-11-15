@@ -1,0 +1,195 @@
+@inject ExplorerService explorerService
+
+<div class="publish-panel">
+    <div class="publish-fields">
+
+        <div class="field">
+            <label>Collection<span class="required" title="Required">*</span></label>
+            <input type="text" placeholder="Collection" aria-label="Collection" @bind="@collection" @bind:event="oninput" disabled="@publishing" />
+        </div>
+
+        <div class="field">
+            <label>Key<span class="required" title="Required">*</span></label>
+            <input type="text" placeholder="Key" aria-label="Key" @bind="@key" @bind:event="oninput" disabled="@publishing" />
+        </div>
+
+        <div class="field field-value">
+            <label>Value</label>
+            <textarea placeholder="Value" aria-label="Value" rows="@GetValueRows()" @bind="@value" @bind:event="oninput" disabled="@publishing"></textarea>
+        </div>
+
+    </div>
+
+    <div class="publish-buttons">
+        @if (!publishing)
+        {
+            <button class="admin-write btn btn-primary" @onclick="Publish" disabled="@(!CanPublish())"><span class="icon fa-solid fa-sharp fa-paper-plane"></span>Publish</button>
+            <button class="btn btn-light" @onclick="Cancel">Cancel</button>
+        }
+        else
+        {
+            <button class="admin-write btn btn-primary btn-loading" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Publishing..</button>
+        }
+
+        @if (string.IsNullOrWhiteSpace(collection))
+        {
+            <span class="publish-note">Enter a Collection</span>
+        }
+        else if (string.IsNullOrWhiteSpace(key))
+        {
+            <span class="publish-note">Enter a Key</span>
+        }
+        else if (IsExistingKey)
+        {
+            <span class="publish-note">Publishing replaces the existing Value</span>
+        }
+    </div>
+</div>
+
+@code {
+
+    private string collection;
+    private string key;
+    private string value;
+    private bool publishing;
+    private string previousCollection;
+    private int previousEditVersion = -1;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    /// <summary>
+    /// The default Collection (ex. the Collection that is currently being viewed)
+    /// </summary>
+    [Parameter]
+    public string Collection { get; set; }
+
+    /// <summary>
+    /// The Key and Value to Edit (applied when EditVersion changes)
+    /// </summary>
+    [Parameter]
+    public string EditKey { get; set; }
+
+    [Parameter]
+    public string EditValue { get; set; }
+
+    [Parameter]
+    public int EditVersion { get; set; }
+
+    /// <summary>
+    /// Shows a note that Publishing will replace the existing Value
+    /// </summary>
+    [Parameter]
+    public Func<string, string, bool> KeyExists { get; set; }
+
+    [Parameter]
+    public EventCallback<PublishResult> Published { get; set; }
+
+    [Parameter]
+    public EventCallback<PublishResult> PublishFailed { get; set; }
+
+    [Parameter]
+    public EventCallback Cancelled { get; set; }
+
+
+    public class PublishResult
+    {
+        public string Collection { get; set; }
+        public string Key { get; set; }
+        public string Value { get; set; }
+        public string Message { get; set; }
+    }
+
+
+    private bool IsExistingKey => KeyExists != null && KeyExists(collection?.Trim(), key?.Trim());
+
+
+    protected override void OnParametersSet()
+    {
+        // Only reset the fields when the parameters change (so typed values are not overwritten on re-render)
+        if (Collection != previousCollection)
+        {
+            previousCollection = Collection;
+            collection = Collection;
+        }
+
+        if (EditVersion != previousEditVersion)
+        {
+            previousEditVersion = EditVersion;
+            if (EditKey != null)
+            {
+                collection = Collection;
+                key = EditKey;
+                value = EditValue;
+            }
+        }
+    }
+
+    private bool CanPublish()
+    {
+        return !string.IsNullOrWhiteSpace(collection) && !string.IsNullOrWhiteSpace(key);
+    }
+
+    private int GetValueRows()
+    {
+        var lines = value?.Split('\n').Length ?? 1;
+        return Math.Clamp(lines, 1, 12);
+    }
+
+    private async Task Publish()
+    {
+        if (!CanPublish() || publishing) return;
+
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null) return;
+
+        var result = new PublishResult
+        {
+            Collection = collection.Trim(),
+            Key = key.Trim(),
+            Value = value ?? ""
+        };
+
+        publishing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Send the Value in the request body (long Values don't fit in a query string)
+            var entries = new Dictionary<string, string> { { result.Key, result.Value } };
+            var response = await client.Services.KeyValues.Publish(result.Collection, entries, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                // Keep the Collection so multiple Values can be published to the same Collection
+                key = null;
+                value = null;
+                await Published.InvokeAsync(result);
+            }
+            else
+            {
+                result.Message = !string.IsNullOrEmpty(response.Message) ? response.Message : $"Status Code {response.StatusCode}";
+                await PublishFailed.InvokeAsync(result);
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Message = ex.Message;
+            await PublishFailed.InvokeAsync(result);
+        }
+
+        publishing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Cancel()
+    {
+        key = null;
+        value = null;
+        await Cancelled.InvokeAsync();
+    }
+
+}

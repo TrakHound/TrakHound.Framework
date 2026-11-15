@@ -1,0 +1,547 @@
+@page "/_admin/security/users"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Users)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@using TrakHound.Instances
+@using TrakHound.Security
+@using TrakHound.Instance.Components
+@using TrakHound.Instance.Http
+
+<TrakHoundPageTitle Text="Users" />
+<AreaBreadcrumbs Items="@([new("Users")])" />
+
+<Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-users"></span>
+        <div class="page-title">
+            <span class="title">Users</span>
+            <span class="description">Usernames and Passwords for Apps that just need basic sign in. Each User's Roles are mapped to Permissions by Profiles that use the Users Identity Provider</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <span class="search-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input class="form-control" type="search" placeholder="Search users.." value="@search" @oninput="e => search = e.Value?.ToString()" spellcheck="false" />
+        </div>
+        <div class="toolbar-buttons">
+            <button class="admin-write btn btn-sm btn-command" title="Choose the page Users sign in on" disabled="@(state.UserStore == null)" @onclick="SignInPageClicked"><span class="icon fa-solid fa-sharp fa-palette"></span>Sign In Page</button>
+            @if (state.Users.Count > 0)
+            {
+                <button class="admin-write btn btn-sm btn-command" title="Sign out every User, so they sign in again" @onclick="() => signOutAllVisible = true"><span class="icon fa-solid fa-sharp fa-right-from-bracket"></span>Sign Out All</button>
+            }
+            <button class="admin-write btn btn-primary" disabled="@(state.UserStore == null)" @onclick="CreateClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add User</button>
+        </div>
+    </div>
+
+    <div class="table-container">
+
+        <div class="section callout-section">
+            @if (!usedByProfile && state.Users.Count > 0)
+            {
+                <div class="callout warning">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>No Profile uses the Users Identity Provider, so these Users can't sign in to anything yet. <a href="_admin/configuration/security-profiles">Add a Profile</a> for <code>@TrakHoundUserIdentityProvider.ProviderId</code>.</div>
+                </div>
+            }
+            else
+            {
+                <div class="callout">
+                    <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+                    <div>Users are meant for small teams and low security needs. For single sign on, MFA, or many users, use an OpenID Connect or LDAP Identity Provider instead.</div>
+                </div>
+            }
+        </div>
+
+        @if (state.Users.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon fa-solid fa-sharp fa-users"></span>
+                <span class="empty-title">No Users</span>
+                <span class="empty-description">Add a User to let someone sign in to protected Apps with a Username and Password.</span>
+                <button class="admin-write btn btn-primary" disabled="@(state.UserStore == null)" @onclick="CreateClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add User</button>
+            </div>
+        }
+        else
+        {
+            var rows = GetRows();
+            @if (rows.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-icon fa-regular fa-sharp fa-file-magnifying-glass"></span>
+                    <span class="empty-title">No Users match "@search"</span>
+                    <button class="btn btn-light" @onclick="() => search = null">Clear Search</button>
+                </div>
+            }
+            else
+            {
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Roles</th>
+                            <th class="col-narrow">Status</th>
+                            <th class="col-narrow hide-narrow">Password Changed</th>
+                            <th class="col-actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in rows)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="item-name">@user.DisplayName</span>
+                                    @if (!string.IsNullOrEmpty(user.Name))
+                                    {
+                                        <code class="resource-id">@user.Username</code>
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.Roles.IsNullOrEmpty())
+                                    {
+                                        <span class="muted">None</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="chips">
+                                            @foreach (var role in user.Roles)
+                                            {
+                                                <span class="chip">@role</span>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td class="col-narrow">
+                                    @if (user.Enabled)
+                                    {
+                                        <span class="status ok"><span class="status-dot"></span>Enabled</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status warning"><span class="status-dot"></span>Disabled</span>
+                                    }
+                                </td>
+                                @{
+                                    var passwordChanged = user.PasswordChanged ?? user.Created;
+                                }
+                                <td class="col-narrow hide-narrow" title="@passwordChanged.ToLocalTime().ToString("g")">@passwordChanged.ToLocalTime().ToString("d")</td>
+                                <td class="col-actions">
+                                    <button class="admin-write btn btn-sm btn-command" @onclick="() => EditClicked(user)"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</button>
+                                    <button class="admin-write btn btn-sm btn-command" title="End the User's Sessions, so they sign in again" @onclick="() => SignOut(user)"><span class="icon fa-regular fa-sharp fa-right-from-bracket"></span>Sign Out</button>
+                                    <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => deleteUser = user"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        }
+    </div>
+
+    <Modal Class="security-modal" Visible="@createVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-user-plus"></span>
+            <span class="modal-header-title">Add User</span>
+        </HeaderContent>
+        <BodyContent>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="user-username">Username</label>
+                    <input id="user-username" class="form-control" @bind="createUsername" @bind:event="oninput" placeholder="ex. jsmith" spellcheck="false" autocomplete="off" />
+                </div>
+                <div class="form-field">
+                    <label for="user-name">Name</label>
+                    <input id="user-name" class="form-control" @bind="createName" placeholder="Optional (ex. Jane Smith)" autocomplete="off" />
+                </div>
+                <div class="form-field">
+                    <label for="user-password">Password</label>
+                    <input id="user-password" class="form-control" type="password" @bind="createPassword" @bind:event="oninput" autocomplete="new-password" />
+                    <span class="hint">At least @TrakHoundUserStore.PasswordMinLength characters</span>
+                </div>
+                <div class="form-field">
+                    <label for="user-password-confirm">Confirm Password</label>
+                    <input id="user-password-confirm" class="form-control" type="password" @bind="createPasswordConfirm" @bind:event="oninput" autocomplete="new-password" />
+                </div>
+                <div class="form-field wide">
+                    <label for="user-roles">Roles</label>
+                    <input id="user-roles" class="form-control" @bind="createRoles" placeholder="ex. operators, engineers" spellcheck="false" />
+                    <span class="hint">Comma separated. Profile Assignments map these Roles to Permissions</span>
+                    <RoleSuggestions ProviderId="@TrakHoundUserIdentityProvider.ProviderId" @bind-Value="createRoles" />
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="callout danger user-error">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>@errorMessage</div>
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => createVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(createUsername) || string.IsNullOrEmpty(createPassword))" @onclick="CreateConfirmClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add User</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(editUser != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-user-pen"></span>
+            <span class="modal-header-title">Edit User</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (editUser != null)
+            {
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label>Username</label>
+                        <input class="form-control" value="@editUser.Username" disabled />
+                    </div>
+                    <div class="form-field">
+                        <label for="edit-name">Name</label>
+                        <input id="edit-name" class="form-control" @bind="editName" placeholder="Optional (ex. Jane Smith)" autocomplete="off" />
+                    </div>
+                    <div class="form-field wide">
+                        <label for="edit-roles">Roles</label>
+                        <input id="edit-roles" class="form-control" @bind="editRoles" placeholder="ex. operators, engineers" spellcheck="false" />
+                        <span class="hint">Comma separated. Changing the Roles signs the User out, so they sign in again with the new Roles</span>
+                        <RoleSuggestions ProviderId="@TrakHoundUserIdentityProvider.ProviderId" @bind-Value="editRoles" />
+                    </div>
+                    <div class="form-field">
+                        <label for="edit-password">New Password</label>
+                        <input id="edit-password" class="form-control" type="password" @bind="newPassword" @bind:event="oninput" autocomplete="new-password" placeholder="Leave blank to keep" />
+                        <span class="hint">At least @TrakHoundUserStore.PasswordMinLength characters. Signs the User out</span>
+                    </div>
+                    <div class="form-field">
+                        <label for="edit-password-confirm">Confirm Password</label>
+                        <input id="edit-password-confirm" class="form-control" type="password" @bind="newPasswordConfirm" @bind:event="oninput" autocomplete="new-password" />
+                    </div>
+                    <div class="form-field wide">
+                        <label class="user-enabled">
+                            <input type="checkbox" @bind="editEnabled" />
+                            <span>
+                                Enabled
+                                <span class="muted">A disabled User can't sign in, and is signed out now</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="callout danger user-error">
+                        <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                        <div>@errorMessage</div>
+                    </div>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => editUser = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="EditConfirmClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Save</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@signInPageVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-palette"></span>
+            <span class="modal-header-title">Sign In Page</span>
+        </HeaderContent>
+        <BodyContent>
+            <p class="muted">Users sign in on the Instance's own form. Add a product name and logo to it, or use a page in one of your Apps instead.</p>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="signin-product">Product Name</label>
+                    <input id="signin-product" class="form-control" @bind="signInProduct" @bind:event="oninput" placeholder="Optional (ex. Shop Floor)" maxlength="@TrakHoundUserSettings.ProductMaxLength" autocomplete="off" />
+                    <span class="hint">Shown above the form</span>
+                </div>
+                <div class="form-field">
+                    <label for="signin-logo">Logo</label>
+                    <input id="signin-logo" class="form-control" @bind="signInLogo" @bind:event="oninput" placeholder="Optional (ex. _init/assets/logo.svg)" spellcheck="false" autocomplete="off" />
+                    <span class="hint">A path in this Instance that doesn't require signing in</span>
+                </div>
+                <div class="form-field wide">
+                    <label for="signin-route">App Page</label>
+                    <input id="signin-route" class="form-control" @bind="signInRoute" @bind:event="oninput" @bind:after="CheckSignInRoute" placeholder="Optional (ex. /sign-in)" spellcheck="false" autocomplete="off" />
+                    <span class="hint">The route of a public Page in an App, used instead of the Instance's form (the product name and logo don't apply to it). See the Developer Guide, section 4.6</span>
+                </div>
+            </div>
+            @if (signInRouteWarning != null)
+            {
+                <div class="callout warning user-error">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <div>@signInRouteWarning</div>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="callout danger user-error">
+                    <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                    <div>@errorMessage</div>
+                </div>
+            }
+        </BodyContent>
+        <FooterContent>
+            <a class="btn btn-sm btn-command signin-preview" href="@($"{TrakHound.Instance.Security.TrakHoundIdentityHttp.SignInPrefix.TrimStart('/')}/{TrakHoundUserIdentityProvider.ProviderId}")" target="_blank" title="Open the saved sign in page in a new tab"><span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span>Preview</a>
+            <button class="btn btn-secondary" @onclick="() => signInPageVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="SignInPageSaveClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Save</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@signOutAllVisible">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-right-from-bracket"></span>
+            <span class="modal-header-title">Sign Out All Users</span>
+        </HeaderContent>
+        <BodyContent>
+            <p>@(state.Users.Count == 1 ? "Sign out the 1 User?" : $"Sign out all {state.Users.Count} Users?")</p>
+            <p class="muted">Everyone signed in with the Users Identity Provider has to sign in again on their next request. Their Passwords and Roles don't change. API Keys, other Identity Providers and the Admin interface aren't affected.</p>
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => signOutAllVisible = false"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-primary" @onclick="SignOutAllConfirmClicked"><span class="icon fa-solid fa-sharp fa-right-from-bracket"></span>Sign Out All</button>
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(deleteUser != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Delete User</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (deleteUser != null)
+            {
+                <p>Delete the User <strong>@deleteUser.Username</strong>?</p>
+                <p class="muted">The User is signed out everywhere. This can't be undone. To keep the User but stop them signing in, Edit them and clear Enabled instead.</p>
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => deleteUser = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="DeleteConfirmClicked"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Delete</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private SecurityState state;
+    private bool usedByProfile;
+    private string search;
+    private string errorMessage;
+
+    private bool createVisible;
+    private string createUsername;
+    private string createName;
+    private string createPassword;
+    private string createPasswordConfirm;
+    private string createRoles;
+
+    private TrakHoundUser editUser;
+    private string editName;
+    private string editRoles;
+    private bool editEnabled;
+    private string newPassword;
+    private string newPasswordConfirm;
+
+    private TrakHoundUser deleteUser;
+
+    private bool signOutAllVisible;
+
+    private bool signInPageVisible;
+    private string signInProduct;
+    private string signInLogo;
+    private string signInRoute;
+    private string signInRouteWarning;
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    private void NotificationsUpdated(object sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    private void SecurityChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void Load()
+    {
+        state = SecurityState.Load(instance);
+        usedByProfile = state.Profiles.Any(o => string.Equals(o.ProviderId, TrakHoundUserIdentityProvider.ProviderId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private List<TrakHoundUser> GetRows()
+    {
+        if (string.IsNullOrWhiteSpace(search)) return state.Users;
+
+        var query = search.Trim();
+        return state.Users.Where(o =>
+            Contains(o.Username, query) ||
+            Contains(o.Name, query) ||
+            (o.Roles != null && o.Roles.Any(r => Contains(r, query)))).ToList();
+    }
+
+    private static bool Contains(string value, string query) => value != null && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private static string[] SplitRoles(string roles) => roles?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    private void CreateClicked()
+    {
+        createUsername = null;
+        createName = null;
+        createPassword = null;
+        createPasswordConfirm = null;
+        createRoles = null;
+        errorMessage = null;
+        createVisible = true;
+    }
+
+    private void CreateConfirmClicked()
+    {
+        if (state.UserStore == null) return;
+
+        if (createPassword != createPasswordConfirm)
+        {
+            errorMessage = "The Passwords don't match";
+            return;
+        }
+
+        errorMessage = state.UserStore.Create(createUsername?.Trim(), createName, SplitRoles(createRoles), createPassword);
+        if (errorMessage == null)
+        {
+            createPassword = null;
+            createPasswordConfirm = null;
+            createVisible = false;
+            Load();
+        }
+    }
+
+    private void EditClicked(TrakHoundUser user)
+    {
+        editName = user.Name;
+        editRoles = user.Roles != null ? string.Join(", ", user.Roles) : null;
+        editEnabled = user.Enabled;
+        newPassword = null;
+        newPasswordConfirm = null;
+        errorMessage = null;
+        editUser = user;
+    }
+
+    private void EditConfirmClicked()
+    {
+        if (editUser == null || state.UserStore == null) return;
+
+        // Checked before anything is saved, so a mistake in the Password doesn't save the other changes alone
+        var changePassword = !string.IsNullOrEmpty(newPassword);
+        if (changePassword)
+        {
+            errorMessage = newPassword != newPasswordConfirm ? "The Passwords don't match" : TrakHoundUserStore.ValidatePassword(newPassword);
+            if (errorMessage != null) return;
+        }
+
+        errorMessage = state.UserStore.Update(editUser.Id, editName, SplitRoles(editRoles));
+        if (errorMessage == null && changePassword) errorMessage = state.UserStore.SetPassword(editUser.Id, newPassword);
+        if (errorMessage == null && editEnabled != editUser.Enabled) errorMessage = state.UserStore.SetEnabled(editUser.Id, editEnabled);
+
+        if (errorMessage == null)
+        {
+            newPassword = null;
+            newPasswordConfirm = null;
+            editUser = null;
+        }
+
+        Load();
+    }
+
+    private void SignInPageClicked()
+    {
+        var settings = state.UserStore?.Settings ?? new TrakHoundUserSettings();
+        signInProduct = settings.SignInProduct;
+        signInLogo = settings.SignInLogo;
+        signInRoute = settings.SignInRoute;
+        errorMessage = null;
+        CheckSignInRoute();
+        signInPageVisible = true;
+    }
+
+    // The same checks the Instance makes when showing the sign in page, which falls back to its own form when the Page can't be used
+    private void CheckSignInRoute()
+    {
+        signInRouteWarning = null;
+        if (string.IsNullOrWhiteSpace(signInRoute)) return;
+
+        var route = "/" + signInRoute.Trim().TrimStart('/');
+        try
+        {
+            switch (TrakHoundSignInPage.CheckRoute(instance, route, out var resourceId))
+            {
+                case TrakHoundSignInRouteStatus.AppsNotServed: signInRouteWarning = "Apps aren't served over HTTP (Settings > Interfaces), so the Instance's own form is shown instead."; break;
+                case TrakHoundSignInRouteStatus.NotFound: signInRouteWarning = $"No App Page matches {route}, so the Instance's own form is shown instead."; break;
+                case TrakHoundSignInRouteStatus.RequiresSignIn: signInRouteWarning = $"The Page ({resourceId}) requires signing in, so the Instance's own form is shown instead. Make it public with a Profile that has no Identity Provider."; break;
+            }
+        }
+        catch { }
+    }
+
+    private void SignInPageSaveClicked()
+    {
+        if (state.UserStore == null) return;
+
+        var settings = new TrakHoundUserSettings { SignInProduct = signInProduct, SignInLogo = signInLogo, SignInRoute = signInRoute };
+        errorMessage = state.UserStore.SaveSettings(settings);
+        if (errorMessage == null)
+        {
+            signInPageVisible = false;
+            notificationService.AddNotification(NotificationType.Success, "Sign In Page Saved");
+        }
+    }
+
+    private void SignOut(TrakHoundUser user)
+    {
+        if (state.UserStore == null) return;
+
+        var message = state.UserStore.EndSessions(user.Id);
+        if (message == null) notificationService.AddNotification(NotificationType.Success, "Signed Out", $"{user.Username} has to sign in again");
+        else notificationService.AddNotification(NotificationType.Error, "Sign Out Failed", $"{user.Username} : {message}");
+        Load();
+    }
+
+    private void SignOutAllConfirmClicked()
+    {
+        signOutAllVisible = false;
+        if (state.UserStore == null) return;
+
+        var message = state.UserStore.EndAllSessions();
+        if (message == null) notificationService.AddNotification(NotificationType.Success, "Signed Out All Users", "Everyone has to sign in again");
+        else notificationService.AddNotification(NotificationType.Error, "Sign Out Failed", message);
+        Load();
+    }
+
+    private void DeleteConfirmClicked()
+    {
+        if (deleteUser != null && state.UserStore != null)
+        {
+            // A User whose Roles reach the System API or Services can only be deleted by an Admin who can give those Roles
+            var message = state.UserStore.GetRoleDenial(deleteUser.Roles);
+            if (message != null) notificationService.AddNotification(NotificationType.Error, "Delete Failed", $"{deleteUser.Username} : {message}");
+            else state.UserStore.Delete(deleteUser.Id);
+        }
+
+        deleteUser = null;
+        Load();
+    }
+
+}

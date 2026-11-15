@@ -1,0 +1,61 @@
+# Builds the Module Packages from a clean checkout, so that what's released isn't built on a developer's machine.
+# Packages are signed if the TRAKHOUND_SIGNING_KEY secret is set. Nothing is published : download the Packages from the run's artifacts.
+name: Build Packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      TRAKHOUND_SIGNING_KEY: ${{ secrets.TRAKHOUND_SIGNING_KEY }}
+      TRAKHOUND_BUILDER: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      PACKAGE_OUTPUT: ${{ runner.temp }}/packages
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build the CLI
+        run: dotnet build cli/TrakHound.CLI.csproj -c Release
+
+      # Written outside of the checkout, since a new file would count as an uncommitted change. Apps have no Debug Symbols so that they can be rebuilt
+      - name: Build the Packages
+        shell: pwsh
+        run: |
+          $failed = @()
+          foreach ($configuration in Get-ChildItem modules -Filter trakhound.package.json -Recurse -Depth 1 | Where-Object { $_.DirectoryName -notmatch '[\\/]bin[\\/]' }) {
+            & cli/bin/Release/net10.0/th.exe packages dotnet $configuration.DirectoryName --output $env:PACKAGE_OUTPUT --include-debug-symbols false
+            if ($LASTEXITCODE -ne 0) { $failed += $configuration.DirectoryName }
+          }
+          if ($failed.Count -gt 0) { Write-Error "Failed : $($failed -join ', ')"; exit 1 }
+
+      - name: Check the Packages
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($package in Get-ChildItem $env:PACKAGE_OUTPUT -Filter *.thp) {
+            & cli/bin/Release/net10.0/th.exe packages verify --file $package.FullName
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          }
+          if ($failed) { exit 1 }
+
+      - name: List vulnerable dependencies
+        shell: pwsh
+        run: |
+          foreach ($project in Get-ChildItem modules -Filter *.csproj -Recurse -Depth 1) {
+            dotnet list $project.FullName package --vulnerable --include-transitive
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: ${{ runner.temp }}/packages/*.thp
+          if-no-files-found: error

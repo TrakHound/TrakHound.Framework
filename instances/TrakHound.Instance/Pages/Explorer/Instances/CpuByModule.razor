@@ -1,0 +1,238 @@
+@* The CPU used by each Module Type and Module of the selected Instance, with the CPU not measured for any Module (Unattributed) *@
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject TrakHound.Blazor.Services.TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Clients
+@using TrakHound.Instances
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
+
+<div class="cpu-by-module" style="@MetricsChartColors.GetStyle(IsDark)">
+
+    <div class="section-header">
+        <span class="section-title">CPU by Module</span>
+        <span class="section-subtitle">% of total machine capacity · each Module's own code and the Services it calls · updated every second</span>
+    </div>
+
+    @if (usage == null)
+    {
+        <div class="section-empty">@(loaded ? "CPU usage by Module is not available for this Instance" : "Loading..")</div>
+    }
+    else if (!usage.Enabled)
+    {
+        <a class="section-notice" href="_admin/configuration/settings?section=metrics" title="Settings > Metrics > Measure CPU Usage (applied when the Instance is restarted)">
+            <span class="icon fa-solid fa-sharp fa-circle-pause"></span>
+            <span>CPU usage by Module is not measured for this Instance (Process: @FormatPercent(usage.ProcessUsage))</span>
+        </a>
+    }
+    else
+    {
+        <div class="type-tiles">
+            <div class="type-tile process">
+                <span class="type-label">Process</span>
+                <span class="type-value">@FormatPercent(usage.ProcessUsage)</span>
+                <span class="type-detail">the whole Instance</span>
+            </div>
+            @for (var i = 0; i < TrakHoundCpuModuleTypes.All.Count; i++)
+            {
+                var type = TrakHoundCpuModuleTypes.All[i];
+                var typeUsage = usage.Types?.FirstOrDefault(o => o.Type == type);
+                <div class="type-tile">
+                    <span class="type-label"><span class="swatch series-@(i + 1)"></span>@GetTypeLabel(type)</span>
+                    <span class="type-value">@FormatPercent(typeUsage?.Usage ?? 0)</span>
+                    <span class="type-detail">@FormatCpuTime(typeUsage?.CpuTime ?? 0) total</span>
+                </div>
+            }
+            <div class="type-tile" title="The Process usage not measured for any Module (ex. the HTTP server, Services' own background work and the .NET Garbage Collector)">
+                <span class="type-label"><span class="swatch series-6"></span>Unattributed</span>
+                <span class="type-value">@FormatPercent(usage.UnattributedUsage)</span>
+                <span class="type-detail">Process minus Modules</span>
+            </div>
+        </div>
+
+        @if (!usage.ThreadTimeSupported)
+        {
+            <div class="section-note">Per-thread CPU time isn't available on this platform, so the time each Module holds a thread is measured instead</div>
+        }
+
+        <div class="chart-container">
+            <MetricsChart TItem="TrakHoundCpuUsageSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+                          Title="CPU by Module Type"
+                          Subtitle="@($"% of total machine capacity · last {_windowText}")"
+                          Samples="@samples"
+                          Series="@series"
+                          ValueFormatter="@FormatPercent"
+                          MaxPoints="120" />
+        </div>
+
+        <div class="modules-table">
+            <RadzenDataGrid Data="@usage.Modules"
+                            TItem="TrakHoundCpuModuleUsage"
+                            Density="Density.Compact"
+                            AllowSorting="true"
+                            AllowFiltering="true"
+                            FilterMode="FilterMode.Simple"
+                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            AllowPaging="true"
+                            PageSize="20"
+                            AllowColumnResize="true"
+                            EmptyText="No Modules have been measured yet">
+                <Columns>
+                    <RadzenDataGridColumn TItem="TrakHoundCpuModuleUsage" Property="Type" Title="Type" Width="100px">
+                        <Template Context="module">@GetTypeLabel(module.Type)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TrakHoundCpuModuleUsage" Property="Name" Title="Name" MinWidth="160px">
+                        <Template Context="module">
+                            <span class="ellipsis" title="@module.Id">@(module.Name ?? module.Id)</span>
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TrakHoundCpuModuleUsage" Property="Id" Title="ID" MinWidth="160px">
+                        <Template Context="module">
+                            <span class="ellipsis mono" title="@module.Id">@module.Id</span>
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TrakHoundCpuModuleUsage" Property="Usage" Title="CPU" Width="85px" TextAlign="TextAlign.Right" Filterable="false">
+                        <Template Context="module">
+                            <span class="number">@FormatPercent(module.Usage)</span>
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="TrakHoundCpuModuleUsage" Property="CpuTime" Title="CPU Time" Width="105px" TextAlign="TextAlign.Right" Filterable="false">
+                        <Template Context="module">
+                            <span class="number">@FormatCpuTime(module.CpuTime)</span>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private static readonly TimeSpan _updateInterval = TimeSpan.FromSeconds(1);
+    private static readonly string _windowText = $"{TrakHoundModuleCpuMonitors.HistoryDuration.TotalMinutes:0} min";
+    private const string _unattributed = "Unattributed";
+
+    private TrakHoundCpuUsage usage;
+    private TrakHoundCpuUsageSample[] samples = Array.Empty<TrakHoundCpuUsageSample>();
+    private MetricsChartSeries[] series;
+    private bool loaded;
+    private System.Threading.Timer updateTimer;
+    private int updating;
+    private volatile bool disposed;
+
+
+    private bool IsDark => themeService.Theme == TrakHoundThemes.Dark;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+
+        await UpdateUsage();
+        updateTimer = new System.Threading.Timer(UpdateTimerElapsed, null, _updateInterval, _updateInterval);
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        themeService.ThemeChanged -= ThemeChanged;
+        updateTimer?.Dispose();
+    }
+
+    private async Task UpdateUsage()
+    {
+        try
+        {
+            // The selected Instance (which may not be the one hosting this page)
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                usage = await client.Instances.GetCpuUsage();
+                samples = usage?.History?.ToArray() ?? Array.Empty<TrakHoundCpuUsageSample>(); // A new array so the Chart detects the change
+            }
+        }
+        catch { }
+
+        loaded = true;
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        if (disposed || Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (disposed) return;
+                await UpdateUsage();
+                StateHasChanged();
+            });
+        }
+        catch
+        {
+            // The component or circuit may have been disposed
+        }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(IsDark);
+        var items = new List<MetricsChartSeries>();
+        for (var i = 0; i < TrakHoundCpuModuleTypes.All.Count; i++)
+        {
+            var type = TrakHoundCpuModuleTypes.All[i];
+            items.Add(new MetricsChartSeries(GetTypeLabel(type), type, colors[i % colors.Length]));
+        }
+        items.Add(new MetricsChartSeries(_unattributed, _unattributed, colors[5]));
+        series = items.ToArray();
+    }
+
+    private static double GetSampleValue(TrakHoundCpuUsageSample sample, string property)
+    {
+        if (property == _unattributed) return sample.Unattributed;
+        return sample.Types != null && sample.Types.TryGetValue(property, out var value) ? value : 0;
+    }
+
+    private static DateTime GetSampleTimestamp(TrakHoundCpuUsageSample sample) => sample.Timestamp;
+
+    private static string GetTypeLabel(string type)
+    {
+        switch (type)
+        {
+            case TrakHoundCpuModuleTypes.Worker: return "Workers";
+            case TrakHoundCpuModuleTypes.Function: return "Functions";
+            case TrakHoundCpuModuleTypes.Api: return "APIs";
+            case TrakHoundCpuModuleTypes.App: return "Apps";
+            case TrakHoundCpuModuleTypes.Admin: return "Admin";
+            default: return type;
+        }
+    }
+
+    private static string FormatPercent(double value) => value >= 10 ? $"{value:0}%" : $"{value:0.#}%";
+
+    /// <summary>
+    /// Milliseconds of CPU time
+    /// </summary>
+    private static string FormatCpuTime(double milliseconds)
+    {
+        if (milliseconds >= 3600000) return $"{milliseconds / 3600000:0.#} h";
+        if (milliseconds >= 60000) return $"{milliseconds / 60000:0.#} min";
+        if (milliseconds >= 1000) return $"{milliseconds / 1000:0.#} s";
+        return $"{milliseconds:0} ms";
+    }
+
+}

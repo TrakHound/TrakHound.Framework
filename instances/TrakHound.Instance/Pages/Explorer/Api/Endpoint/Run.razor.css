@@ -1,0 +1,794 @@
+﻿/* Run and the Status across the top, the URL under them, then the Response beside the Request Parameters (stacked on a narrow window, see the bottom of this file) */
+.run-panel {
+    display: grid;
+    /* --input-width is set by dragging the Request Parameters' edge. It can't leave the Response less than 400px (when the page is narrowed after) */
+    grid-template-columns: minmax(0, 1fr) min(var(--input-width, clamp(420px, 38%, 600px)), max(300px, calc(100% - 400px)));
+    grid-template-rows: max-content max-content minmax(0, 1fr);
+    height: 100%;
+    width: 100%;
+    padding-top: 10px;
+    font-size: var(--fontSizeMd);
+}
+
+.hidden-input {
+    display: none;
+}
+
+
+/* Run (or Cancel / Unsubscribe) and the Status */
+.run-toolbar {
+    grid-row: 1;
+    grid-column: 1 / 3;
+    display: flex;
+    align-items: stretch;
+}
+
+    .run-toolbar .btn-run {
+        flex: 0 0 135px;
+        min-height: 42px;
+        font-size: 0.9375rem;
+        border-radius: 0;
+        /* Run keeps its own size, not the shared .btn size */
+        display: inline-block;
+        height: auto;
+        padding: .375rem .75rem;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+        .run-toolbar .btn-run .icon {
+            margin-right: 7px;
+            font-size: inherit;
+            line-height: inherit;
+        }
+
+        .run-toolbar .btn-run:focus {
+            box-shadow: none;
+        }
+
+        .run-toolbar .btn-run.btn-loading .icon {
+            animation: spin 0.65s linear infinite;
+        }
+
+    .run-toolbar .btn-cancel .icon {
+        color: var(--colorRed);
+    }
+
+    .run-toolbar .btn-cancel:disabled {
+        opacity: 1;
+        color: var(--textMild);
+    }
+
+.request-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColor);
+}
+
+.request-status-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    min-width: 150px;
+    border-right: 1px solid var(--borderColor);
+}
+
+.request-status-icon {
+    color: var(--textLight);
+}
+
+    .request-status-icon.spinning {
+        animation: spin 0.65s linear infinite;
+    }
+
+.request-status {
+    font-size: var(--fontSizeBase);
+    font-weight: bold;
+    color: var(--textDark);
+}
+
+.request-panel.success .request-status-icon,
+.request-panel.subscribed .request-status-icon,
+.request-panel.subscribed .request-status {
+    color: var(--colorGreen);
+}
+
+.request-panel.running .request-status-icon,
+.request-panel.subscribing .request-status-icon {
+    color: var(--accent);
+}
+
+.request-panel.cancelled .request-status-icon,
+.request-panel.cancelling .request-status-icon {
+    color: var(--colorOrange);
+}
+
+.request-panel.error .request-status-icon,
+.request-panel.error .request-status {
+    color: var(--colorRed);
+}
+
+.request-fact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 16px;
+    min-width: 90px;
+    border-right: 1px solid var(--borderColor);
+}
+
+.request-fact-label {
+    font-size: 0.625rem; /* 10px, below the smallest size token (--fontSizeXs) */
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--textLight);
+}
+
+.request-fact-value {
+    font-size: var(--fontSizeMd);
+    color: var(--textDark);
+    white-space: nowrap;
+    min-height: 1.2em;
+}
+
+.request-fact-strong {
+    font-weight: bold;
+}
+
+.request-message-container {
+    flex: 1 1 120px;
+    min-width: 0;
+    padding: 6px 18px;
+    overflow: hidden;
+}
+
+.request-message {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: var(--fontSizeMd);
+    line-height: 1.45;
+    color: var(--textMild);
+    word-break: break-word;
+}
+
+    .request-message.error {
+        color: var(--colorRed);
+    }
+
+
+/* The Request URL (and Copy) */
+.request-url-bar {
+    grid-row: 2;
+    grid-column: 1 / 3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px 2px 12px;
+}
+
+.request-url {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm);
+}
+
+.request-url-bar .btn-copy {
+    flex: 0 0 auto;
+    padding: 0;
+    font-size: var(--fontSizeSm);
+    text-decoration: none;
+    color: var(--textMild);
+}
+
+    .request-url-bar .btn-copy:hover {
+        color: var(--accentLight);
+    }
+
+    .request-url-bar .btn-copy .icon {
+        margin-right: 5px;
+    }
+
+    .request-url-bar .btn-copy.copied,
+    .request-url-bar .btn-copy.copied .icon {
+        color: var(--colorGreen);
+    }
+
+
+/* Shared */
+.section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.section-label {
+    display: block;
+    font-size: var(--fontSizeXs, 0.75rem);
+    font-weight: bold;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--textLight);
+}
+
+.section-detail {
+    font-weight: normal;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+.empty-message {
+    display: block;
+    padding: 10px 2px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.response-no-preview {
+    padding: 20px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+
+/* Response */
+.result-pane {
+    grid-row: 3;
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow: hidden;
+    padding-right: 20px;
+    padding-bottom: 10px;
+}
+
+    .result-pane > div {
+        flex: 0 0 auto;
+    }
+
+    .result-pane > .response-content {
+        flex: 1 1 auto;
+        min-height: 200px;
+        overflow: hidden;
+        border: 1px solid var(--borderColorLight);
+    }
+
+.response-parameters-panel {
+    max-height: 35%;
+    overflow: auto;
+}
+
+.response-parameters {
+    width: 100%;
+    overflow: hidden;
+    border-top: 1px solid var(--tableBorderColor);
+}
+
+    .response-parameters .table {
+        width: 100%;
+        margin: 0;
+    }
+
+        .response-parameters .table td {
+            font-size: var(--fontSizeSm);
+            line-height: 16px;
+            padding: 4px 10px;
+            border-bottom: 1px solid var(--borderColorLight);
+        }
+
+            .response-parameters .table td.parameter-key {
+                width: 200px;
+                font-weight: 600;
+                color: var(--textMild);
+            }
+
+            .response-parameters .table td.parameter-value {
+                word-break: break-word;
+            }
+
+
+/* Stream Messages (newest first) */
+.result-pane.stream {
+    overflow-y: auto;
+}
+
+.stream-header {
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.stream-listening-empty {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 2px;
+}
+
+    .stream-listening-empty .empty-message {
+        padding: 0;
+    }
+
+.stream-messages {
+    border: 1px solid var(--borderColorLight);
+}
+
+.stream-message {
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .stream-message:last-child {
+        border-bottom: none;
+    }
+
+.stream-message-header {
+    display: grid;
+    grid-template-columns: max-content max-content max-content max-content minmax(0, 1fr) max-content;
+    align-items: center;
+    column-gap: 12px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+    .stream-message-header:hover {
+        background: var(--panelBackgroundMedium);
+    }
+
+.stream-message.selected .stream-message-header {
+    background: var(--panelBackgroundMedium);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.stream-message-toggle {
+    width: 10px;
+    font-size: var(--fontSizeXs, 0.75rem);
+    color: var(--textLight);
+}
+
+.stream-message-number {
+    min-width: 36px;
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+.stream-message-time {
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm);
+    color: var(--textDark);
+}
+
+.stream-message-status {
+    font-size: var(--fontSizeSm);
+    font-weight: bold;
+    color: var(--colorGreen);
+}
+
+.stream-message.error .stream-message-status {
+    color: var(--colorRed);
+}
+
+.stream-message-preview {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+.stream-message-size {
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+.stream-message-content {
+    height: 320px;
+    overflow: hidden;
+}
+
+
+/* Request Parameters (a table, in a sidebar that can be collapsed) */
+.input-pane {
+    grid-row: 3;
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 0 20px 15px;
+    border-left: 1px solid var(--borderColorLight);
+    position: relative;
+}
+
+    /* Centered on the Request Parameters' left border */
+    .input-pane > .resize-handle {
+        left: -5px;
+    }
+
+    .input-pane.collapsed > .resize-handle {
+        display: none;
+    }
+
+    .input-pane > .section-header {
+        flex: 0 0 auto;
+        align-items: center;
+    }
+
+.section-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-clear {
+    padding: 0;
+    text-decoration: none;
+}
+
+.btn-collapse {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
+    .btn-collapse:hover {
+        color: var(--accentLight);
+    }
+
+    .btn-collapse .icon {
+        margin: 0;
+    }
+
+/* Collapsed : a strip with the Expand button and the label running down it */
+.run-panel.parameters-collapsed {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.input-pane.collapsed {
+    width: 34px;
+    padding: 0;
+    align-items: center;
+}
+
+    .input-pane.collapsed > .section-header {
+        flex-direction: column;
+        gap: 12px;
+        margin: 0;
+    }
+
+    .input-pane.collapsed .section-label {
+        writing-mode: vertical-rl;
+        cursor: pointer;
+    }
+
+        .input-pane.collapsed .section-label:hover {
+            color: var(--accentLight);
+        }
+
+.request-parameters {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    border-top: 1px solid var(--tableBorderColor);
+    border-left: 1px solid var(--tableBorderColor);
+}
+
+    .request-parameters .table {
+        margin: 0;
+        border-top: none !important;
+    }
+
+    .request-parameters thead {
+        border: none !important;
+        border-bottom: 1px solid var(--tableHeaderBorderColor) !important;
+    }
+
+    /* The wrapper draws the top border (.table-bordered would add a second one, in the text color) */
+    .request-parameters thead tr {
+        border-top: none;
+    }
+
+    .request-parameters th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        border: none !important;
+        border-bottom: 1px solid var(--tableHeaderBorderColor) !important;
+        padding: 2px 8px;
+        background: var(--tableHeaderBackground) !important;
+        color: var(--tableHeaderText) !important;
+    }
+
+    .request-parameters td {
+        font-size: var(--fontSizeMd);
+        line-height: 20px;
+        padding: 4px 8px;
+        height: auto;
+        vertical-align: top;
+    }
+
+.name-cell {
+    white-space: nowrap;
+    cursor: help;
+}
+
+    .name-cell .parameter-name {
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .name-cell .required {
+        margin-left: 3px;
+        font-weight: bold;
+        color: var(--colorRed);
+    }
+
+
+.in-cell {
+    width: 1%;
+    font-size: var(--fontSizeSm) !important;
+    color: var(--textMild);
+}
+
+.data-type-cell {
+    width: 1%;
+    font-family: var(--fontMono);
+    font-size: var(--fontSizeSm) !important;
+    white-space: nowrap;
+}
+
+.request-parameters td.value-cell {
+    width: 100%;
+    min-width: 120px;
+    padding: 2px;
+}
+
+    .value-cell ::deep .text-box {
+        padding: 0;
+        margin: 0;
+        border-radius: 0;
+    }
+
+        .value-cell ::deep .text-box .form-group {
+            padding: 0;
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .value-cell ::deep .text-box input {
+            width: 100%;
+            font-size: var(--fontSizeMd) !important;
+            border-radius: 0;
+            border: 1px solid var(--inputPrimaryBorder) !important;
+            padding: 0px 8px !important;
+            height: 26px !important;
+            background: var(--inputPrimaryBackground) !important;
+            color: var(--inputPrimaryText) !important;
+        }
+
+            .value-cell ::deep .text-box input::placeholder {
+                color: var(--inputPrimaryPlaceholder);
+                font-size: var(--fontSizeSm) !important;
+                font-style: normal;
+            }
+
+            .value-cell ::deep .text-box input:focus {
+                outline: none;
+                box-shadow: var(--focusRing);
+            }
+
+    .value-cell ::deep .rz-textarea {
+        display: block;
+        width: 100%;
+        min-height: 140px;
+        resize: vertical;
+        font-family: var(--fontMono);
+        font-size: var(--fontSizeSm) !important;
+        border-radius: 0;
+        border: 1px solid var(--inputPrimaryBorder) !important;
+        background: var(--inputPrimaryBackground) !important;
+        margin: 0;
+        padding: 5px 10px !important;
+        color: var(--inputPrimaryText) !important;
+    }
+
+        .value-cell ::deep .rz-textarea:focus {
+            outline: none;
+            box-shadow: var(--focusRing);
+        }
+
+/* The Body's row and the full width row with its editor below it read as one */
+.request-parameters tr.continued td {
+    border-bottom: none;
+}
+
+/* A required Parameter without a value (after Run) */
+tr.missing .parameter-name {
+    color: var(--colorRed);
+}
+
+tr.missing ::deep .text-box input,
+tr.missing ::deep .rz-textarea {
+    border-color: var(--colorRed) !important;
+    background: color-mix(in srgb, var(--colorRed) 12%, var(--inputPrimaryBackground)) !important;
+}
+
+/* Format and Example (JSON Body) */
+.body-tools {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 2px 6px;
+}
+
+    .body-tools .btn {
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+.body-message {
+    margin-top: 3px;
+    padding: 2px 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--fontSizeSm);
+    color: var(--colorRed);
+    background: color-mix(in srgb, var(--colorRed) 12%, transparent);
+}
+
+/* A Binary Body (Text or File) */
+.value-cell .body-upload {
+    display: grid;
+    border: 1px solid var(--inputPrimaryBorder);
+}
+
+    .value-cell .body-upload.text {
+        grid-template-rows: max-content 1fr;
+    }
+
+.value-cell .body-upload-toolbar {
+    background: var(--inputPrimaryBackground) !important;
+    padding: 0;
+}
+
+    .value-cell .body-upload-toolbar ::deep .rz-dropdown {
+        width: 100px;
+        background: var(--inputPrimaryBackground) !important;
+        color: var(--inputPrimaryText) !important;
+        border: none !important;
+        border-right: 1px solid var(--inputPrimaryBorder) !important;
+        border-radius: 0 !important;
+        margin: 0;
+        height: 30px !important;
+        font-size: var(--fontSizeSm);
+    }
+
+        .value-cell .body-upload-toolbar ::deep .rz-dropdown:focus {
+            outline: none !important;
+            box-shadow: none !important;
+        }
+
+.value-cell .body-upload-content ::deep textarea {
+    border: none !important;
+    border-top: 1px solid var(--inputPrimaryBorder) !important;
+}
+
+.value-cell .body-upload-content .body-upload-file {
+    display: grid;
+    grid-template-columns: max-content max-content 1fr;
+    border-top: 1px solid var(--inputPrimaryBorder);
+}
+
+    .value-cell .body-upload-content .body-upload-file .body-upload-file-button {
+        border-right: 1px solid var(--inputPrimaryBorder);
+    }
+
+        .value-cell .body-upload-content .body-upload-file .body-upload-file-button .btn {
+            background: var(--inputPrimaryBackground);
+            color: var(--inputPrimaryText);
+            border: none !important;
+            margin: 0 !important;
+        }
+
+            .value-cell .body-upload-content .body-upload-file .body-upload-file-button .btn:hover {
+                background: var(--accentLight);
+                color: #fff;
+            }
+
+    .value-cell .body-upload-content .body-upload-file .body-upload-file-path ::deep .text-box input {
+        border: none !important;
+    }
+
+    .value-cell .body-upload-content .body-upload-file .body-upload-file-size {
+        background: var(--inputPrimaryBackground);
+        border-right: 1px solid var(--inputPrimaryBorder);
+        padding: 0 15px;
+        line-height: 30px;
+        color: var(--inputPrimaryText);
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+    }
+
+    .value-cell .body-upload-content .body-upload-file .body-upload-placeholder {
+        background: var(--inputPrimaryBackground);
+    }
+
+
+/* Stacked on a narrow window (the Explorer tree takes part of the width) : the Request Parameters above the Response */
+@media (max-width: 1100px) {
+    .run-panel,
+    .run-panel.parameters-collapsed {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: max-content max-content max-content minmax(0, 1fr);
+    }
+
+    .run-toolbar,
+    .request-url-bar {
+        grid-column: 1;
+    }
+
+    .input-pane {
+        grid-row: 3;
+        grid-column: 1;
+        max-height: 40vh;
+        padding: 0 0 10px;
+        border-left: none;
+        border-bottom: 1px solid var(--borderColorLight);
+    }
+
+        /* Stacked, the Request Parameters are as wide as the page */
+        .input-pane > .resize-handle {
+            display: none;
+        }
+
+        /* Collapsed to its header */
+        .input-pane.collapsed {
+            width: auto;
+            align-items: stretch;
+            padding-bottom: 6px;
+        }
+
+            .input-pane.collapsed > .section-header {
+                flex-direction: row;
+                justify-content: flex-start;
+                gap: 8px;
+            }
+
+            .input-pane.collapsed .section-label {
+                writing-mode: horizontal-tb;
+            }
+
+            .input-pane.collapsed .btn-collapse .icon {
+                transform: rotate(-90deg);
+            }
+
+    .input-pane:not(.collapsed) .btn-collapse .icon {
+        transform: rotate(-90deg);
+    }
+
+    .result-pane {
+        grid-row: 4;
+        grid-column: 1;
+        padding-right: 0;
+        padding-top: 10px;
+    }
+}

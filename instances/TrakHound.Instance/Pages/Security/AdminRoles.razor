@@ -1,0 +1,348 @@
+@page "/_admin/security/admin-roles"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.Admins)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHound.Instance.Security.TrakHoundAdminRoleStore store
+@inject TrakHound.Instance.Security.TrakHoundAdminAccountStore accounts
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@using TrakHound.Instances
+@using TrakHound.Instance.Components
+@using TrakHound.Instance.Security
+
+<TrakHoundPageTitle Text="Admin Roles" />
+<AreaBreadcrumbs Items="@([new("Admin Roles")])" />
+
+<Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="page">
+
+    <div class="page-header">
+        <span class="page-icon fa-solid fa-sharp fa-list-check"></span>
+        <div class="page-title">
+            <span class="title">Admin Roles</span>
+            <span class="description">What the Admin Accounts that hold each Role can view and change in this Admin interface. An Account with several Roles can do what any of them allows</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <div class="toolbar-search">
+            <a class="btn btn-sm btn-command" href="_admin/security/admins"><span class="icon fa-solid fa-sharp fa-user-gear"></span>Admin Accounts</a>
+        </div>
+        <div class="toolbar-buttons">
+            @if (canWrite)
+            {
+                <button class="admin-write btn btn-primary" @onclick="AddClicked"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Role</button>
+            }
+        </div>
+    </div>
+
+    <div class="table-container">
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Role</th>
+                    <th>What it allows</th>
+                    <th class="col-narrow">Accounts</th>
+                    <th class="col-actions"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var role in TrakHoundAdminSecurity.AllRoles)
+                {
+                    var holders = GetHolderCount(role.Id);
+
+                    <tr>
+                        <td>
+                            <span class="item-name">@role.Name</span>
+                            <code class="resource-id">@role.Id</code>
+                            @if (role.BuiltIn)
+                            {
+                                <span class="chip">Built in</span>
+                            }
+                        </td>
+                        <td>@(role.BuiltIn ? role.Description : Describe(role))</td>
+                        <td class="col-narrow">@holders</td>
+                        <td class="col-actions">
+                            @if (role.BuiltIn || !canWrite)
+                            {
+                                <button class="btn btn-sm btn-command" @onclick="() => ViewClicked(role)"><span class="icon fa-regular fa-sharp fa-eye"></span>View</button>
+                            }
+                            else
+                            {
+                                <button class="admin-write btn btn-sm btn-command" @onclick="() => EditClicked(role)"><span class="icon fa-regular fa-sharp fa-pen-to-square"></span>Edit</button>
+                                <button class="admin-write btn btn-sm btn-command btn-remove" @onclick="() => DeleteClicked(role)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+    </div>
+
+    <Modal Class="security-modal admin-role-modal" Visible="@(editRole != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-list-check"></span>
+            <span class="modal-header-title">@(readOnly ? editRole?.Name : isNew ? "Add Admin Role" : "Edit Admin Role")</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (editRole != null)
+            {
+                @if (!readOnly)
+                {
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label for="role-name">Name</label>
+                            <input id="role-name" class="form-control" @bind="editRole.Name" @bind:event="oninput" placeholder="ex. Line 1 Operator" autocomplete="off" />
+                        </div>
+                        <div class="form-field">
+                            <label for="role-id">ID</label>
+                            <input id="role-id" class="form-control" @bind="editRole.Id" @bind:event="oninput" placeholder="ex. line-1-operator" spellcheck="false" autocomplete="off" disabled="@(!isNew)" />
+                            <span class="hint">Lowercase letters, numbers and '-'. It can't be changed later</span>
+                        </div>
+                        <div class="form-field wide">
+                            <label for="role-description">Description</label>
+                            <input id="role-description" class="form-control" @bind="editRole.Description" placeholder="Optional" autocomplete="off" />
+                        </div>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(editRole.Description))
+                {
+                    <p class="muted">@editRole.Description</p>
+                }
+
+                <table class="data-table admin-role-grants">
+                    <thead>
+                        <tr>
+                            <th>Area</th>
+                            <th class="col-narrow">Access</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var resource in TrakHoundAdminSecurity.Resources)
+                        {
+                            var access = GetAccess(resource.Id);
+
+                            <tr>
+                                <td>
+                                    <span class="item-name">@resource.Title</span>
+                                    <span class="muted grant-description">@resource.Description</span>
+                                </td>
+                                <td class="col-narrow">
+                                    @if (readOnly || resource.Id == TrakHoundAdminSecurity.Admins)
+                                    {
+                                        @* Only the Owner Role includes the Admin Accounts *@
+                                        <span class="@(access == "" ? "muted" : "status ok")">@GetAccessLabel(access)</span>
+                                    }
+                                    else
+                                    {
+                                        <select class="form-select" aria-label="@($"Access to {resource.Title}")" value="@access" @onchange="e => SetAccess(resource.Id, e.Value?.ToString())">
+                                            <option value="">None</option>
+                                            <option value="@TrakHoundAdminSecurity.ReadPermission">View</option>
+                                            <option value="@TrakHoundAdminSecurity.WritePermission">Change</option>
+                                        </select>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                @if (!readOnly)
+                {
+                    <div class="form-grid admin-role-grantable">
+                        <div class="form-field wide">
+                            <label for="role-grantable">Roles it can give Users and API Keys</label>
+                            <input id="role-grantable" class="form-control" @bind="grantableRoles" placeholder="Any (ex. operators, line-1-*)" spellcheck="false" autocomplete="off" />
+                            <span class="hint">Comma separated Role names, or patterns ending with *. Leave blank for any Role. Only matters when the Role can change Users or API Keys. A User or Key with a Role outside this list can't be changed either</span>
+                        </div>
+                    </div>
+                }
+                else if (!editRole.GrantableRoles.IsNullOrEmpty())
+                {
+                    <p class="muted">Can give Users and API Keys these Roles : @string.Join(", ", editRole.GrantableRoles)</p>
+                }
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="callout danger admin-role-error">
+                        <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                        <div>@errorMessage</div>
+                    </div>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => editRole = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>@(readOnly ? "Close" : "Cancel")</button>
+            @if (!readOnly)
+            {
+                <button class="admin-write btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(editRole?.Name) || string.IsNullOrWhiteSpace(editRole?.Id))" @onclick="SaveClicked"><span class="icon fa-solid fa-sharp fa-check"></span>Save</button>
+            }
+        </FooterContent>
+    </Modal>
+
+    <Modal Class="security-modal" Visible="@(deleteRole != null)">
+        <HeaderContent>
+            <span class="modal-header-icon fa-solid fa-sharp fa-trash-can"></span>
+            <span class="modal-header-title">Delete Admin Role</span>
+        </HeaderContent>
+        <BodyContent>
+            @if (deleteRole != null)
+            {
+                <p>Delete the Admin Role <strong>@deleteRole.Name</strong>?</p>
+                <p class="muted">This can't be undone. A Role that an Admin Account holds can't be deleted : take it off the Account first.</p>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="callout danger admin-role-error">
+                        <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                        <div>@errorMessage</div>
+                    </div>
+                }
+            }
+        </BodyContent>
+        <FooterContent>
+            <button class="btn btn-secondary" @onclick="() => deleteRole = null"><span class="icon fa-solid fa-sharp fa-xmark"></span>Cancel</button>
+            <button class="admin-write btn btn-danger" @onclick="DeleteConfirmClicked"><span class="icon fa-solid fa-sharp fa-trash-can"></span>Delete</button>
+        </FooterContent>
+    </Modal>
+
+</div>
+
+@code {
+
+    private bool canWrite;
+    private string errorMessage;
+
+    private TrakHoundAdminRole editRole;
+    private bool isNew;
+    private bool readOnly;
+    private string grantableRoles;
+
+    private TrakHoundAdminRole deleteRole;
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+
+    protected override void OnInitialized()
+    {
+        canWrite = adminAccess.CanWrite(TrakHoundAdminSecurity.Admins);
+        store.Changed += Changed;
+        accounts.Changed += Changed;
+        notificationService.Updated += Changed;
+    }
+
+    public void Dispose()
+    {
+        store.Changed -= Changed;
+        accounts.Changed -= Changed;
+        notificationService.Updated -= Changed;
+        notificationService.Dispose();
+    }
+
+    private void Changed(object sender, EventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    private int GetHolderCount(string roleId)
+    {
+        return accounts.GetAccounts().Count(o => o.RoleIds.Any(r => string.Equals(r, roleId, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    // A custom Role's own Description, or a summary of what it allows
+    private static string Describe(TrakHoundAdminRole role)
+    {
+        if (!string.IsNullOrEmpty(role.Description)) return role.Description;
+
+        var change = TrakHoundAdminSecurity.Resources.Count(o => role.Allows(o.Id, TrakHoundAdminSecurity.WritePermission));
+        var view = TrakHoundAdminSecurity.Resources.Count(o => role.Allows(o.Id, TrakHoundAdminSecurity.ReadPermission)) - change;
+        static string Areas(int count) => count == 1 ? "1 area" : $"{count} areas";
+
+        if (change == 0 && view == 0) return "Nothing yet";
+        if (change == 0) return $"Views {Areas(view)}";
+        return view == 0 ? $"Changes {Areas(change)}" : $"Changes {Areas(change)} and views {view} more";
+    }
+
+    private string GetAccess(string resourceId)
+    {
+        if (editRole.Allows(resourceId, TrakHoundAdminSecurity.WritePermission)) return TrakHoundAdminSecurity.WritePermission;
+        return editRole.Allows(resourceId, TrakHoundAdminSecurity.ReadPermission) ? TrakHoundAdminSecurity.ReadPermission : "";
+    }
+
+    private static string GetAccessLabel(string access)
+    {
+        return access == TrakHoundAdminSecurity.WritePermission ? "Change" : access == TrakHoundAdminSecurity.ReadPermission ? "View" : "None";
+    }
+
+    private void SetAccess(string resourceId, string access)
+    {
+        editRole.Grants ??= new List<TrakHoundAdminGrant>();
+        editRole.Grants.RemoveAll(o => o.Resource == resourceId);
+        if (!string.IsNullOrEmpty(access)) editRole.Grants.Add(new TrakHoundAdminGrant(resourceId, access));
+    }
+
+    private void AddClicked()
+    {
+        errorMessage = null;
+        isNew = true;
+        readOnly = false;
+        grantableRoles = null;
+        editRole = new TrakHoundAdminRole { Grants = new List<TrakHoundAdminGrant>() };
+    }
+
+    private void EditClicked(TrakHoundAdminRole role)
+    {
+        errorMessage = null;
+        isNew = false;
+        readOnly = false;
+        grantableRoles = role.GrantableRoles != null ? string.Join(", ", role.GrantableRoles) : null;
+        editRole = role.Clone();
+    }
+
+    private void ViewClicked(TrakHoundAdminRole role)
+    {
+        errorMessage = null;
+        isNew = false;
+        readOnly = true;
+        editRole = role.Clone();
+    }
+
+    private void SaveClicked()
+    {
+        if (editRole == null) return;
+
+        editRole.Id = editRole.Id?.Trim();
+        editRole.GrantableRoles = grantableRoles?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        if (isNew && TrakHoundAdminSecurity.GetRole(editRole.Id) != null)
+        {
+            errorMessage = $"A Role with the ID '{editRole.Id}' already exists";
+            return;
+        }
+
+        errorMessage = store.Save(editRole);
+        if (errorMessage != null) return;
+
+        // Each Role is a file in the Profile, so a change is recorded in the Audit Log with the Admin who made it
+        instance.AuditMonitor?.RecordFile(store.GetRolePath(editRole.Id));
+        notificationService.AddNotification(NotificationType.Success, isNew ? "Admin Role Added" : "Admin Role Saved", editRole.Name);
+        editRole = null;
+    }
+
+    private void DeleteClicked(TrakHoundAdminRole role)
+    {
+        errorMessage = null;
+        deleteRole = role;
+    }
+
+    private void DeleteConfirmClicked()
+    {
+        if (deleteRole == null) return;
+
+        errorMessage = store.Delete(deleteRole.Id, accounts.GetAccounts());
+        if (errorMessage != null) return;
+
+        instance.AuditMonitor?.RecordFile(store.GetRolePath(deleteRole.Id));
+        deleteRole = null;
+    }
+
+}

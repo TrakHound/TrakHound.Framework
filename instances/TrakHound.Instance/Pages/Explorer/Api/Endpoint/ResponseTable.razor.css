@@ -1,0 +1,35 @@
+﻿/* Like the other list tables : a plain header and row borders only */
+th {
+    padding: 6px 12px;
+    font-size: var(--fontSizeSm);
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--textMild);
+    background: transparent;
+    border-bottom: 1px solid var(--borderColor);
+}
+
+td {
+    font-size: var(--fontSizeBase);
+    padding: 6px 12px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.status-code-cell {
+    width: 100px;
+}
+
+.content-type-cell {
+    width: 175px;
+}
+
+.schema-cell {
+    padding: 20px;
+}
+
+pre {
+    font-size: var(--fontSizeSm);
+    font-family: var(--fontMono);
+    color: var(--textMild);
+}

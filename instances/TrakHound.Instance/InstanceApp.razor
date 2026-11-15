@@ -1,0 +1,101 @@
+﻿@using TrakHound.Instances
+@inject TrakHoundInstanceConfiguration instanceConfiguration
+
+@if (isAppHost)
+{
+    @* App pages (the App Host is the catch-all Endpoint for every route that isn't an Instance page) *@
+    <AppDocument />
+}
+else
+{
+    <!DOCTYPE html>
+    <html lang="en">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <base href="@InstanceAssets.GetBasePath(instanceConfiguration.BasePath)" />
+
+        @* Critical Images (img tags aren't rendered until the Blazor circuit connects since prerender is disabled) *@
+        <link rel="preload" as="image" href="img/trakhound-logo.svg" fetchpriority="high" />
+        <link rel="preload" as="image" href="img/trakhound-logo-text.svg" />
+
+        @* Fonts (otherwise not discovered until the stylesheet is parsed and an icon is rendered) *@
+        @foreach (var font in InstanceAssets.IconFonts)
+        {
+            <link rel="preload" as="font" type="font/woff2" crossorigin href="@font" />
+        }
+
+        @* Package Stylesheets *@
+        @foreach (var stylesheet in InstanceAssets.IconStylesheets)
+        {
+            <link rel="stylesheet" href="@stylesheet" />
+        }
+
+        @* Radzen Stylesheets *@
+        <link rel="stylesheet" href="@InstanceAssets.RadzenStylesheet" />
+
+        @* TrakHound Stylesheets *@
+        <link rel="stylesheet" href="@InstanceAssets.TrakHoundStylesheet" />
+        <link rel="stylesheet" href="@InstanceAssets.GetInstanceAsset("_content/TrakHound.Blazor.Diagrams/style.css")" />
+        <link rel="stylesheet" href="@InstanceAssets.GetInstanceAsset("_content/TrakHound.Blazor.Diagrams/default.styles.css")" />
+
+        @* Application Stylesheet *@
+        <link rel="stylesheet" href="@InstanceAssets.TokensStylesheet" />
+        <link rel="stylesheet" href="@InstanceAssets.GetInstanceAsset("css/admin.css")" />
+        <link rel="stylesheet" href="@InstanceAssets.InstanceStylesheet" />
+
+        @* Favicon *@
+        <link rel="icon" href="favicon.ico" sizes="32x32" />
+        <link rel="icon" href="img/favicons/icon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="img/favicons/apple-touch-icon.png" />
+
+        <TrakHoundHeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+        <TrakHoundThemeOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+
+    </head>
+
+    <body>
+
+        <InstanceRoutes @rendermode="new InteractiveServerRenderMode(prerender: false)" ErrorStatusCode="@errorStatusCode" ErrorRequestId="@errorRequestId" />
+
+        <TrakHound.Instance.Pages.InstanceDisconnectionPage />
+
+        <script src="@InstanceAssets.RadzenScript"></script>
+        <script src="@InstanceAssets.BlazorScript" autostart="false"></script>
+        <script src="@InstanceAssets.TrakHoundBlazorScript"></script>
+        <script src="@InstanceAssets.TrakHoundScript"></script>
+        <script src="@InstanceAssets.GetInstanceAsset("_content/TrakHound.Blazor.Diagrams/script.js")"></script>
+
+    </body>
+
+    </html>
+}
+
+@code {
+
+    private bool isAppHost;
+    private int? errorStatusCode;
+    private string errorRequestId;
+
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        // An unhandled error re-executed to the Error Page : the browser's URL is still the failed Path (which the Routes would route),
+        // so pass them the Status and the Request ID (logged with the error, see TrakHoundExceptionLogger)
+        if (HttpContext?.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>() != null)
+        {
+            errorStatusCode = HttpContext.Response.StatusCode;
+            errorRequestId = HttpContext.TraceIdentifier;
+        }
+        else
+        {
+            isAppHost = Pages.AppHost.IsEndpoint(HttpContext?.GetEndpoint());
+        }
+    }
+
+}

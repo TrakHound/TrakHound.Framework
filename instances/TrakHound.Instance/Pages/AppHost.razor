@@ -1,0 +1,19 @@
+@page "/{**path}"
+@* The App Host : a catch-all Razor Component Endpoint for every route that isn't an Instance page (more specific routes win).
+   It is never rendered : InstanceApp renders the App document (and AppRoutes routes to the App's Page) when this is the Endpoint *@
+
+@code {
+
+    [Parameter]
+    public string Path { get; set; }
+
+
+    /// <summary>
+    /// Whether the Endpoint is the App Host (so the Request is for an App page)
+    /// </summary>
+    public static bool IsEndpoint(Endpoint endpoint)
+    {
+        return endpoint?.Metadata.GetMetadata<Microsoft.AspNetCore.Components.Endpoints.ComponentTypeMetadata>()?.Type == typeof(AppHost);
+    }
+
+}

@@ -1,0 +1,167 @@
+@implements IDisposable
+@inject JavascriptService javascriptService
+@using TrakHound.Blazor.Services
+@using TrakHound.Logging
+
+<div class="log-stream" @ref="container">
+
+    <LogRows Rows="@lines" ShowSource="true" />
+
+</div>
+
+@code {
+
+    private const int FollowThreshold = 30; // Pixels from the bottom that still count as "at the bottom"
+
+    private readonly ThrottleEvent _logThrottle = new ThrottleEvent(500);
+    private LogStreamBuffer buffer; // The Buffer parameter, or one owned by this component
+    private bool ownsBuffer;
+    private LogRow[] lines = Array.Empty<LogRow>(); // Sorted snapshot that is Rendered
+    private string previousFilter;
+    private ElementReference container;
+    private bool scrollToBottom = true; // Start at the newest lines
+    private bool disposed;
+
+
+    [Parameter]
+    public ITrakHoundStream<IEnumerable<TrakHoundLogItem>> Consumer { get; set; }
+
+    /// <summary>
+    /// Keeps the lines (and the subscription) when this component isn't rendered (ex. a tab that isn't selected).
+    /// Without it, the lines are kept by this component and lost when it is removed
+    /// </summary>
+    [Parameter]
+    public LogStreamBuffer Buffer { get; set; }
+
+    [Parameter]
+    public int MaxLines { get; set; } = LogStreamBuffer.DefaultMaxLines;
+
+    /// <summary>
+    /// Only show the lines whose Message or Source contains this text (ignoring case). Every line is still kept
+    /// </summary>
+    [Parameter]
+    public string Filter { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        _logThrottle.Elapsed += LogUpdated;
+    }
+
+    protected override void OnParametersSet()
+    {
+        UpdateBuffer();
+
+        buffer.SetMaxLines(MaxLines);
+        buffer.SetConsumer(Consumer);
+
+        if (Filter != previousFilter)
+        {
+            previousFilter = Filter;
+            scrollToBottom = true; // Show the newest matching lines
+        }
+
+        UpdateSnapshot();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (scrollToBottom)
+        {
+            scrollToBottom = false;
+            await javascriptService.ScrollToBottom(container);
+        }
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+
+        _logThrottle.Elapsed -= LogUpdated;
+        _logThrottle.Dispose();
+
+        DetachBuffer();
+    }
+
+
+    private void UpdateBuffer()
+    {
+        var target = Buffer;
+        if (target != null && ReferenceEquals(target, buffer)) return;
+        if (target == null && buffer != null && ownsBuffer) return;
+
+        DetachBuffer();
+
+        ownsBuffer = target == null;
+        buffer = target ?? new LogStreamBuffer();
+        buffer.Updated += BufferUpdated;
+        buffer.Cleared += BufferCleared;
+        scrollToBottom = true;
+    }
+
+    private void DetachBuffer()
+    {
+        if (buffer != null)
+        {
+            buffer.Updated -= BufferUpdated;
+            buffer.Cleared -= BufferCleared;
+
+            // A Buffer passed in belongs to the parent (it keeps receiving lines)
+            if (ownsBuffer) buffer.Dispose();
+            buffer = null;
+        }
+    }
+
+    private void BufferUpdated(object sender, EventArgs args)
+    {
+        _logThrottle.Set();
+    }
+
+    private void BufferCleared(object sender, EventArgs args)
+    {
+        scrollToBottom = true;
+    }
+
+    private async void LogUpdated(object sender, EventArgs args)
+    {
+        // async void (a Timer event) : an exception that escapes would crash the process
+        try
+        {
+            if (disposed) return;
+
+            await InvokeAsync(async () =>
+            {
+                if (disposed) return;
+
+                // Only follow new lines if the user hasn't scrolled up to read something
+                var follow = await javascriptService.IsScrolledToBottom(container, FollowThreshold);
+
+                UpdateSnapshot();
+
+                if (follow) scrollToBottom = true;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException) { } // Component or Circuit disposed during the update
+        catch (Exception) { } // ex. JavaScript interop failed (Circuit disconnected)
+    }
+
+    private void UpdateSnapshot()
+    {
+        if (buffer == null) return;
+
+        var filter = !string.IsNullOrWhiteSpace(Filter) ? Filter.Trim() : null;
+
+        IEnumerable<LogRow> rows = buffer.GetRows();
+        if (filter != null) rows = rows.Where(o => IsFilterMatch(o, filter));
+
+        lines = rows.OrderBy(o => o.Timestamp).ThenBy(o => o.Key).ToArray();
+    }
+
+    private static bool IsFilterMatch(LogRow row, string filter)
+    {
+        return (row.Message != null && row.Message.Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
+            (row.Source != null && row.Source.Contains(filter, StringComparison.OrdinalIgnoreCase));
+    }
+
+}

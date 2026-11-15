@@ -1,0 +1,463 @@
+﻿@page "/_admin/explorer/{instanceId}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Blazor.Components
+@using TrakHound.Clients
+@using TrakHound.Instances
+
+<TrakHoundPageTitle Text="@GetDisplayName()" />
+
+@if (loading)
+{
+    <div class="loading-panel">
+        <Loading Message="Loading Instance.." />
+    </div>
+}
+else if (instanceInformation == null)
+{
+    <div class="not-found-panel">
+        <div class="not-found-container">
+            <span class="icon fa-solid fa-sharp fa-ban"></span>
+            <span class="title">Instance Not Found</span>
+            <span class="subtitle">@InstanceId</span>
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <span class="subtitle">@errorMessage</span>
+            }
+        </div>
+    </div>
+}
+else
+{
+    var status = instanceInformation.Status;
+
+    var canStart = (status == TrakHoundInstanceStatus.Stopped || status == TrakHoundInstanceStatus.Error) && !actionPending;
+    var startLabel = status == TrakHoundInstanceStatus.Starting ? "Starting.." : "Start";
+    var startIcon = status == TrakHoundInstanceStatus.Starting ? "fa-solid fa-sharp fa-loader spin" : "fa-solid fa-sharp fa-play";
+
+    var canStop = status == TrakHoundInstanceStatus.Started && !actionPending;
+    var stopLabel = status == TrakHoundInstanceStatus.Stopping && !restarting ? "Stopping.." : "Stop";
+    var stopIcon = status == TrakHoundInstanceStatus.Stopping && !restarting ? "fa-solid fa-sharp fa-loader spin" : "fa-solid fa-sharp fa-stop";
+
+    var canRestart = status == TrakHoundInstanceStatus.Started && !actionPending;
+    var restartLabel = restarting ? "Restarting.." : "Restart";
+    var restartIcon = restarting ? "fa-solid fa-sharp fa-loader spin" : "fa-solid fa-sharp fa-rotate";
+
+    var http = instanceInformation.GetInterface("HTTP");
+    var baseUrl = http?.GetBaseUrl();
+    var hasName = !string.IsNullOrEmpty(instanceInformation.Name);
+    <div class="instance-page">
+
+        <div class="header-panel">
+            <div class="header-content">
+                <div class="header-icon-container">
+                    <span class="header-icon fa-solid fa-sharp fa-server"></span>
+                </div>
+                <div class="header-description-container">
+                    @if (hasName)
+                    {
+                        <span class="header-name">@instanceInformation.Name</span>
+                    }
+                    else
+                    {
+                        <span class="header-name unnamed">Unnamed Instance<a class="header-set-name" href="_admin/configuration/settings?section=general">Set a name</a></span>
+                    }
+                    <span class="header-details">
+                        <span class="header-id">@instanceInformation.Id</span><CopyButton Value="@instanceInformation.Id" Title="Copy Instance ID" />
+                        @if (!string.IsNullOrEmpty(instanceInformation.Version))
+                        {
+                            <span class="header-separator">·</span><span>v@(instanceInformation.Version)</span>
+                        }
+                        @if (!string.IsNullOrEmpty(baseUrl))
+                        {
+                            <span class="header-separator">·</span><a class="header-url" href="@baseUrl" target="_blank" title="Open in a new tab">@baseUrl<span class="icon fa-solid fa-sharp fa-arrow-up-right-from-square"></span></a>
+                        }
+                    </span>
+                    @if (!string.IsNullOrEmpty(instanceInformation.Description))
+                    {
+                        <span class="header-description">@instanceInformation.Description</span>
+                    }
+                </div>
+                <div class="header-health-container">
+                    @if (health != null)
+                    {
+                        <a class="header-health health-@health.Status.ToString().ToLower()" href="@($"_admin/explorer/{explorerService.SelectedInstanceId}/diagnostics/health")" title="@GetHealthTitle()">
+                            <span class="header-health-dot"></span>
+                            <span class="header-health-label">Health</span>
+                            <span class="header-health-status">@health.Status</span>
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar-panel">
+            <div class="toolbar-group" role="group" aria-label="Runtime">
+                <button class="admin-write btn btn-light btn-start" disabled="@(!canStart)" @onclick="StartClicked"><span class="icon @startIcon"></span>@startLabel</button>
+                <button class="admin-write btn btn-light btn-stop" disabled="@(!canStop)" @onclick="StopClicked"><span class="icon @stopIcon"></span>@stopLabel</button>
+                <button class="admin-write btn btn-light btn-restart @(restarting ? "restarting" : null)" disabled="@(!canRestart)" @onclick="RestartClicked" title="Stop and Start the Instance Runtime (applies settings that require a restart)"><span class="icon @restartIcon"></span>@restartLabel</button>
+            </div>
+            <div class="toolbar-status status-@status.ToString().ToLower()" role="status">
+                <span class="status-dot"></span>
+                <span class="status-label">@status</span>
+                <span class="status-timer" title="@instanceInformation.LastUpdated.ToLocalTime()">for <ElapsedTime Since="@instanceInformation.LastUpdated" /></span>
+            </div>
+        </div>
+
+        <div class="tab-panel">
+            <RadzenTabs @bind-SelectedIndex="@selectedTab">
+                <Tabs>
+                    <RadzenTabsItem Text="Overview">
+                        <div class="scroll-panel">
+                            <Overview Health="@health" MonitorRequested="@(() => selectedTab = _monitorTab)" />
+                        </div>
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Information">
+                        <div class="scroll-panel">
+                            <Information InstanceInformation="@instanceInformation" />
+                        </div>
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Monitor">
+                        <div class="monitor-panel">
+                            <Monitor />
+                        </div>
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Boots">
+                        <div class="scroll-panel">
+                            <Boots />
+                        </div>
+                    </RadzenTabsItem>
+                    <RadzenTabsItem Text="Log">
+                        <div class="log-panel">
+                            <Log InstanceInformation="@instanceInformation" />
+                        </div>
+                    </RadzenTabsItem>
+                </Tabs>
+            </RadzenTabs>
+        </div>
+
+    </div>
+}
+
+<Modal Class="instance-action-modal stop" Visible="@stopModalVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-stop"></span>
+        <span class="modal-header-title">Stop Instance</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="action-target">
+            <span class="action-target-icon fa-solid fa-sharp fa-server"></span>
+            <span class="action-target-text">
+                <span class="action-target-name">@GetDisplayName()</span>
+                <span class="action-target-id">@instanceInformation?.Id</span>
+            </span>
+        </div>
+        <p class="action-description">All Apps, APIs, Functions, Workers, and Services stop until the Instance is Started again.</p>
+        <ul class="action-notes">
+            <li><span class="icon fa-solid fa-sharp fa-circle-info"></span>The process keeps running, so the Admin Interface stays available to Start it again.</li>
+            <li><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>Requests to APIs and Apps fail while the Instance is Stopped.</li>
+        </ul>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="StopCancelClicked">Cancel</button>
+        <button class="admin-write btn btn-danger" @onclick="StopConfirmClicked"><span class="icon fa-solid fa-sharp fa-stop"></span>Stop Instance</button>
+    </FooterContent>
+</Modal>
+
+<Modal Class="instance-action-modal restart" Visible="@restartModalVisible">
+    <HeaderContent>
+        <span class="modal-header-icon fa-solid fa-sharp fa-rotate"></span>
+        <span class="modal-header-title">Restart Instance</span>
+    </HeaderContent>
+    <BodyContent>
+        <div class="action-target">
+            <span class="action-target-icon fa-solid fa-sharp fa-server"></span>
+            <span class="action-target-text">
+                <span class="action-target-name">@GetDisplayName()</span>
+                <span class="action-target-id">@instanceInformation?.Id</span>
+            </span>
+        </div>
+        <p class="action-description">All Apps, APIs, Functions, Workers, and Services stop and then Start again.</p>
+        <ul class="action-notes">
+            <li><span class="icon fa-solid fa-sharp fa-circle-info"></span>Settings that require a restart (ex. Metrics) are applied.</li>
+            <li><span class="icon fa-solid fa-sharp fa-circle-info"></span>The process keeps running, so the Admin Interface stays available.</li>
+            <li><span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>While it Restarts, API requests return 503 (Service Unavailable) and App pages show a Restarting page that reloads when the Instance is running.</li>
+        </ul>
+    </BodyContent>
+    <FooterContent>
+        <button class="btn btn-secondary" @onclick="RestartCancelClicked">Cancel</button>
+        <button class="admin-write btn btn-primary" @onclick="RestartConfirmClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Restart Instance</button>
+    </FooterContent>
+</Modal>
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+@code {
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private TrakHoundInstanceInformation instanceInformation;
+    private ITrakHoundStream<TrakHoundInstanceInformation> statusStream;
+    private string previousInstanceId;
+    private string errorMessage;
+
+    private const int _monitorTab = 2;
+    private static readonly TimeSpan _healthInterval = TimeSpan.FromSeconds(3); // Also shown (and refreshed) on the Overview tab
+
+    private TrakHoundInstanceHealth health;
+    private System.Threading.Timer healthTimer;
+    private int selectedTab;
+
+    private bool loading = true;
+    private bool actionPending;
+    private bool restarting;
+    private bool stopModalVisible;
+    private bool restartModalVisible;
+    private bool disposed;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    void IDisposable.Dispose()
+    {
+        disposed = true;
+        healthTimer?.Dispose();
+        DisposeStatusStream();
+
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            previousInstanceId = explorerService.SelectedInstanceId;
+
+            loading = true;
+            errorMessage = null;
+            instanceInformation = null;
+            DisposeStatusStream();
+
+            try
+            {
+                // Set Explorer Breadcrumbs
+                var breadcrumbItems = new List<BreadcrumbItem>();
+                breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+                explorerService.BreadcrumbItems = breadcrumbItems;
+
+                await explorerService.LoadInstance(InstanceId);
+
+                var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+                if (client != null)
+                {
+                    // The Explorer only hosts the local Instance, so its Host Information is this Instance
+                    instanceInformation = await client.Instances.GetHostInformation();
+
+                    // Health (for the header)
+                    health = await GetHealth(client);
+                    healthTimer?.Dispose();
+                    healthTimer = new System.Threading.Timer(HealthTimerElapsed, null, _healthInterval, _healthInterval);
+
+                    // Subscribe to any new Updates
+                    var stream = await client.Instances.SubscribeInformation(explorerService.SelectedInstanceId);
+                    if (stream != null)
+                    {
+                        stream.Received += StatusUpdated;
+                        statusStream = stream;
+                    }
+                }
+                else
+                {
+                    errorMessage = "Client Not Found";
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = ex.Message;
+            }
+            finally
+            {
+                loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async void HealthTimerElapsed(object state)
+    {
+        if (disposed) return;
+
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client == null) return;
+
+        health = await GetHealth(client);
+        await InvokeSafe(StateHasChanged);
+    }
+
+    private static async Task<TrakHoundInstanceHealth> GetHealth(ITrakHoundClient client)
+    {
+        try { return await client.Instances.GetHealth(); }
+        catch { return null; }
+    }
+
+    private string GetHealthTitle()
+    {
+        var reasons = health?.Checks?
+            .Where(o => o.Status == health.Status && !o.Ignored && health.Status > TrakHoundHealthStatus.Healthy)
+            .Select(o => $"{o.Title} : {o.Description}");
+
+        return reasons.IsNullOrEmpty() ? $"Health : {health?.Status}" : string.Join("\n", reasons);
+    }
+
+    private void DisposeStatusStream()
+    {
+        var stream = statusStream;
+        statusStream = null;
+
+        if (stream != null)
+        {
+            stream.Received -= StatusUpdated;
+            try { stream.Dispose(); } catch { }
+        }
+    }
+
+    private async void StatusUpdated(object sender, TrakHoundInstanceInformation information)
+    {
+        if (disposed || information == null) return;
+
+        instanceInformation = information;
+        await InvokeSafe(StateHasChanged);
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeSafe(StateHasChanged);
+    }
+
+    private async Task InvokeSafe(Action action)
+    {
+        if (disposed) return;
+
+        try
+        {
+            await InvokeAsync(action);
+        }
+        catch
+        {
+            // The component or circuit may have been disposed
+        }
+    }
+
+
+    private async Task StartClicked()
+    {
+        if (actionPending || (instanceInformation?.Status != TrakHoundInstanceStatus.Stopped && instanceInformation?.Status != TrakHoundInstanceStatus.Error)) return;
+
+        await RunAction("Start", client => client.Instances.Start(explorerService.SelectedInstanceId));
+    }
+
+    private void StopClicked()
+    {
+        if (actionPending || instanceInformation?.Status != TrakHoundInstanceStatus.Started) return;
+
+        stopModalVisible = true;
+    }
+
+    private void StopCancelClicked()
+    {
+        stopModalVisible = false;
+    }
+
+    private async Task StopConfirmClicked()
+    {
+        stopModalVisible = false;
+
+        await RunAction("Stop", client => client.Instances.Stop(explorerService.SelectedInstanceId));
+    }
+
+    // The Name (the ID is shown below it)
+    private string GetDisplayName() => !string.IsNullOrEmpty(instanceInformation?.Name) ? instanceInformation.Name : "Unnamed Instance";
+
+    private void RestartClicked()
+    {
+        if (actionPending || instanceInformation?.Status != TrakHoundInstanceStatus.Started) return;
+
+        restartModalVisible = true;
+    }
+
+    private void RestartCancelClicked()
+    {
+        restartModalVisible = false;
+    }
+
+    private async Task RestartConfirmClicked()
+    {
+        restartModalVisible = false;
+        restarting = true;
+
+        try
+        {
+            var instanceId = explorerService.SelectedInstanceId;
+            await RunAction("Restart", async client =>
+            {
+                await client.Instances.Stop(instanceId);
+                await client.Instances.Start(instanceId);
+            });
+        }
+        finally
+        {
+            restarting = false;
+            await InvokeSafe(StateHasChanged);
+        }
+    }
+
+    private async Task RunAction(string actionName, Func<ITrakHoundClient, Task> action)
+    {
+        var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+        if (client == null)
+        {
+            notificationService.AddNotification(NotificationType.Error, $"Error {GetActionVerb(actionName)} Instance", "Client Not Found");
+            return;
+        }
+
+        actionPending = true;
+        StateHasChanged();
+
+        try
+        {
+            await action(client);
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, $"Error {GetActionVerb(actionName)} Instance", ex.Message);
+        }
+        finally
+        {
+            actionPending = false;
+        }
+    }
+
+    private static string GetActionVerb(string actionName)
+    {
+        switch (actionName)
+        {
+            case "Stop": return "Stopping";
+            case "Restart": return "Restarting";
+            default: return "Starting";
+        }
+    }
+
+}

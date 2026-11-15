@@ -1,0 +1,317 @@
+@page "/_admin/security"
+@attribute [TrakHound.Instance.Security.AdminResource(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles)]
+@layout SecurityLayout
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@inject TrakHound.Instance.Security.AdminAccess adminAccess
+@inject TrakHoundInstanceConfiguration instanceConfiguration
+@inject Microsoft.AspNetCore.Routing.EndpointDataSource endpointDataSource
+@using TrakHound.Instances
+@using TrakHound.Security
+
+<TrakHoundPageTitle />
+
+<div class="overview-page">
+
+    <div class="callout">
+        <span class="icon fa-solid fa-sharp fa-circle-info"></span>
+        <div>
+            <strong>Access is allowed by default.</strong>
+            Apis, Apps, Services, and the System API that are not covered by a Profile can be used without signing in.
+            Add a Profile with Assignments to require an Identity, then use <a href="_admin/security/public">What is Public?</a> and <a href="_admin/security/access-check">Access Check</a> to confirm who can reach what.
+        </div>
+    </div>
+
+    @if (issues.Count > 0)
+    {
+        <div class="issues">
+            @foreach (var issue in issues)
+            {
+                <div class="callout @(issue.Severity)">
+                    <span class="icon fa-solid fa-sharp @(issue.Severity == "danger" ? "fa-circle-exclamation" : "fa-triangle-exclamation")"></span>
+                    <div class="issue-text">
+                        <span>@issue.Message</span>
+                        @if (issue.Link != null)
+                        {
+                            <a href="@issue.Link">@issue.LinkText</a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="card-grid">
+
+        @if (adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles))
+        {
+            <a class="overview-card" href="_admin/configuration/security-profiles">
+                <div class="card-header">
+                    <span class="card-icon fa-solid fa-sharp fa-shield-halved"></span>
+                    <div class="card-title">
+                        <span class="title">Security Profiles</span>
+                        <span class="description">Choose an Identity Provider for Resources and map its Roles to Permissions</span>
+                    </div>
+                </div>
+                <div class="card-stats">
+                    <div class="stat">
+                        <span class="stat-value">@state.Profiles.Count</span>
+                        <span class="stat-label">@(state.Profiles.Count == 1 ? "Profile" : "Profiles")</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">@state.AssignmentCount</span>
+                        <span class="stat-label">@(state.AssignmentCount == 1 ? "Assignment" : "Assignments")</span>
+                    </div>
+                </div>
+            </a>
+        }
+
+        @if (adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.IdentityProviders))
+        {
+            <a class="overview-card" href="_admin/security/providers">
+                <div class="card-header">
+                    <span class="card-icon fa-solid fa-sharp fa-id-badge"></span>
+                    <div class="card-title">
+                        <span class="title">Identity Providers</span>
+                        <span class="description">Verify who is making a Request (API Keys, Users, OpenID Connect, LDAP, ..)</span>
+                    </div>
+                </div>
+                <div class="card-stats">
+                    <div class="stat">
+                        <span class="stat-value">@state.Providers.Count(o => o.IsLoaded)</span>
+                        <span class="stat-label">Loaded</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">@state.Providers.Count(o => o.CanSignIn)</span>
+                        <span class="stat-label">With Sign In</span>
+                    </div>
+                </div>
+                @if (state.Providers.Any(o => !o.IsLoaded))
+                {
+                    var count = state.Providers.Count(o => !o.IsLoaded);
+                    <div class="card-alerts">
+                        <span class="chip danger"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@count not loaded</span>
+                    </div>
+                }
+            </a>
+        }
+
+        @if (adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.ApiKeys))
+        {
+            <a class="overview-card" href="_admin/security/api-keys">
+                <div class="card-header">
+                    <span class="card-icon fa-solid fa-sharp fa-key"></span>
+                    <div class="card-title">
+                        <span class="title">API Keys</span>
+                        <span class="description">Keys issued by this Instance for scripts, integrations, and other Instances</span>
+                    </div>
+                </div>
+                <div class="card-stats">
+                    <div class="stat">
+                        <span class="stat-value">@state.Keys.Count(o => !o.IsExpired)</span>
+                        <span class="stat-label">Active</span>
+                    </div>
+                </div>
+                @{
+                    var expired = state.Keys.Count(o => o.IsExpired);
+                    var expiring = state.Keys.Count(o => !o.IsExpired && o.Expires.HasValue && o.Expires.Value.ToUniversalTime() < DateTime.UtcNow.AddDays(30));
+                }
+                @if (expired > 0 || expiring > 0)
+                {
+                    <div class="card-alerts">
+                        @if (expired > 0)
+                        {
+                            <span class="chip danger"><span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>@expired expired</span>
+                        }
+                        @if (expiring > 0)
+                        {
+                            <span class="chip warning"><span class="icon fa-solid fa-sharp fa-clock"></span>@expiring expiring within 30 days</span>
+                        }
+                    </div>
+                }
+            </a>
+        }
+
+        @if (adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.Users))
+        {
+            <a class="overview-card" href="_admin/security/users">
+                <div class="card-header">
+                    <span class="card-icon fa-solid fa-sharp fa-users"></span>
+                    <div class="card-title">
+                        <span class="title">Users</span>
+                        <span class="description">Usernames and Passwords managed on this Instance, for Apps that just need basic sign in</span>
+                    </div>
+                </div>
+                <div class="card-stats">
+                    <div class="stat">
+                        <span class="stat-value">@state.Users.Count(o => o.Enabled)</span>
+                        <span class="stat-label">Enabled</span>
+                    </div>
+                </div>
+                @if (state.Users.Any(o => !o.Enabled))
+                {
+                    var disabled = state.Users.Count(o => !o.Enabled);
+                    <div class="card-alerts">
+                        <span class="chip warning"><span class="icon fa-solid fa-sharp fa-user-slash"></span>@disabled disabled</span>
+                    </div>
+                }
+            </a>
+        }
+
+        @if (adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles))
+        {
+            <a class="overview-card" href="_admin/security/public">
+                <div class="card-header">
+                    <span class="card-icon fa-solid fa-sharp fa-globe"></span>
+                    <div class="card-title">
+                        <span class="title">What is Public?</span>
+                        <span class="description">Every endpoint served over HTTP that can be used without signing in</span>
+                    </div>
+                </div>
+                <div class="card-stats">
+                    <div class="stat">
+                        <span class="stat-value">@publicCount</span>
+                        <span class="stat-label">Public @(publicCount == 1 ? "Endpoint" : "Endpoints")</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value">@signInCount</span>
+                        <span class="stat-label">Sign In Required</span>
+                    </div>
+                </div>
+            </a>
+        }
+
+        @if (adminAccess.CanRead(TrakHound.Instance.Security.TrakHoundAdminSecurity.SecurityProfiles))
+        {
+            <a class="overview-card" href="_admin/security/access-check">
+                <div class="card-header">
+                    <span class="card-icon fa-solid fa-sharp fa-user-shield"></span>
+                    <div class="card-title">
+                        <span class="title">Access Check</span>
+                        <span class="description">Check whether an Identity can reach an Api Endpoint, App Page, or Service operation, and why</span>
+                    </div>
+                </div>
+            </a>
+        }
+
+    </div>
+
+    @if (protectedSummary.Count > 0)
+    {
+        <div class="section-block">
+            <div class="section-header">
+                <span class="section-title">Protected Resources<span class="section-description">Assignments that require an Identity, grouped by Resource type</span></span>
+            </div>
+            <div class="protected-grid">
+                @foreach (var item in protectedSummary)
+                {
+                    <div class="protected-item">
+                        <span class="icon @SecurityResources.GetScopeIcon(item.Scope)"></span>
+                        <span class="protected-count">@item.Count</span>
+                        <span class="protected-label">@item.Label</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private SecurityState state;
+    private List<Issue> issues = new List<Issue>();
+    private List<ProtectedSummary> protectedSummary = new List<ProtectedSummary>();
+    private int publicCount;
+    private int signInCount;
+
+    private class Issue
+    {
+        public string Severity { get; set; }
+        public string Message { get; set; }
+        public string Link { get; set; }
+        public string LinkText { get; set; }
+    }
+
+    private class ProtectedSummary
+    {
+        public SecurityResourceScope Scope { get; set; }
+        public int Count { get; set; }
+        public string Label { get; set; }
+    }
+
+
+    protected override void OnInitialized()
+    {
+        Load();
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed += SecurityChanged;
+    }
+
+    public void Dispose()
+    {
+        if (instance.SecurityManager is TrakHoundSecurityManager securityManager) securityManager.Changed -= SecurityChanged;
+    }
+
+    private void SecurityChanged(object sender, EventArgs args) => _ = InvokeAsync(() => { Load(); StateHasChanged(); });
+
+    private void Load()
+    {
+        state = SecurityState.Load(instance);
+        var resources = new SecurityResources(instance);
+
+        // Endpoints that can be used without signing in (not counting the ones that are public by design, ex. Health checks)
+        var publicEndpoints = PublicEndpointsReport.Create(instance, instanceConfiguration, endpointDataSource);
+        publicCount = publicEndpoints.Endpoints.Count(o => o.IsPublic && !o.ByDesign);
+        signInCount = publicEndpoints.Endpoints.Count(o => o.Status == PublicEndpointStatus.SignIn);
+
+        issues = new List<Issue>();
+
+        foreach (var provider in state.Providers.Where(o => !o.IsLoaded))
+        {
+            var message = provider.ProfileIds.Count > 0
+                ? $"The Identity Provider \"{provider.DisplayName}\" is not loaded, so Resources in {FormatList(provider.ProfileIds, "Profile")} cannot be accessed."
+                : $"The Identity Provider \"{provider.DisplayName}\" is not loaded (rebuild or update its Package).";
+            issues.Add(new Issue { Severity = provider.ProfileIds.Count > 0 ? "danger" : "warning", Message = message, Link = provider.ConfigurationLink, LinkText = "Open Configuration" });
+        }
+
+        foreach (var profile in state.Profiles.Where(o => !string.IsNullOrEmpty(o.ProviderId) && state.GetProvider(o.ProviderId) == null))
+        {
+            issues.Add(new Issue { Severity = "danger", Message = $"The Profile \"{profile.Id}\" uses the Identity Provider \"{profile.ProviderId}\", which does not exist.", Link = $"_admin/configuration/security-profiles/{Uri.EscapeDataString(profile.Id)}", LinkText = "Edit Profile" });
+        }
+
+        foreach (var profile in state.Profiles.Where(o => o.Assignments.IsNullOrEmpty()))
+        {
+            issues.Add(new Issue { Severity = "warning", Message = $"The Profile \"{profile.Id}\" has no Assignments, so it doesn't protect anything.", Link = $"_admin/configuration/security-profiles/{Uri.EscapeDataString(profile.Id)}", LinkText = "Add Assignments" });
+        }
+
+        // Assignments that require an Identity (Profiles without an Identity Provider make Resources public)
+        protectedSummary = state.Profiles
+            .Where(o => !string.IsNullOrEmpty(o.ProviderId) && o.Assignments != null)
+            .SelectMany(o => o.Assignments)
+            .Select(o => resources.Describe(o.ResourceId).Scope)
+            .GroupBy(o => o)
+            .Select(o => new ProtectedSummary { Scope = o.Key, Count = o.Count(), Label = GetScopeLabel(o.Key, o.Count()) })
+            .OrderBy(o => o.Scope)
+            .ToList();
+    }
+
+    private static string GetScopeLabel(SecurityResourceScope scope, int count)
+    {
+        var plural = count != 1;
+        switch (scope)
+        {
+            case SecurityResourceScope.Everything: return plural ? "Everything Assignments" : "Everything Assignment";
+            case SecurityResourceScope.Api: return plural ? "Api Assignments" : "Api Assignment";
+            case SecurityResourceScope.App: return plural ? "App Assignments" : "App Assignment";
+            case SecurityResourceScope.Service: return plural ? "Service Assignments" : "Service Assignment";
+            case SecurityResourceScope.System: return plural ? "System Assignments" : "System Assignment";
+            default: return plural ? "Custom Assignments" : "Custom Assignment";
+        }
+    }
+
+    private static string FormatList(List<string> items, string noun)
+    {
+        return items.Count == 1 ? $"the \"{items[0]}\" {noun}" : $"{items.Count} {noun}s";
+    }
+
+}

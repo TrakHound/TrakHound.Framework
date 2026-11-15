@@ -1,0 +1,111 @@
+@implements IDisposable
+@inject ITrakHoundInstance instance
+@using TrakHound.Apps
+@using TrakHound.Instances
+
+@* Shows Messages sent from the admin interface (from the Apps or App Connections pages) at the top of the page until dismissed (or for the Seconds requested). Messages are not stored, so a reload clears them *@
+@if (messages.Count > 0)
+{
+    <div class="app-message-panel">
+        @foreach (var message in messages)
+        {
+            <div @key="message" class="app-message @(message.Severity == TrakHoundAppMessageSeverity.Warning ? "warning" : null)" role="@(message.Severity == TrakHoundAppMessageSeverity.Warning ? "alert" : "status")">
+                <span class="app-message-icon fa-solid fa-sharp @(message.Severity == TrakHoundAppMessageSeverity.Warning ? "fa-triangle-exclamation" : "fa-message")"></span>
+                <span class="app-message-body">
+                    <span class="app-message-title">Message from @message.From <span class="app-message-time">@message.Received.ToLocalTime().ToString("t")</span></span>
+                    <span class="app-message-text">@message.Message</span>
+                </span>
+                <button class="app-message-close" title="Dismiss" aria-label="Dismiss" @onclick="() => Remove(message)"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+
+    // Older Messages are dropped when more than this are showing
+    private const int _maxMessages = 5;
+
+    private class ReceivedMessage
+    {
+        public string Message { get; set; }
+        public string From { get; set; }
+        public TrakHoundAppMessageSeverity Severity { get; set; }
+        public DateTime Received { get; set; }
+        public CancellationTokenSource HideCancellation { get; set; }
+    }
+
+
+    private readonly List<ReceivedMessage> messages = new List<ReceivedMessage>();
+    private TrakHoundAppProvider appProvider;
+
+
+    [Parameter]
+    public string AppId { get; set; }
+
+    /// <summary>
+    /// The page's Connection (used to receive Messages sent to this page only)
+    /// </summary>
+    [Parameter]
+    public TrakHoundAppConnection Connection { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        appProvider = instance.AppProvider as TrakHoundAppProvider;
+        if (appProvider != null) appProvider.MessageRequested += MessageRequested;
+    }
+
+    public void Dispose()
+    {
+        if (appProvider != null) appProvider.MessageRequested -= MessageRequested;
+        foreach (var message in messages) message.HideCancellation?.Cancel();
+    }
+
+    private async void MessageRequested(object sender, TrakHoundAppMessageRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Message)) return;
+
+        var matches = request.ConnectionId != null
+            ? Connection != null && request.ConnectionId == Connection.ConnectionId
+            : !string.IsNullOrEmpty(AppId) && request.AppId == AppId;
+        if (!matches) return;
+
+        var message = new ReceivedMessage
+        {
+            Message = request.Message,
+            From = !string.IsNullOrWhiteSpace(request.From) ? request.From : TrakHoundAppMessageRequest.DefaultFrom,
+            Severity = request.Severity,
+            Received = DateTime.UtcNow,
+            HideCancellation = request.Seconds > 0 ? new CancellationTokenSource() : null
+        };
+
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                messages.Add(message);
+                while (messages.Count > _maxMessages) Remove(messages[0]);
+                StateHasChanged();
+            });
+
+            if (message.HideCancellation != null)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(request.Seconds), message.HideCancellation.Token);
+
+                await InvokeAsync(() =>
+                {
+                    messages.Remove(message);
+                    StateHasChanged();
+                });
+            }
+        }
+        catch { } // Cancelled (closed by the user, or the page closed)
+    }
+
+    private void Remove(ReceivedMessage message)
+    {
+        message.HideCancellation?.Cancel();
+        messages.Remove(message);
+    }
+}

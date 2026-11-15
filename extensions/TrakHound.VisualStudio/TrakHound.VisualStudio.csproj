@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- VisualStudio.Extensibility (out-of-process) extensions run on a .NET runtime that ships with Visual Studio, not one
+         installed on the machine. Visual Studio 2022 only has the .NET 8 host (Visual Studio 2026 has .NET 8 and .NET 10),
+         so it targets .NET 8 (not TrakHoundTargetFramework) to run in both -->
+    <TargetFramework>net8.0-windows8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>12</LangVersion>
+    <RootNamespace>TrakHound.VisualStudio</RootNamespace>
+
+    <!-- The Output Window API (OutputChannel) is marked as a preview API in the 17.14 SDK -->
+    <NoWarn>$(NoWarn);VSEXTPREVIEW_OUTPUTWINDOW</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Remote UI : the XAML is sent to Visual Studio (not compiled) -->
+    <EmbeddedResource Include="PublishToolWindowControl.xaml" />
+    <Page Remove="PublishToolWindowControl.xaml" />
+    <EmbeddedResource Include="PublishPackagesDialog.xaml" />
+    <Page Remove="PublishPackagesDialog.xaml" />
+  </ItemGroup>
+
+</Project>

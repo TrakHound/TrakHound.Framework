@@ -1,0 +1,25 @@
+.switch-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.switch-label {
+    font-size: var(--fontSizeBase);
+    color: var(--textMild);
+}
+
+.numeric-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+    .numeric-control .units {
+        font-size: var(--fontSizeSm);
+        color: var(--textMild);
+    }
+
+.settings-notifications ::deep .settings-field.disabled .settings-field-description {
+    opacity: 0.5;
+}

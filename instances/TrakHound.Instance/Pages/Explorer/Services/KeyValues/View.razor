@@ -1,0 +1,579 @@
+@page "/_admin/explorer/{instanceId}/services/key-values/{configurationId}/collection/{collection}"
+@implements IDisposable
+@inject ExplorerService explorerService
+@inject JavascriptService javascriptService
+@using System.Text.Json
+@using TrakHound.Blazor.Services
+@using TrakHound.Services
+
+<TrakHoundPageTitle Text="@($"{Collection} - {(!string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId)} - KeyValues")" />
+
+<TrakHound.Instance.Components.Notifications Items="@notificationService.Notifications" OnDismiss="notificationService.Dismiss" />
+
+<div class="key-value-view-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-folder-open"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name" title="@Collection">@Collection</span>
+                <span class="header-description">@GetDescription()</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <button class="admin-write btn @(showPublish ? "btn-secondary" : "btn-light")" @onclick="TogglePublish"><span class="icon fa-solid fa-sharp fa-plus"></span>Publish</button>
+
+        <div class="filter">
+            <span class="filter-icon fa-solid fa-sharp fa-magnifying-glass"></span>
+            <input type="text" placeholder="Filter by key or value" aria-label="Filter Values" value="@filter" @oninput="FilterChanged" @onkeydown="FilterKeyDown" />
+            @if (!string.IsNullOrWhiteSpace(filter))
+            {
+                <button class="btn-clear-filter" title="Clear Filter" @onclick="ClearFilter"><span class="fa-solid fa-sharp fa-xmark"></span></button>
+            }
+        </div>
+
+    </div>
+
+    <div class="publish-container">
+        @if (showPublish)
+        {
+            <PublishPanel InstanceId="@InstanceId" ConfigurationId="@ConfigurationId" Collection="@Collection"
+                          EditKey="@editKey" EditValue="@editValue" EditVersion="@editVersion" KeyExists="KeyExists"
+                          Published="ValuePublished" PublishFailed="ValuePublishFailed" Cancelled="PublishCancelled" />
+        }
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (errorMessage != null)
+            {
+                <div class="empty-panel error">
+                    <span class="icon fa-solid fa-sharp fa-triangle-exclamation"></span>
+                    <span class="empty-title">Values could not be Loaded</span>
+                    <span class="empty-description">@errorMessage</span>
+                </div>
+            }
+            else if (keyValues.Count > 0)
+            {
+                var items = GetItems();
+
+                <div class="table-layout">
+                    @if (!items.IsNullOrEmpty())
+                    {
+                        <div class="table-panel">
+                            <RadzenDataGrid Data="@items" TItem="KeyValueItem" Density="Density.Compact" AllowSorting="true" AllowColumnResize="true" AllowVirtualization="@(expandedKeys.Count < 1)">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="KeyValueItem" Property="Key" Title="Key" Width="320px" CssClass="key-cell">
+                                        <Template Context="item">
+                                            <span class="key" title="@item.Key">@item.Key</span>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="KeyValueItem" Property="Value" Title="Value" MinWidth="240px" CssClass="value-cell">
+                                        <Template Context="item">
+                                            @if (item.Value == null)
+                                            {
+                                                <span class="value-null">null</span>
+                                            }
+                                            else if (item.Value.Length == 0)
+                                            {
+                                                <span class="value-null">(empty)</span>
+                                            }
+                                            else if (expandedKeys.Contains(item.Key))
+                                            {
+                                                <div class="value-expanded">
+                                                    <button class="btn-expand" title="Collapse" @onclick="() => ToggleExpanded(item)"><span class="fa-solid fa-sharp fa-chevron-down"></span></button>
+                                                    <pre>@FormatValue(item.Value)</pre>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="value-collapsed">
+                                                    @if (IsExpandable(item.Value))
+                                                    {
+                                                        <button class="btn-expand" title="Expand" @onclick="() => ToggleExpanded(item)"><span class="fa-solid fa-sharp fa-chevron-right"></span></button>
+                                                    }
+                                                    <span class="value">@item.Value</span>
+                                                </div>
+                                            }
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="KeyValueItem" Property="Length" Title="Length" Width="90px" TextAlign="TextAlign.Right">
+                                        <Template Context="item">
+                                            <span class="number">@item.Length.ToString("N0")</span>
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                    <RadzenDataGridColumn TItem="KeyValueItem" CssClass="buttons actions-cell" Width="220px" Sortable="false">
+                                        <Template Context="item">
+                                            @if (deletingKey == item.Key)
+                                            {
+                                                <span class="deleting"><span class="icon fa-regular fa-sharp fa-loader spin"></span>Deleting..</span>
+                                            }
+                                            else if (confirmDeleteKey == item.Key)
+                                            {
+                                                <span class="confirm-delete">
+                                                    <span class="confirm-text">Delete?</span>
+                                                    <button class="admin-write btn btn-sm btn-danger" @onclick="() => Delete(item)">Delete</button>
+                                                    <button class="btn btn-sm btn-light" @onclick="() => confirmDeleteKey = null">Cancel</button>
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <button class="admin-write btn btn-sm btn-link" title="Edit @item.Key" @onclick="() => Edit(item)"><span class="icon fa-regular fa-sharp fa-pen"></span>Edit</button>
+                                                <button class="btn btn-sm btn-link" title="Copy Value" @onclick="() => CopyValue(item)">
+                                                    @if (copiedKey == item.Key)
+                                                    {
+                                                        <span class="icon fa-solid fa-sharp fa-check copied"></span><span>Copied</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="icon fa-regular fa-sharp fa-copy"></span><span>Copy</span>
+                                                    }
+                                                </button>
+                                                <button class="admin-write btn btn-sm btn-link btn-delete" title="Delete @item.Key" @onclick="() => confirmDeleteKey = item.Key" disabled="@(deletingKey != null)"><span class="icon fa-regular fa-sharp fa-trash-can"></span>Delete</button>
+                                            }
+                                        </Template>
+                                    </RadzenDataGridColumn>
+                                </Columns>
+                            </RadzenDataGrid>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-panel">
+                            <span class="empty-title">No matching Values</span>
+                            <span class="empty-description">No loaded Keys or Values match "@filter?.Trim()"</span>
+                        </div>
+                    }
+
+                    @if (hasMore)
+                    {
+                        <div class="more-panel">
+                            <span class="more-text">Showing the first @keyValues.Count.ToString("N0") Keys</span>
+                            @if (!loadingMore)
+                            {
+                                <button class="btn btn-sm btn-light" @onclick="LoadMore"><span class="icon fa-solid fa-sharp fa-angles-down"></span>Load More</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-light" disabled><span class="icon fa-regular fa-sharp fa-loader spin"></span>Loading..</button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-folder-open"></span>
+                    <span class="empty-title">No Values</span>
+                    <span class="empty-description">The @Collection Collection does not contain any Keys</span>
+                    @if (!showPublish)
+                    {
+                        <button class="admin-write btn btn-light btn-empty-action" @onclick="() => showPublish = true"><span class="icon fa-solid fa-sharp fa-plus"></span>Publish</button>
+                    }
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="Loading Values.." />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _pageSize = 1000;
+    private const int _expandableLength = 120;
+
+    private readonly TrakHound.Instance.Components.NotificationService notificationService = new TrakHound.Instance.Components.NotificationService();
+
+    private List<KeyValueItem> keyValues = new List<KeyValueItem>();
+    private HashSet<string> expandedKeys = new HashSet<string>();
+    private TrakHoundServiceInformation service;
+    private CancellationTokenSource copiedReset;
+    private int keysLoaded;
+    private string previousKey;
+    private string filter;
+    private string errorMessage;
+    private string confirmDeleteKey;
+    private string deletingKey;
+    private string copiedKey;
+    private string editKey;
+    private string editValue;
+    private int editVersion;
+    private bool hasMore;
+    private bool showPublish;
+    private bool loading = true;
+    private bool loadingMore;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    [Parameter]
+    public string ConfigurationId { get; set; }
+
+    [Parameter]
+    public string Collection { get; set; }
+
+
+    public class KeyValueItem
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+        public int Length => Value?.Length ?? 0;
+    }
+
+
+    protected override void OnInitialized()
+    {
+        notificationService.Updated += NotificationsUpdated;
+    }
+
+    void IDisposable.Dispose()
+    {
+        copiedReset?.Cancel();
+        notificationService.Updated -= NotificationsUpdated;
+        notificationService.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        // Only reload when navigating to a different Collection
+        var key = $"{InstanceId}:{ConfigurationId}:{Collection}";
+        if (key != previousKey)
+        {
+            previousKey = key;
+            filter = null;
+            showPublish = false;
+            confirmDeleteKey = null;
+            editKey = null;
+
+            await explorerService.LoadInstance(InstanceId);
+            service = explorerService.GetServices(InstanceId, ConfigurationId);
+
+            SetBreadcrumbs();
+
+            await Load();
+        }
+    }
+
+    private void SetBreadcrumbs()
+    {
+        var serviceName = !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+
+        var breadcrumbItems = new List<BreadcrumbItem>();
+        breadcrumbItems.Add(new BreadcrumbItem(InstanceId, null));
+        breadcrumbItems.Add(new BreadcrumbItem("Services", Url.Combine("_admin/explorer", InstanceId, "services")));
+        breadcrumbItems.Add(new BreadcrumbItem("KeyValues", Url.Combine("_admin/explorer", InstanceId, "services", "key-values")));
+        breadcrumbItems.Add(new BreadcrumbItem(serviceName, Url.Combine("_admin/explorer", InstanceId, "services", "key-values", ConfigurationId)));
+        breadcrumbItems.Add(new BreadcrumbItem(Collection, null));
+        explorerService.BreadcrumbItems = breadcrumbItems;
+    }
+
+    private async Task Load()
+    {
+        loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        // Replace the full list (so Keys that were removed don't remain)
+        keyValues = new List<KeyValueItem>();
+        expandedKeys = new HashSet<string>();
+        keysLoaded = 0;
+        hasMore = false;
+        errorMessage = await LoadPage();
+
+        loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadMore()
+    {
+        if (loadingMore) return;
+
+        loadingMore = true;
+        await InvokeAsync(StateHasChanged);
+
+        var error = await LoadPage();
+        if (error != null)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Load More Failed", error);
+        }
+
+        loadingMore = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Load the next page of Keys, read their Values, and add them to the list. Returns an error message if a request failed
+    /// </summary>
+    private async Task<string> LoadPage()
+    {
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null) return $"Instance {InstanceId} is not available";
+
+        try
+        {
+            var keysResponse = await client.Services.KeyValues.ListKeys(Collection, "*", keysLoaded, _pageSize, routerId: ConfigurationId);
+            if (keysResponse.StatusCode == 404)
+            {
+                // Not Found is returned when there are no (more) Keys
+                hasMore = false;
+                return null;
+            }
+            if (!keysResponse.Success) return GetErrorMessage(keysResponse.StatusCode, keysResponse.Message);
+
+            var keys = keysResponse.Result?.Where(o => !string.IsNullOrEmpty(o)).Distinct().ToList() ?? new List<string>();
+            keysLoaded += keys.Count;
+            hasMore = keys.Count >= _pageSize;
+
+            // Skip Keys that are already loaded (ex. a Key was added between pages)
+            var loadedKeys = keyValues.Select(o => o.Key).ToHashSet();
+            keys = keys.Where(o => !loadedKeys.Contains(o)).ToList();
+            if (keys.Count < 1) return null;
+
+            var valuesResponse = await client.Services.KeyValues.Read(Collection, keys, routerId: ConfigurationId);
+            if (!valuesResponse.Success && valuesResponse.StatusCode != 404) return GetErrorMessage(valuesResponse.StatusCode, valuesResponse.Message);
+
+            var values = valuesResponse.Result?.Values;
+            foreach (var key in keys)
+            {
+                string value = null;
+                values?.TryGetValue(key, out value);
+                keyValues.Add(new KeyValueItem { Key = key, Value = value });
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private IEnumerable<KeyValueItem> GetItems()
+    {
+        var items = keyValues.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(filter)) return items.ToList();
+
+        var value = filter.Trim();
+        return items.Where(o => o.Key.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+            (o.Value?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+    }
+
+    private bool KeyExists(string collection, string key)
+    {
+        return collection == Collection && !string.IsNullOrEmpty(key) && keyValues.Any(o => o.Key == key);
+    }
+
+    private void Edit(KeyValueItem item)
+    {
+        editKey = item.Key;
+        editValue = item.Value;
+        editVersion++;
+        showPublish = true;
+    }
+
+    private async Task Delete(KeyValueItem item)
+    {
+        var client = explorerService.GetClient(InstanceId, ConfigurationId);
+        if (client == null || deletingKey != null) return;
+
+        confirmDeleteKey = null;
+        deletingKey = item.Key;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await client.Services.KeyValues.Delete(Collection, new[] { item.Key }, routerId: ConfigurationId);
+            if (response.Success)
+            {
+                // Remove from the list (instead of reloading every page)
+                keyValues.Remove(item);
+                expandedKeys.Remove(item.Key);
+                if (keysLoaded > 0) keysLoaded--;
+                notificationService.AddNotification(NotificationType.Success, "Key Deleted", item.Key);
+            }
+            else
+            {
+                notificationService.AddNotification(NotificationType.Error, "Delete Failed", $"{item.Key} : {GetErrorMessage(response.StatusCode, response.Message)}");
+            }
+        }
+        catch (Exception ex)
+        {
+            notificationService.AddNotification(NotificationType.Error, "Delete Failed", $"{item.Key} : {ex.Message}");
+        }
+
+        deletingKey = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CopyValue(KeyValueItem item)
+    {
+        await javascriptService.CopyClipboard(item.Value ?? "");
+
+        // Show the "Copied" check briefly, then return to the Copy icon
+        copiedReset?.Cancel();
+        copiedReset = new CancellationTokenSource();
+        var token = copiedReset.Token;
+
+        copiedKey = item.Key;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            copiedKey = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void ToggleExpanded(KeyValueItem item)
+    {
+        if (!expandedKeys.Remove(item.Key)) expandedKeys.Add(item.Key);
+    }
+
+    private void FilterChanged(ChangeEventArgs args)
+    {
+        filter = args.Value?.ToString();
+    }
+
+    private void FilterKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") ClearFilter();
+    }
+
+    private void ClearFilter()
+    {
+        filter = null;
+    }
+
+    private async Task RefreshClicked()
+    {
+        confirmDeleteKey = null;
+        await Load();
+    }
+
+    private void TogglePublish()
+    {
+        showPublish = !showPublish;
+        editKey = null;
+    }
+
+    private void PublishCancelled()
+    {
+        showPublish = false;
+        editKey = null;
+    }
+
+    private void ValuePublished(PublishPanel.PublishResult result)
+    {
+        if (result.Collection == Collection)
+        {
+            // Update the list (instead of reloading every page)
+            var existing = keyValues.FirstOrDefault(o => o.Key == result.Key);
+            if (existing != null)
+            {
+                existing.Value = result.Value;
+            }
+            else
+            {
+                keyValues.Add(new KeyValueItem { Key = result.Key, Value = result.Value });
+                keysLoaded++;
+            }
+
+            notificationService.AddNotification(NotificationType.Success, "Value Published", result.Key);
+        }
+        else
+        {
+            notificationService.AddNotification(NotificationType.Success, "Value Published", $"{result.Collection} / {result.Key}");
+        }
+
+        // Close the panel after an Edit
+        if (editKey != null)
+        {
+            editKey = null;
+            showPublish = false;
+        }
+    }
+
+    private void ValuePublishFailed(PublishPanel.PublishResult result)
+    {
+        notificationService.AddNotification(NotificationType.Error, "Publish Failed", $"{result.Collection} / {result.Key} : {result.Message}");
+    }
+
+    private async void NotificationsUpdated(object sender, EventArgs args)
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    private string GetDescription()
+    {
+        var serviceName = !string.IsNullOrEmpty(service?.Name) ? service.Name : ConfigurationId;
+        var description = $"KeyValue Collection · {serviceName}";
+
+        if (!loading && errorMessage == null)
+        {
+            var count = keyValues.Count.ToString("N0") + (hasMore ? "+" : "");
+            description += keyValues.Count == 1 ? " · 1 Key" : $" · {count} Keys";
+        }
+
+        return description;
+    }
+
+    private static string GetErrorMessage(int statusCode, string message)
+    {
+        return !string.IsNullOrEmpty(message) ? message : $"Status Code {statusCode}";
+    }
+
+    private static bool IsExpandable(string value)
+    {
+        return value.Length > _expandableLength || value.Contains('\n') || IsJson(value);
+    }
+
+    private static bool IsJson(string value)
+    {
+        var trimmed = value?.Trim();
+        return !string.IsNullOrEmpty(trimmed) && ((trimmed.StartsWith("{") && trimmed.EndsWith("}")) || (trimmed.StartsWith("[") && trimmed.EndsWith("]")));
+    }
+
+    private static string FormatValue(string value)
+    {
+        // Indent JSON Values
+        if (IsJson(value))
+        {
+            try
+            {
+                var element = JsonSerializer.Deserialize<JsonElement>(value);
+                return JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = true });
+            }
+            catch { }
+        }
+
+        return value;
+    }
+
+}

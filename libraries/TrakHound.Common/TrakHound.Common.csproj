@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<TargetFrameworks>$(TrakHoundTargetFramework)</TargetFrameworks>
+		<RuntimeIdentifiers>win-x64;win-x86;osx-x64;linux-x64;linux-arm64;android-arm64</RuntimeIdentifiers>
+		<Optimize>true</Optimize>
+	</PropertyGroup>
+	
+	<PropertyGroup>
+		<RootNamespace>TrakHound</RootNamespace>
+		<Description>Contains the core classes of the TrakHound Framework (the Client, Apis, Apps, Functions, Workers, Services, Packages and Configurations) used by the Instance and by every package</Description>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)'=='Release'">
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Api\TrakHoundApiPublishAttribute.cs" />
+	  <Compile Remove="Api\TrakHoundApiQueryAttribute.cs" />
+	  <Compile Remove="Api\TrakHoundApiStreamResponse.cs" />
+	  <Compile Remove="Api\TrakHoundApiSubscribeAttribute.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="Api\TrakHoundApiPublishAttribute.cs" />
+	  <None Include="Api\TrakHoundApiQueryAttribute.cs" />
+	  <None Include="Api\TrakHoundApiStreamResponse.cs" />
+	  <None Include="Api\TrakHoundApiSubscribeAttribute.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="YamlDotNet" Version="16.2.0" />
+	</ItemGroup>
+
+</Project>

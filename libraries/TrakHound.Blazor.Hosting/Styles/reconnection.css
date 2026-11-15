@@ -1,0 +1,170 @@
+/* Reconnection Toast (ReconnectionPanel) : class selectors only, so they don't apply to other panels that use the #reconnection-panel ID (ex. the Instance Disconnection Page) */
+
+.reconnection-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    background: rgba(0, 0, 0, 0.35);
+    -webkit-backdrop-filter: grayscale(0.6);
+    backdrop-filter: grayscale(0.6);
+}
+
+.reconnection-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 9999;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    width: min(420px, calc(100% - 32px));
+    padding: 16px 18px;
+    color: #fff;
+    text-align: left;
+    background: rgba(20, 24, 30, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25);
+    transform: translateX(-50%);
+    animation: reconnectionToastIn 0.25s ease-out;
+}
+
+.reconnection-toast-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+    color: #ffc078;
+    border: 1px solid rgba(255, 176, 77, 0.45);
+    border-radius: 50%;
+    background: rgba(255, 176, 77, 0.12);
+}
+
+    .reconnection-toast-icon .icon-reconnecting {
+        display: none;
+        animation: reconnectionSpin 0.8s linear infinite;
+    }
+
+.reconnection-overlay[data-state="reconnecting"] .reconnection-toast-icon .icon-disconnected {
+    display: none;
+}
+
+.reconnection-overlay[data-state="reconnecting"] .reconnection-toast-icon .icon-reconnecting {
+    display: inline-block;
+}
+
+.reconnection-overlay[data-state="offline"] .reconnection-toast-icon {
+    color: #ff9a9a;
+    border-color: rgba(255, 120, 120, 0.45);
+    background: rgba(255, 99, 99, 0.12);
+}
+
+.reconnection-toast-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+    .reconnection-toast-content .title {
+        font-size: 0.875rem;
+        font-weight: bold;
+        line-height: 1.4;
+    }
+
+    .reconnection-toast-content .description {
+        margin-bottom: 8px;
+        font-size: 0.8125rem;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .reconnection-toast-content .label {
+        font-size: 0.875rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .reconnection-toast-content .since {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.55);
+    }
+
+        .reconnection-toast-content .label:empty,
+        .reconnection-toast-content .since:empty {
+            display: none;
+        }
+
+    .reconnection-toast-content .buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+.reconnection-toast-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+}
+
+    .reconnection-toast-button:hover {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    .reconnection-toast-button:focus-visible {
+        outline: 2px solid #cce6ff;
+        outline-offset: 2px;
+    }
+
+    .reconnection-toast-button.primary {
+        border-color: transparent;
+        background: #1a8cff;
+    }
+
+        .reconnection-toast-button.primary:hover {
+            background: #0079f2;
+        }
+
+@keyframes reconnectionToastIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+@keyframes reconnectionSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reconnection-toast,
+    .reconnection-toast-icon .icon-reconnecting {
+        animation: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .reconnection-toast {
+        bottom: 16px;
+        padding: 14px;
+    }
+}

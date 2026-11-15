@@ -1,0 +1,548 @@
+@page "/_admin/explorer/{instanceId}/diagnostics/functions"
+@implements IDisposable
+@inject ExplorerService explorerService
+@using TrakHound.Clients
+@using TrakHound.Functions
+
+<TrakHoundPageTitle Text="Function Metrics - Diagnostics" />
+
+<div class="function-metrics-page">
+
+    <div class="header-panel">
+        <div class="header-content">
+            <div class="header-icon">
+                <span class="icon fa-solid fa-sharp fa-code"></span>
+            </div>
+            <div class="header-text">
+                <span class="header-name">Function Metrics</span>
+                <span class="header-description">Runs, results and durations for each Function since the Instance started · updated every second</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar-panel">
+
+        @if (!loading)
+        {
+            <button class="btn btn-light" @onclick="RefreshClicked"><span class="icon fa-solid fa-sharp fa-rotate"></span>Refresh</button>
+        }
+        else
+        {
+            <button class="btn btn-light btn-run btn-loading" disabled><span class="icon loading-icon fa-regular fa-loader spin"></span>Loading..</button>
+        }
+
+        <MetricsDisabledNotice Area="Functions" />
+        <MetricsDisabledNotice Area="Cpu" />
+
+    </div>
+
+    @if (!loading)
+    {
+        <div class="content-panel">
+
+            @if (!tableItems.IsNullOrEmpty())
+            {
+                <div class="table-panel summary-panel">
+                    <RadzenDataGrid Data="@tableItems"
+                                    TItem="TableItem"
+                                    Density="Density.Compact"
+                                    AllowSorting="true"
+                                    AllowColumnResize="true"
+                                    RowClick="@RowClicked"
+                                    RowRender="@RowRender">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="TableItem" Property="FunctionId" Title="Function" MinWidth="160px" />
+                            <RadzenDataGridColumn TItem="TableItem" Property="PackageId" Title="Package" MinWidth="140px">
+                                <Template Context="item">
+                                    <span>@item.PackageId</span>
+                                    @if (!string.IsNullOrEmpty(item.PackageVersion))
+                                    {
+                                        <span class="version">@item.PackageVersion</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalRunCount" Title="Runs" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.TotalRunCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="ActiveRunCount" Title="Running" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@item.ActiveRunCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="TotalErrorCount" Title="Errors" Width="90px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number @(item.TotalErrorCount > 0 ? "error" : null)">@item.TotalErrorCount.ToString("N0")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="SuccessRate" Title="Success" Width="95px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.TotalRunCount > 0 ? $"{item.SuccessRate:0.#}%" : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="AverageDuration" Title="Avg Time" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.TotalRunCount > 0 ? FormatDuration(item.AverageDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="MaxDuration" Title="Max Time" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number">@(item.TotalRunCount > 0 ? FormatDuration(item.MaxDuration) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="AverageCpuTime" Title="CPU / Run" Width="100px" TextAlign="TextAlign.Right">
+                                <Template Context="item">
+                                    <span class="number" title="@(item.TotalRunCount > 0 ? $"{FormatPercent(item.AverageCpuUsage)} of machine capacity while running" : null)">@(item.TotalRunCount > 0 ? FormatDuration(item.AverageCpuTime) : "-")</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastStatusCode" Title="Last Result" Width="110px">
+                                <Template Context="item">
+                                    @if (item.TotalRunCount > 0)
+                                    {
+                                        <span class="result @GetResultClass(item.LastStatusCode)">@item.LastStatusCode</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">-</span>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="TableItem" Property="LastStarted" Title="Last Run" Width="130px">
+                                <Template Context="item">
+                                    <span class="number">@FormatTimestamp(item.LastStarted)</span>
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                </div>
+
+                var selected = tableItems.FirstOrDefault(o => o.FunctionId == selectedFunctionId);
+                if (selected != null)
+                {
+                    <div class="detail-panel">
+
+                        <div class="detail-header">
+                            <a class="detail-name" href="@GetFunctionLink(selected.FunctionId)">@selected.FunctionId</a>
+                            @if (!string.IsNullOrEmpty(selected.PackageId))
+                            {
+                                <span class="detail-type">@selected.PackageId @selected.PackageVersion</span>
+                            }
+                            <span class="detail-state"><span class="icon fa-regular fa-sharp fa-clock"></span>@(selected.LastStarted != null ? $"Last run {FormatTimestamp(selected.LastStarted)}" : "Not run yet")</span>
+                        </div>
+
+                        <div class="stat-tiles">
+                            <div class="stat-tile">
+                                <span class="stat-label">Runs</span>
+                                <span class="stat-value">@selected.TotalRunCount.ToString("N0")</span>
+                                <span class="stat-detail">since the Instance started</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Running Now</span>
+                                <span class="stat-value">@selected.ActiveRunCount.ToString("N0")</span>
+                                <span class="stat-detail">runs in progress</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Success Rate</span>
+                                <span class="stat-value">@(selected.TotalRunCount > 0 ? $"{selected.SuccessRate:0.#}" : "-")<span class="stat-unit">%</span></span>
+                                <span class="stat-detail">@selected.TotalSuccessCount.ToString("N0") succeeded · @selected.TotalCancelledCount.ToString("N0") cancelled</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Errors</span>
+                                <span class="stat-value @(selected.TotalErrorCount > 0 ? "error" : null)">@selected.TotalErrorCount.ToString("N0")</span>
+                                <span class="stat-detail" title="@selected.LastErrorMessage">@(selected.LastError != null ? $"last {FormatTimestamp(selected.LastError)}" : "no errors")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Avg Duration</span>
+                                <span class="stat-value">@(selected.TotalRunCount > 0 ? FormatDuration(selected.AverageDuration) : "-")</span>
+                                <span class="stat-detail">min @(selected.TotalRunCount > 0 ? FormatDuration(selected.MinDuration) : "-") · max @(selected.TotalRunCount > 0 ? FormatDuration(selected.MaxDuration) : "-")</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">Total Time</span>
+                                <span class="stat-value">@FormatDuration(selected.TotalDuration)</span>
+                                <span class="stat-detail">across all runs</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">CPU per Run</span>
+                                <span class="stat-value">@(selected.TotalRunCount > 0 ? FormatDuration(selected.AverageCpuTime) : "-")</span>
+                                <span class="stat-detail">max @(selected.TotalRunCount > 0 ? FormatDuration(selected.MaxCpuTime) : "-") · @FormatDuration(selected.TotalCpuTime) total</span>
+                            </div>
+                            <div class="stat-tile">
+                                <span class="stat-label">CPU Usage</span>
+                                <span class="stat-value">@(selected.TotalRunCount > 0 ? FormatPercent(selected.AverageCpuUsage) : "-")</span>
+                                <span class="stat-detail">of machine capacity while running</span>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(selected.LastErrorMessage))
+                        {
+                            <div class="last-error">
+                                <span class="icon fa-solid fa-sharp fa-circle-exclamation"></span>
+                                <span class="last-error-text">Last Error (@FormatTimestamp(selected.LastError)) : @selected.LastErrorMessage</span>
+                            </div>
+                        }
+
+                        <div class="section-title">Recent Runs<span class="section-subtitle">running, and the last @TrakHoundFunctionMetricsCollector.MaxRecentRuns completed</span></div>
+                        @if (!recentRuns.IsNullOrEmpty())
+                        {
+                            <div class="table-panel runs-panel">
+                                <RadzenDataGrid Data="@recentRuns"
+                                                TItem="TrakHoundFunctionRunMetrics"
+                                                Density="Density.Compact"
+                                                AllowSorting="true"
+                                                AllowColumnResize="true">
+                                    <Columns>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="RunId" Title="Run" MinWidth="160px">
+                                            <Template Context="run">
+                                                <span class="run-id" title="@run.RunId">@run.RunId</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="StatusCode" Title="Result" Width="120px">
+                                            <Template Context="run">
+                                                @if (run.Completed == null)
+                                                {
+                                                    <span class="result running"><span class="icon fa-regular fa-loader spin"></span>Running</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="result @GetResultClass(run.StatusCode)">@run.StatusCode</span>
+                                                }
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="Duration" Title="Duration" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="run">
+                                                <span class="number">@FormatDuration(run.Duration)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="CpuTime" Title="CPU Time" Width="100px" TextAlign="TextAlign.Right">
+                                            <Template Context="run">
+                                                <span class="number">@(run.Completed != null ? FormatDuration(run.CpuTime) : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="CpuUsage" Title="CPU" Width="80px" TextAlign="TextAlign.Right">
+                                            <Template Context="run">
+                                                <span class="number">@(run.Completed != null ? FormatPercent(run.CpuUsage) : "-")</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="Message" Title="Message" MinWidth="180px">
+                                            <Template Context="run">
+                                                <span class="path" title="@run.Message">@run.Message</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                        <RadzenDataGridColumn TItem="TrakHoundFunctionRunMetrics" Property="Started" Title="Started" Width="130px">
+                                            <Template Context="run">
+                                                <span class="number">@FormatTimestamp(run.Started)</span>
+                                            </Template>
+                                        </RadzenDataGridColumn>
+                                    </Columns>
+                                </RadzenDataGrid>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="empty-panel">
+                                <span class="empty-description">This Function has not been Run since the Instance started</span>
+                            </div>
+                        }
+
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-panel">
+                    <span class="icon fa-solid fa-sharp fa-code"></span>
+                    <span class="empty-title">No Functions</span>
+                    <span class="empty-description">No Functions are configured in this Instance</span>
+                </div>
+            }
+
+        </div>
+    }
+    else
+    {
+        <div class="loading-panel">
+            <Loading Message="@loadingMessage" />
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private const int _updateInterval = 1000;
+
+    private IEnumerable<TrakHoundFunctionInformation> functions;
+    private IEnumerable<TableItem> tableItems;
+    private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>(); // By lowercase FunctionId
+    private IEnumerable<TrakHoundFunctionRunMetrics> recentRuns;
+    private string selectedFunctionId;
+
+    private System.Threading.Timer updateTimer;
+    private int updating;
+
+    private string previousInstanceId;
+    private bool loading;
+    private string loadingMessage;
+
+
+    [Parameter]
+    public string InstanceId { get; set; }
+
+    /// <summary>
+    /// Selects this Function when the page opens (ex. from the Function page)
+    /// </summary>
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string FunctionId { get; set; }
+
+
+    public class TableItem
+    {
+        public string FunctionId { get; set; }
+        public string PackageId { get; set; }
+        public string PackageVersion { get; set; }
+        public long TotalRunCount { get; set; }
+        public long TotalSuccessCount { get; set; }
+        public long TotalErrorCount { get; set; }
+        public long TotalCancelledCount { get; set; }
+        public int ActiveRunCount { get; set; }
+        public double SuccessRate { get; set; }
+        public double TotalDuration { get; set; }
+        public double AverageDuration { get; set; }
+        public double MinDuration { get; set; }
+        public double MaxDuration { get; set; }
+        public double TotalCpuTime { get; set; }
+        public double AverageCpuTime { get; set; }
+        public double MaxCpuTime { get; set; }
+        public double AverageCpuUsage { get; set; }
+        public int LastStatusCode { get; set; }
+        public DateTime? LastStarted { get; set; }
+        public DateTime? LastError { get; set; }
+        public string LastErrorMessage { get; set; }
+
+        public TableItem(string functionId, TrakHoundFunctionInformation information, TrakHoundFunctionMetrics metrics)
+        {
+            Update(functionId, information, metrics);
+        }
+
+        public void Update(string functionId, TrakHoundFunctionInformation information, TrakHoundFunctionMetrics metrics)
+        {
+            FunctionId = information?.FunctionId ?? metrics?.FunctionId ?? functionId;
+            PackageId = information?.PackageId ?? metrics?.PackageId;
+            PackageVersion = information?.PackageVersion ?? metrics?.PackageVersion;
+
+            TotalRunCount = metrics?.TotalRunCount ?? 0;
+            TotalSuccessCount = metrics?.TotalSuccessCount ?? 0;
+            TotalErrorCount = metrics?.TotalErrorCount ?? 0;
+            TotalCancelledCount = metrics?.TotalCancelledCount ?? 0;
+            ActiveRunCount = metrics?.ActiveRunCount ?? 0;
+            SuccessRate = metrics != null && metrics.TotalRunCount > 0 ? (double)metrics.TotalSuccessCount / metrics.TotalRunCount * 100 : 0;
+            TotalDuration = metrics?.TotalDuration ?? 0;
+            AverageDuration = metrics?.AverageDuration ?? 0;
+            MinDuration = metrics?.MinDuration ?? 0;
+            MaxDuration = metrics?.MaxDuration ?? 0;
+            TotalCpuTime = metrics?.TotalCpuTime ?? 0;
+            AverageCpuTime = metrics?.AverageCpuTime ?? 0;
+            MaxCpuTime = metrics?.MaxCpuTime ?? 0;
+            AverageCpuUsage = metrics?.AverageCpuUsage ?? 0;
+            LastStatusCode = metrics?.LastStatusCode ?? 0;
+            LastStarted = metrics?.LastStarted;
+            LastError = metrics?.LastError;
+            LastErrorMessage = metrics?.LastErrorMessage;
+        }
+    }
+
+
+    void IDisposable.Dispose()
+    {
+        updateTimer?.Dispose();
+    }
+
+    protected async override Task OnParametersSetAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load(bool forceReload = false)
+    {
+        if (forceReload || explorerService.SelectedInstanceId != previousInstanceId)
+        {
+            loading = true;
+            loadingMessage = "Loading Function Metrics..";
+            await InvokeAsync(StateHasChanged);
+
+            updateTimer?.Dispose();
+            tableItems = null;
+            _tableItemsById.Clear();
+            recentRuns = null;
+
+            previousInstanceId = explorerService.SelectedInstanceId;
+            if (!string.IsNullOrEmpty(FunctionId)) selectedFunctionId = FunctionId;
+
+            await explorerService.LoadInstance(explorerService.SelectedInstanceId, forceReload);
+
+            // Set Explorer Breadcrumbs
+            var breadcrumbItems = new List<BreadcrumbItem>();
+            breadcrumbItems.Add(new BreadcrumbItem(explorerService.SelectedInstanceId, null));
+            breadcrumbItems.Add(new BreadcrumbItem("Diagnostics", null));
+            breadcrumbItems.Add(new BreadcrumbItem("Functions", null));
+            explorerService.BreadcrumbItems = breadcrumbItems;
+
+            var client = explorerService.GetClient(explorerService.SelectedInstanceId);
+            if (client != null)
+            {
+                // List every configured Function (including those that have not been Run yet)
+                functions = await client.Functions.GetInformation();
+
+                await UpdateMetrics(client);
+
+                // Poll for Metrics
+                updateTimer = new System.Threading.Timer(UpdateTimerElapsed, client, _updateInterval, _updateInterval);
+            }
+
+            loading = false;
+            loadingMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateMetrics(ITrakHoundClient client)
+    {
+        var metrics = await client.Functions.GetMetrics();
+        var metricsByFunction = metrics?.Where(o => !string.IsNullOrEmpty(o?.FunctionId)).GroupBy(o => o.FunctionId.ToLower()).ToDictionary(o => o.Key, o => o.First()) ?? new Dictionary<string, TrakHoundFunctionMetrics>();
+        var functionsById = functions?.Where(o => !string.IsNullOrEmpty(o?.FunctionId)).GroupBy(o => o.FunctionId.ToLower()).ToDictionary(o => o.Key, o => o.First()) ?? new Dictionary<string, TrakHoundFunctionInformation>();
+
+        // Configured Functions, plus Functions that were Run but are no longer configured
+        var items = functionsById.Keys.Union(metricsByFunction.Keys)
+            .Select(id => GetTableItem(id, functionsById.GetValueOrDefault(id), metricsByFunction.GetValueOrDefault(id)))
+            .OrderBy(o => o.FunctionId)
+            .ToList();
+
+        SetTableItems(items);
+
+        // Select the most recently Run Function by default (or if the selected one went away)
+        var selected = items.FirstOrDefault(o => string.Equals(o.FunctionId, selectedFunctionId, StringComparison.OrdinalIgnoreCase));
+        if (selected == null)
+        {
+            selected = items.OrderByDescending(o => o.LastStarted ?? DateTime.MinValue).FirstOrDefault();
+        }
+        selectedFunctionId = selected?.FunctionId;
+
+        if (selected != null && selected.TotalRunCount + selected.ActiveRunCount > 0)
+        {
+            var functionMetrics = await client.Functions.GetMetrics(selected.FunctionId);
+            recentRuns = functionMetrics?.RecentRuns?.ToList();
+        }
+        else
+        {
+            recentRuns = null;
+        }
+    }
+
+    // Rows are updated in place (and the list kept while the Functions are the same) so the grid
+    // doesn't replace every row on each update
+    private TableItem GetTableItem(string id, TrakHoundFunctionInformation information, TrakHoundFunctionMetrics metrics)
+    {
+        if (_tableItemsById.TryGetValue(id, out var item))
+        {
+            item.Update(id, information, metrics);
+            return item;
+        }
+
+        item = new TableItem(id, information, metrics);
+        _tableItemsById[id] = item;
+        return item;
+    }
+
+    private void SetTableItems(List<TableItem> items)
+    {
+        if (tableItems != null && tableItems.SequenceEqual(items)) return;
+
+        tableItems = items;
+
+        var current = items.ToHashSet();
+        foreach (var id in _tableItemsById.Where(o => !current.Contains(o.Value)).Select(o => o.Key).ToList()) _tableItemsById.Remove(id);
+    }
+
+    private async void UpdateTimerElapsed(object state)
+    {
+        // Skip if the previous update is still running
+        if (Interlocked.Exchange(ref updating, 1) == 1) return;
+
+        try
+        {
+            if (state is ITrakHoundClient client)
+            {
+                await UpdateMetrics(client);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref updating, 0);
+        }
+    }
+
+    private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)
+    {
+        if (args.Data?.FunctionId != selectedFunctionId)
+        {
+            selectedFunctionId = args.Data?.FunctionId;
+            recentRuns = null; // Loaded for the new Function on the next update
+        }
+    }
+
+    private void RowRender(RowRenderEventArgs<TableItem> args)
+    {
+        if (args.Data?.FunctionId == selectedFunctionId)
+        {
+            args.Attributes.Add("class", "selected-row");
+        }
+    }
+
+    private async void RefreshClicked()
+    {
+        await Load(true);
+    }
+
+
+    private string GetFunctionLink(string functionId)
+    {
+        return $"/_admin/explorer/{explorerService.SelectedInstanceId}/functions/{functionId}";
+    }
+
+    private static string GetResultClass(int statusCode)
+    {
+        if (statusCode >= 200 && statusCode < 300) return "success";
+        if (statusCode == TrakHoundFunctionMetricsCollector.CancelledStatusCode) return "cancelled";
+        return "error";
+    }
+
+    private static string FormatPercent(double value)
+    {
+        if (value >= 10) return $"{value:0}%";
+        if (value >= 1) return $"{value:0.#}%";
+        return $"{value:0.##}%";
+    }
+
+    private static string FormatDuration(double milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
+        if (duration.TotalHours >= 1) return $"{(int)duration.TotalHours}h {duration.Minutes:00}m";
+        if (duration.TotalMinutes >= 1) return $"{duration.Minutes}m {duration.Seconds:00}s";
+        if (duration.TotalSeconds >= 10) return $"{duration.TotalSeconds:0} s";
+        if (duration.TotalSeconds >= 1) return $"{duration.TotalSeconds:0.#} s";
+        if (milliseconds >= 10) return $"{milliseconds:0} ms";
+        return $"{milliseconds:0.#} ms";
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        if (timestamp == null || timestamp.Value == DateTime.MinValue) return "-";
+
+        var local = timestamp.Value.ToLocalTime();
+        return local.Date == DateTime.Now.Date ? local.ToString("HH:mm:ss") : local.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+}

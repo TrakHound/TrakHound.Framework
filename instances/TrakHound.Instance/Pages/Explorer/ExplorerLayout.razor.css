@@ -1,0 +1,253 @@
+.explorer {
+    display: grid;
+    grid-template-rows: max-content minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Header : Title and Breadcrumbs (AreaHeader) */
+.explorer-header {
+    grid-row: 1;
+}
+
+.explorer-container {
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+
+/* Explorer Navigation Sidebar (shown when the Sidebar is collapsed) */
+.explorer-navigation-sidebar {
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--borderColor);
+    background: var(--panelBackgroundMedium);
+    animation: fadein 0.15s;
+}
+
+    .explorer-navigation-sidebar .btn {
+        border-radius: 0;
+        width: 40px;
+        height: 36px;
+        padding: 0;
+        border: none;
+        border-bottom: 1px solid var(--borderColorLight);
+        background: none;
+        color: var(--textMild);
+    }
+
+        .explorer-navigation-sidebar .btn:hover {
+            color: var(--textDark);
+            background: var(--panelBackground);
+        }
+
+        .explorer-navigation-sidebar .btn .icon {
+            margin-right: 0;
+            font-size: var(--fontSizeMd);
+        }
+
+/* Collapsed : hide the Sidebar pane and the Splitter bar (only the top level Splitter) */
+.explorer.sidebar-collapsed .explorer-content > ::deep .rz-splitter > .rz-splitter-pane:first-child,
+.explorer.sidebar-collapsed .explorer-content > ::deep .rz-splitter > .rz-splitter-bar {
+    display: none !important;
+}
+
+/* The Splitter sets the panes' flex-basis (ex. after a drag), so fill the space with the main pane */
+.explorer.sidebar-collapsed .explorer-content > ::deep .rz-splitter > .rz-splitter-pane:not(:first-child) {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+}
+
+.explorer.sidebar-collapsed .explorer-main {
+    border-left: none;
+}
+
+
+/* Main content container */
+.explorer-content {
+    grid-column: 2;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+
+/* Explorer Treeview Sidebar */
+.explorer-sidebar {
+    min-width: 175px;
+    border-right: 1px solid var(--borderColor);
+    height: 100%;
+    overflow: hidden;
+}
+
+.explorer-sidebar-content {
+    display: grid;
+    grid-template-rows: max-content auto 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.explorer-sidebar-toolbar {
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-bottom: 1px solid var(--borderColorLight);
+    padding: 2px 6px 2px 2px;
+}
+
+    .explorer-sidebar-toolbar .btn {
+        padding: 3px 8px !important;
+        min-width: 0px !important;
+    }
+
+    .explorer-sidebar-toolbar .btn:focus {
+        outline: none;
+        box-shadow: none;
+    }
+
+        .explorer-sidebar-toolbar .btn .icon {
+            margin-right: 0 !important;
+            font-size: var(--fontSizeMd) !important;
+        }
+
+.explorer-sidebar-starting {
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--borderColorLight);
+    font-size: var(--fontSizeSm);
+    color: var(--textMuted);
+}
+
+.explorer-sidebar-tree {
+    grid-row: 3;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    animation: fadein 0.25s;
+}
+
+
+/* Main Content Panel */
+.explorer-main {
+    height: 100%;
+    overflow: hidden;
+    border-left: 1px solid var(--borderColor);
+}
+
+
+.explorer-body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--panelBackground);
+}
+
+
+.explorer-page ::deep .add-modal .modal-body {
+    padding: 20px 50px 0;
+}
+
+.explorer-page ::deep .add-modal .form-field {
+    display: block;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+    .explorer-page ::deep .add-modal .form-field label {
+        display: block;
+        font-size: var(--fontSizeSm);
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .explorer-page ::deep .add-modal .form-field .rz-textbox {
+        display: block;
+        width: 100%;
+    }
+
+
+.explorer-content {
+    height: 100%;
+    width: 100%;
+    overflow: auto;
+}
+
+.explorer-clipboard {
+    overflow: hidden;
+    overflow-y: auto;
+    height: 100%;
+    border-left: 1px solid var(--borderColor);
+    padding-top: 10px;
+}
+
+
+.explorer ::deep .rz-splitter {
+    height: 100%;
+    overflow: hidden;
+}
+
+.explorer ::deep .rz-splitter-pane {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Tree Filter */
+.explorer-sidebar-filter {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    margin-left: 6px;
+}
+
+    .explorer-sidebar-filter .filter-icon {
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        pointer-events: none;
+    }
+
+    .explorer-sidebar-filter input {
+        width: 100%;
+        height: 26px;
+        padding: 2px 26px 2px 26px;
+        font-size: var(--fontSizeSm);
+        color: var(--textDark);
+        background: var(--inputBackground);
+        border: 1px solid var(--borderColorLight);
+        border-radius: 3px;
+        outline: none;
+    }
+
+        .explorer-sidebar-filter input:focus {
+            border-color: var(--accent);
+        }
+
+    .explorer-sidebar-filter .btn-clear-filter {
+        position: absolute;
+        right: 2px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        font-size: var(--fontSizeXs);
+        color: var(--textLight);
+        background: none;
+        border: none;
+        cursor: pointer;
+    }
+
+        .explorer-sidebar-filter .btn-clear-filter:hover {
+            color: var(--textDark);
+        }

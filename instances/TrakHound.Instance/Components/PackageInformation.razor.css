@@ -1,0 +1,362 @@
+﻿.package-information {
+    font-size: var(--fontSizeMd, 13px);
+    color: var(--textDark);
+}
+
+.information-content {
+    max-width: 924px;
+    padding: 24px 32px 100px;
+}
+
+
+/* Toolbar : stays at the top of the panel while the details scroll */
+
+.information-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 32px;
+    background: var(--panelBackground);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+    .information-toolbar .btn {
+        white-space: nowrap;
+    }
+
+    .information-toolbar .btn .icon {
+        margin-right: 6px;
+    }
+
+
+/* Header */
+
+.header-panel {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    align-items: center;
+    column-gap: 16px;
+}
+
+.icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+    .icon-container ::deep span.icon {
+        font-size: 26px;
+        color: var(--accentLight);
+    }
+
+    .icon-container ::deep img.icon {
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+.header-text {
+    min-width: 0;
+}
+
+    .header-text .title {
+        display: block;
+        font-size: var(--fontSizeXl, 18px);
+        font-weight: 600;
+        line-height: 1.3;
+        color: var(--textDark);
+        overflow-wrap: anywhere;
+    }
+
+.subtitle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+    .subtitle .publisher {
+        font-size: var(--fontSizeSm, 12px);
+        color: var(--textMild);
+    }
+
+.category-chip {
+    padding: 0 8px;
+    font-size: var(--fontSizeXs, 11px);
+    line-height: 18px;
+    color: var(--textMild);
+    border: 1px solid var(--borderColor);
+    border-radius: 9px;
+}
+
+/* Description */
+
+.description {
+    margin: 16px 0 0;
+    font-size: var(--fontSizeBase, 14px);
+    line-height: 1.5;
+    color: var(--textDark);
+}
+
+
+/* License */
+
+.license-panel {
+    display: grid;
+    grid-template-columns: max-content 1fr max-content;
+    align-items: center;
+    column-gap: 14px;
+    margin-top: 18px;
+    padding: 12px 16px;
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-left: 3px solid var(--colorOrange, #f59e0b);
+    border-radius: 6px;
+}
+
+.license-icon {
+    font-size: 18px;
+    color: var(--colorOrange, #f59e0b);
+}
+
+.license-title {
+    display: block;
+    font-weight: 600;
+    color: var(--textDark);
+}
+
+.license-description {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm, 12px);
+    color: var(--textMild);
+}
+
+.license-product-id {
+    font-family: var(--fontMono, Consolas, monospace);
+    color: var(--textDark);
+}
+
+.btn-license .icon-right {
+    margin-left: 6px;
+    font-size: 10px;
+}
+
+
+/* Version */
+
+.version-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin-top: 20px;
+    padding: 12px 0;
+    border-top: 1px solid var(--borderColorLight);
+    border-bottom: 1px solid var(--borderColorLight);
+}
+
+.field-label {
+    font-size: var(--fontSizeSm, 12px);
+    font-weight: 600;
+    color: var(--textMild);
+}
+
+/* Wide enough for a prerelease (ex. 0.4.5-dev-feature-opc-ua.20261114153000), but no wider than the panel. A version that still doesn't
+   fit wraps onto a second line instead of being cut off, so the height isn't fixed (trakhound.css sets every dropdown to 38px) */
+.version-panel ::deep .rz-dropdown {
+    width: auto;
+    min-width: 180px;
+    max-width: 100%;
+    height: auto !important;
+    min-height: 38px;
+    margin: 0 !important;
+}
+
+.version-panel ::deep .rz-dropdown .rz-dropdown-label {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 22px;
+}
+
+.build-date {
+    font-size: var(--fontSizeSm, 12px);
+    color: var(--textMild);
+}
+
+
+/* Sections */
+
+.section {
+    margin-top: 22px;
+}
+
+.section-title {
+    display: block;
+    margin-bottom: 10px;
+    font-size: var(--fontSizeXs, 11px);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--textMild);
+}
+
+.none {
+    font-size: var(--fontSizeSm, 12px);
+    color: var(--textMild);
+}
+
+.properties {
+    display: grid;
+    grid-template-columns: minmax(110px, max-content) 1fr;
+    column-gap: 24px;
+    row-gap: 8px;
+}
+
+.property-label {
+    color: var(--textMild);
+}
+
+.property-value {
+    min-width: 0;
+    color: var(--textDark);
+    overflow-wrap: anywhere;
+}
+
+    .property-value a {
+        color: var(--accentLight);
+    }
+
+.mono {
+    font-family: var(--fontMono, Consolas, monospace);
+    font-size: var(--fontSizeSm, 12px);
+}
+
+.identifiers .property-value {
+    color: var(--textMild);
+}
+
+
+/* Verification */
+
+.verification-hint {
+    margin: 0 0 8px;
+    font-size: var(--fontSizeSm, 12px);
+    color: var(--textMild);
+}
+
+.verification-result {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.verification {
+    padding: 0 6px;
+    font-size: var(--fontSizeSm, 12px);
+    border: 1px solid currentColor;
+    border-radius: 3px;
+}
+
+    .verification.verified {
+        color: var(--bs-success, #198754);
+    }
+
+    .verification.unverified {
+        color: var(--textMild);
+    }
+
+    .verification.problem {
+        color: var(--bs-danger, #dc3545);
+    }
+
+.verification-version {
+    font-size: var(--fontSizeSm, 12px);
+    color: var(--textMild);
+}
+
+.verification-problem {
+    display: block;
+    font-size: var(--fontSizeSm, 12px);
+    color: var(--bs-danger, #dc3545);
+    overflow-wrap: anywhere;
+}
+
+.verification-properties {
+    margin-top: 10px;
+}
+
+.sbom-component {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fontSizeSm, 12px);
+}
+
+/* Dependencies */
+
+.dependencies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.dependency-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    font-size: var(--fontSizeSm, 12px);
+    background: var(--panelBackgroundMedium);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 6px;
+}
+
+.dependency-id {
+    color: var(--textDark);
+}
+
+.dependency-version {
+    font-variant-numeric: tabular-nums;
+    color: var(--textMild);
+}
+
+
+@media (max-width: 700px) {
+    .information-toolbar {
+        padding: 10px 16px;
+    }
+
+    .information-content {
+        padding: 20px 16px 80px;
+    }
+
+    .license-panel {
+        grid-template-columns: max-content 1fr;
+        row-gap: 10px;
+    }
+
+        .license-panel .btn-license {
+            grid-column: 2;
+            justify-self: start;
+        }
+
+    .properties {
+        grid-template-columns: 1fr;
+        row-gap: 2px;
+    }
+
+    .property-value {
+        margin-bottom: 8px;
+    }
+}

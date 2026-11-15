@@ -1,0 +1,58 @@
+@* Displays a history of CPU Usage (percent of total machine capacity, 0 - 100) as an Area Chart *@
+@using TrakHound.Workers
+
+<div class="cpu-usage-chart">
+    <div class="cpu-usage-chart-header">
+        <span class="cpu-usage-chart-subtitle">% of total machine capacity · last @GetWindowText()</span>
+    </div>
+
+    @if (Samples != null && Samples.Count() > 1)
+    {
+        <RadzenChart Style="height: 200px; width: 100%;">
+            <RadzenAreaSeries Data="@Samples" CategoryProperty="Timestamp" ValueProperty="Usage" Title="CPU Usage" Stroke="var(--accent)" StrokeWidth="2" Fill="var(--accent)" Smooth="false">
+                <TooltipTemplate Context="sample">
+                    <div class="cpu-usage-chart-tooltip">
+                        <span class="tooltip-time">@sample.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <span class="tooltip-value">@sample.Usage.ToString("0.00")%</span>
+                    </div>
+                </TooltipTemplate>
+            </RadzenAreaSeries>
+            <RadzenCategoryAxis Formatter="@FormatTimestamp" Padding="0">
+                <RadzenGridLines Visible="false" />
+            </RadzenCategoryAxis>
+            <RadzenValueAxis Min="0" Max="100" Step="25" Formatter="@FormatUsage">
+                <RadzenGridLines Visible="true" LineType="LineType.Dashed" />
+            </RadzenValueAxis>
+            <RadzenLegend Visible="false" />
+        </RadzenChart>
+    }
+    else
+    {
+        <div class="cpu-usage-chart-empty">Collecting CPU usage..</div>
+    }
+</div>
+
+@code {
+
+    [Parameter]
+    public IEnumerable<TrakHoundWorkerCpuSample> Samples { get; set; }
+
+    [Parameter]
+    public TimeSpan Window { get; set; } = TimeSpan.FromMinutes(5);
+
+
+    private string GetWindowText() => Window.TotalMinutes >= 1 ? $"{Window.TotalMinutes:0} min" : $"{Window.TotalSeconds:0} sec";
+
+    private string FormatTimestamp(object value)
+    {
+        if (value is DateTime timestamp) return timestamp.ToLocalTime().ToString("HH:mm:ss");
+        return value?.ToString();
+    }
+
+    private string FormatUsage(object value)
+    {
+        if (value is double usage) return $"{usage:0.##}%";
+        return value?.ToString();
+    }
+
+}

@@ -1,0 +1,12 @@
+﻿{
+  "id": "TrakHound.Oidc.Identity",
+  "category": "identity",
+  "version": "0.2",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Sign in with an OpenID Connect server (ex. Microsoft Entra ID, Okta, Keycloak) and accept its Bearer Tokens",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Oidc.Identity",
+    ".configurationParameters": "authority,clientId,clientSecret,scopes,rolesClaim,userIdClaim,nameClaim,audience,requireHttpsMetadata"
+  }
+}

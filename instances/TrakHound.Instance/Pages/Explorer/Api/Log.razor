@@ -1,0 +1,18 @@
+﻿@rendermode InteractiveServer
+@using TrakHound.Api
+@using TrakHound.Logging
+
+@* "**" so the Endpoint Loggers (api/{package}/{controller}/{type}/{endpoint}) are included, not just the Controller Loggers.
+   Debug so Request lines are shown *@
+@if (ApiInformation != null)
+{
+    var pattern = $"api/{ApiInformation.PackageId}/**";
+    <LoggerLog @key="pattern" Pattern="@pattern" MinimumLevel="TrakHoundLogLevel.Debug" />
+}
+
+@code {
+
+    [Parameter]
+    public TrakHoundApiInformation ApiInformation { get; set; }
+
+}

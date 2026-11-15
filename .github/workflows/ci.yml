@@ -1,0 +1,96 @@
+# Builds every project and runs the tests on each pull request and push to main, and scans for secrets.
+# Uses no secrets, so pull requests from forks run the same way.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request replaces the run in progress
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Projects are built through a generated solution, since TrakHound.Framework.sln can reference projects outside this repository.
+      # Left out: the template content (placeholders, not projects), the Visual Studio extension (Windows only), and the Apps that
+      # build against the published TrakHound packages instead of this source (they're built when those packages are released)
+      - name: Create the solution
+        run: |
+          projects=$(git ls-files '*.csproj' \
+            | grep -v '^templates/.*/content/' \
+            | grep -v '^extensions/' \
+            | grep -v -F -x \
+                -e modules/TrakHound.ApiExplorer.App/TrakHound.ApiExplorer.App.csproj \
+                -e modules/TrakHound.Packages.App/TrakHound.Packages.App.csproj \
+                -e modules/TrakHound.Welcome.App/TrakHound.Welcome.App.csproj)
+          dotnet new sln --name ci --output "$RUNNER_TEMP/ci"
+          dotnet sln "$RUNNER_TEMP/ci/ci.slnx" add $projects
+          echo "Projects:"; echo "$projects"
+
+      - name: Build
+        run: dotnet build "$RUNNER_TEMP/ci/ci.slnx" -c Release
+
+      # The tests for PostgreSQL, SQL Server, TimescaleDB, InfluxDB, RabbitMQ and Redis skip themselves without their TRAKHOUND_*_TEST_* variables
+      - name: Test
+        run: dotnet test "$RUNNER_TEMP/ci/ci.slnx" -c Release --no-build --blame-hang-timeout 5m
+
+  secrets:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The gitleaks binary (MIT), checked against the release's checksums. gitleaks-action needs a license key for organization repositories
+      - name: Install gitleaks
+        run: |
+          cd "$RUNNER_TEMP"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfLO "$base/$archive"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " $archive\$" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum --check
+          tar -xzf "$archive" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # The files as they are at this commit
+      - name: Scan the files
+        run: gitleaks dir . --redact --no-banner --verbose
+
+      # Each commit in the pull request too, so a secret added in one commit and removed in a later one is still found
+      - name: Scan the pull request's commits
+        if: github.event_name == 'pull_request'
+        run: gitleaks git . --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" --redact --no-banner --verbose

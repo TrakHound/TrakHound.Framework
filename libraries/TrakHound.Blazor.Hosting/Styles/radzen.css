@@ -1,0 +1,674 @@
+/* Overrides for the Radzen components, using the theme variables */
+
+
+.rz-tabview {
+    height: 100%;
+    overflow: hidden;
+}
+
+        .rz-tabview .rz-tabview-nav li a {
+            padding: 5px 10px !important;
+            min-width: 100px;
+            text-align: center;
+        }
+
+    .rz-tabview .rz-tabview-nav .rz-tabview-title {
+        font-size: 13px !important;
+        width: 100%;
+    }
+
+    .rz-tabview .rz-tabview-panels {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .rz-tabview .rz-tabview-panel {
+        height: 100%;
+        overflow: hidden;
+        padding: 0;
+    }
+
+
+.rz-splitter-bar {
+    background: var(--borderColor) !important;
+}
+
+.rz-tabview-panels {
+    border-top: 1px solid var(--borderColor) !important;
+}
+
+/* Tabs that don't fit scroll sideways instead of being cut off on narrow pages */
+.rz-tabview-nav {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+}
+
+.rz-tabview-nav li {
+    flex-shrink: 0;
+    transition: none;
+    color: var(--textMild) !important;
+}
+
+    .rz-tabview-nav li:hover {
+        background: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    .rz-tabview-nav li a {
+        padding: 12px 30px;
+        font-size: 14px;
+        border-right: 1px solid var(--borderColorVeryLight);
+        color: var(--textMild) !important;
+    }
+
+    .rz-tabview-nav li:hover a {
+        background: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    .rz-tabview-nav li .rz-tabview-title {
+        color: var(--textMild) !important;
+    }
+
+    .rz-tabview-nav li .tab-header {
+        color: var(--textMild);
+    }
+
+    .rz-tabview-nav li a .rz-tabview-left-icon {
+        margin-right: 10px;
+    }
+
+
+    .rz-tabview-nav li a .icon {
+        font-size: 16px;
+        line-height: 22px;
+        color: var(--textLight);
+        vertical-align: top;
+    }
+
+.rz-tabview-selected .icon {
+    color: var(--accent) !important;
+}
+
+.rz-tabview-nav li a .title {
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+
+.rz-notification {
+    position: fixed !important;
+    top: unset !important;
+    bottom: 0px !important;
+    width: 450px;
+}
+
+    .rz-notification .rz-growl-item {
+        padding: 10px 20px;
+        width: 450px;
+    }
+
+        .rz-notification .rz-growl-item .rz-growl-image {
+            font-size: 24px;
+            margin-top: 2px;
+        }
+
+        .rz-notification .rz-growl-item .rz-growl-title {
+            font-size: 12px;
+            display: block;
+        }
+
+        .rz-notification .rz-growl-item p {
+            font-size: 12px;
+        }
+
+        .rz-notification .rz-growl-item .rz-growl-icon-close {
+            font-size: 18px;
+            margin-top: 3px;
+        }
+
+
+.rz-dropdown {
+    padding: 7px 20px 7px 15px;
+    font-size: 14px;
+    border-radius: 2px !important;
+    height: 38px !important;
+    background: var(--inputBackground) !important;
+    border: 1px solid var(--inputBorder) !important;
+    color: var(--inputText) !important;
+}
+
+    .rz-dropdown:hover {
+        background: var(--inputBackgroundHover) !important;
+        border: 1px solid var(--inputBorderHover) !important;
+        color: var(--inputTextHover) !important;
+    }
+
+    .rz-dropdown:focus {
+        background: var(--inputBackgroundHighlight) !important;
+        border: 1px solid var(--inputBorderHighlight) !important;
+        color: var(--inputTextHighlight) !important;
+        box-shadow: inset 0px 0px 1px 1px var(--accentLight) !important;
+        outline: none;
+    }
+
+    .rz-dropdown.rz-state-disabled {
+        background: var(--inputBackgroundDisabled) !important;
+        border: 1px dashed var(--inputBorderDisabled) !important;
+        color: var(--inputTextDisabled) !important;
+        box-shadow: none !important;
+        outline: none;
+        cursor: not-allowed;
+    }
+
+        .rz-dropdown.rz-state-disabled .rz-dropdown-trigger-icon {
+            color: var(--inputTextDisabled) !important;
+        }
+
+
+    .rz-dropdown .rz-dropdown-label {
+        background: var(--inputBackground) !important;
+        color: var(--inputText) !important;
+    }
+
+    .rz-dropdown:hover .rz-dropdown-label {
+        background: var(--inputBackgroundHover) !important;
+        color: var(--inputTextHover) !important;
+    }
+
+    .rz-dropdown:focus .rz-dropdown-label {
+        background: var(--inputBackgroundHighlight) !important;
+        color: var(--inputTextHighlight) !important;
+    }
+
+    .rz-dropdown.rz-state-disabled .rz-dropdown-label {
+        background: var(--inputBackgroundDisabled) !important;
+        color: var(--inputTextDisabled) !important;
+    }
+
+
+    .rz-dropdown .rz-placeholder {
+        font-size: 14px;
+        color: var(--inputPlaceholder) !important;
+    }
+
+    .rz-dropdown:hover .rz-placeholder {
+        color: var(--inputPlaceholderHover) !important;
+    }
+
+    .rz-dropdown:focus .rz-placeholder {
+        color: var(--inputPlaceholderHighlight) !important;
+    }
+
+    .rz-dropdown.rz-state-disabled .rz-placeholder {
+        color: var(--inputPlaceholderDisabled) !important;
+    }
+
+.rz-dropdown-trigger {
+    height: 35px !important;
+    line-height: 35px !important;
+}
+
+.rz-dropdown-trigger-icon {
+    height: 35px !important;
+    padding-top: 5px;
+}
+
+.rz-dropdown-panel {
+    background: var(--panelItemBackground);
+    border-radius: 0 !important;
+}
+
+.rz-dropdown-items {
+    padding: 0;
+}
+
+.rz-dropdown-item {
+    padding: 2px 8px !important;
+    color: var(--textDark);
+    border-bottom: 1px solid var(--panelItemBorder);
+    font-size: 14px !important;
+}
+
+    .rz-dropdown-item:hover {
+        background: var(--panelItemBackgroundHover) !important;
+        color: var(--textDark) !important;
+    }
+
+    .rz-dropdown-item.rz-state-highlight {
+        background: var(--panelItemBackgroundHover) !important;
+        color: var(--textDark) !important;
+    }
+
+
+.rz-autocomplete-panel {
+    background: var(--panelItemBackground);
+    border-radius: 0 !important;
+}
+
+.rz-autocomplete-items {
+    padding: 0;
+    border-radius: 0 !important;
+}
+
+.rz-autocomplete-list-item {
+    padding: 2px 8px !important;
+    color: var(--textDark);
+    border-bottom: 1px solid var(--panelItemBorder);
+    font-size: 14px !important;
+}
+
+    .rz-autocomplete-list-item span {
+        padding: 0 15px !important;
+        font-size: 14px;
+    }
+
+    .rz-autocomplete-list-item:hover {
+        background: var(--panelItemBackgroundHover) !important;
+        color: var(--textDark) !important;
+    }
+
+    .rz-autocomplete-list-item.rz-state-highlight {
+        background: var(--panelItemBackgroundHover) !important;
+        color: var(--textDark) !important;
+    }
+
+
+.rz-selectbutton .rz-button-text {
+    font-size: 12px;
+    text-decoration: none;
+    text-transform: none;
+}
+
+.rz-datepicker-calendar td .rz-state-active {
+    background-color: var(--accent);
+}
+
+    .rz-datepicker-calendar td .rz-state-active:hover {
+        background-color: var(--accentLight);
+    }
+
+.rz-datepicker.rz-popup .rz-button-md {
+    background: var(--accent) !important;
+}
+
+    .rz-datepicker.rz-popup .rz-button-md:hover {
+        background: var(--accentLight) !important;
+    }
+
+
+.rz-data-grid {
+    background: var(--tableBackground) !important;
+    border-color: var(--tableBorderColor) !important;
+}
+
+    .rz-data-grid table thead {
+        border-bottom: 1px solid var(--tableHeaderBorderColor) !important;
+    }
+
+    .rz-data-grid table th {
+        background: var(--tableHeaderBackground);
+        border-bottom: 1px solid var(--tableHeaderBorderColor) !important;
+        border-right: 1px solid var(--tableHeaderBorderColor) !important;
+    }
+
+        .rz-data-grid table th:last-child {
+            border-right: none !important;
+        }
+
+        .rz-data-grid table th .rz-column-title {
+            color: var(--tableHeaderText);
+        }
+
+    .rz-data-grid table tr:not(.rz-expanded-row-content):nth-child(odd) > td {
+        background: none;
+    }
+
+    .rz-data-grid table tr:not(.rz-expanded-row-content):nth-child(even) > td {
+        background: var(--tableRowAltBackground);
+    }
+
+    .rz-data-grid .rz-column-title-content {
+        font-size: 12px;
+        font-weight: bold;
+    }
+
+    .rz-data-grid .rz-column-resizer:hover::after {
+        background-color: var(--accent);
+    }
+
+    .rz-data-grid tr {
+        border-color: var(--tableBorderColor) !important;
+    }
+
+    .rz-data-grid td {
+        background: var(--tableBackground);
+        border-bottom: 1px solid var(--tableBorderColor) !important;
+        border-right: 1px solid var(--tableBorderColor) !important;
+    }
+
+        .rz-data-grid td:last-child {
+            border-right: none !important;
+        }
+
+    .rz-data-grid td,
+    .rz-data-grid .rz-cell-data {
+        transition: none !important;
+        border-color: var(--tableBorderColor) !important;
+        color: var(--tableText) !important;
+    }
+
+    /* Column filters fill their header cell (the cell's borders frame them, so the box has none of its own) */
+    .rz-data-grid th .rz-cell-filter {
+        padding: 0 !important;
+    }
+
+    .rz-data-grid th .rz-cell-filter-content,
+    .rz-data-grid th .rz-cell-filter-label {
+        width: 100%;
+        border: none !important;
+        border-radius: 0 !important;
+    }
+
+    .rz-data-grid th .rz-cell-filter input {
+        height: 100%;
+        border: none !important;
+        border-radius: 0 !important;
+        padding: 0 8px;
+    }
+
+        .rz-data-grid th .rz-cell-filter input:focus {
+            box-shadow: inset 0 0 0 1px var(--inputBorderHighlight) !important;
+        }
+
+.rz-data-row:hover td {
+    background: var(--tableBackgroundHover) !important;
+    transition: none !important;
+}
+
+.rz-data-row.rz-state-highlight td {
+    border-bottom: 1px solid var(--tableRowSelectedBorder);
+    background: var(--tableRowSelectedBackground) !important;
+    color: var(--tableRowSelectedText) !important;
+}
+
+.rz-data-row.rz-state-highlight .rz-cell-data,
+.rz-data-row.rz-state-highlight .rz-cell-data a {
+    color: var(--tableRowSelectedText) !important;
+}
+
+    .rz-data-row.rz-state-highlight .rz-cell-data a:hover {
+        color: var(--accent) !important;
+    }
+
+
+.rz-numeric {
+    border-radius: 0;
+}
+
+.rz-numeric-button .rz-numeric-button-icon {
+    color: var(--textDark) !important;
+}
+
+.rz-numeric-button:hover .rz-numeric-button-icon {
+    color: var(--accentLight) !important;
+}
+
+.rz-numeric.rz-state-disabled .rz-numeric-button {
+    cursor: not-allowed;
+}
+
+    .rz-numeric.rz-state-disabled .rz-numeric-button .rz-numeric-button-icon {
+        color: var(--inputTextDisabled) !important;
+    }
+
+
+.rz-switch .rz-switch-circle {
+    background: var(--textVeryLight);
+}
+
+.rz-switch.rz-switch-checked .rz-switch-circle {
+    background: var(--accentVeryLight);
+}
+
+.rz-switch .rz-switch-circle::before {
+    background: var(--textLight);
+}
+
+.rz-switch.rz-switch-checked .rz-switch-circle::before {
+    background: var(--accent);
+}
+
+.rz-switch.rz-switch-checked .rz-switch-circle:hover:not(.rz-disabled):before {
+    box-shadow: none;
+}
+
+/* A disabled switch is grey whether it's on or off (only the knob's side shows its value), so a
+   disabled "on" switch doesn't look like an enabled one */
+.rz-switch.rz-state-disabled .rz-switch-circle,
+.rz-switch.rz-state-disabled.rz-switch-checked .rz-switch-circle {
+    background: var(--inputBorderDisabled);
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+    .rz-switch.rz-state-disabled .rz-switch-circle::before,
+    .rz-switch.rz-state-disabled.rz-switch-checked .rz-switch-circle::before {
+        background: var(--inputTextDisabled);
+        box-shadow: none;
+    }
+
+
+.rz-menu {
+    background: var(--panelBackground) !important;
+    color: var(--accent);
+    padding-left: 10px !important;
+}
+
+.rz-navigation-item-link,
+.rz-navigation-item-text,
+.rz-navigation-item-icon {
+    color: inherit !important;
+}
+
+.rz-menu > .rz-navigation-item > .rz-navigation-item-wrapper > .rz-navigation-item-link {
+    border-right: 1px solid var(--borderColorLight);
+    padding-right: 20px;
+    margin-right: 10px;
+}
+
+.rz-navigation-item-link:hover {
+    color: var(--accentLight) !important;
+}
+
+.rz-navigation-item-text {
+    font-size: 12px;
+}
+
+.rz-navigation-item-icon {
+    font-size: 16px;
+}
+
+.rz-navigation-item-icon-children {
+    font-size: 18px;
+    margin-left: 10px;
+}
+
+
+.rz-listbox {
+    padding: 0;
+    background: var(--panelItemBackground);
+    border: 1px solid var(--borderColor);
+    border-radius: 0;
+}
+
+    .rz-listbox:focus {
+        border: 1px solid var(--borderColor) !important;
+        outline: none !important;
+        box-shadow: none !important;
+    }
+
+.rz-listbox-header {
+    border-bottom: 1px solid var(--borderColor);
+}
+
+    .rz-listbox-header .rz-chkbox-box {
+        background: var(--panelBackground);
+        border-color: var(--borderColorDark);
+    }
+
+        .rz-listbox-header .rz-chkbox-box.rz-state-active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+.rz-listbox li {
+    padding: 3px 15px;
+    border-bottom: 1px solid var(--borderColorLight);
+    font-size: 15px;
+    color: var(--textDark);
+}
+
+    .rz-listbox li:hover {
+        background: var(--panelItemBackgroundHover);
+        color: var(--textDark);
+    }
+
+    .rz-listbox li.rz-state-highlight {
+        background: var(--accent) !important;
+        border-bottom: 1px solid var(--accentDark) !important;
+        color: #fff !important;
+    }
+
+    .rz-listbox li .rz-chkbox-box {
+        background: var(--panelBackground);
+        border-color: var(--borderColorDark);
+    }
+
+    .rz-listbox li.rz-state-highlight .rz-chkbox-box {
+        background: var(--accent);
+        color: #fff;
+    }
+
+
+.rz-datepicker-popup-container {
+    background: var(--panelBackground) !important;
+}
+
+.rz-calendar {
+    background: none !important;
+}
+
+.rz-calendar-header {
+    background: var(--panelBackgroundMedium) !important;
+    margin-bottom: 10px;
+}
+
+    .rz-calendar-header .rz-button {
+        background: var(--accent) !important;
+        color: #fff !important;
+        border-radius: 0;
+    }
+
+        .rz-calendar-header .rz-button:hover {
+            background: var(--accentLight) !important;
+            color: #fff !important;
+        }
+
+        .rz-calendar-header .rz-button .rzi {
+            color: #fff !important;
+        }
+
+.rz-calendar-view {
+    border: 1px solid var(--borderColor);
+}
+
+    .rz-calendar-view td {
+        padding: 0 !important;
+    }
+
+        .rz-calendar-view td > span {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .rz-calendar-view td .rz-state-default {
+            color: var(--textDark) !important;
+            transition: none;
+        }
+
+            .rz-calendar-view td .rz-state-default:hover {
+                color: var(--accent) !important;
+                background: var(--panelBackgroundMedium) !important;
+                border-radius: 0 !important;
+            }
+
+            .rz-calendar-view td .rz-state-default.rz-calendar-today {
+                color: var(--textDark) !important;
+                background: none !important;
+                border-radius: 0 !important;
+                border: 1px solid var(--accent) !important;
+            }
+
+        .rz-calendar-view td .rz-state-active,
+        .rz-calendar-view td .rz-state-active.rz-calendar-today {
+            color: #fff !important;
+            background: var(--accent) !important;
+            border-radius: 0 !important;
+        }
+
+            .rz-calendar-view td .rz-state-active:hover {
+                color: #fff !important;
+                background: var(--accentLight) !important;
+                border-radius: 0 !important;
+            }
+
+        .rz-calendar-view td.rz-calendar-other-month {
+            background: var(--panelBackgroundDark) !important;
+        }
+
+        .rz-calendar-view td .rz-calendar-other-month {
+            color: var(--textMild) !important;
+        }
+
+.rz-timepicker .rz-ampm-picker span {
+    color: var(--textDark) !important;
+}
+
+
+.rz-timepicker > .rz-button {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border-radius: 0;
+}
+
+    .rz-timepicker > .rz-button:hover {
+        background: var(--accentLight) !important;
+        color: #fff !important;
+    }
+
+
+.rz-datepicker {
+    border-radius: 0 !important;
+}
+
+    .rz-datepicker input {
+        font-size: 14px !important;
+        border-radius: 0 !important;
+    }
+
+    .rz-datepicker .rz-button-icon-left {
+        color: var(--textMild);
+    }
+
+        .rz-datepicker .rz-button-icon-left:hover {
+            color: var(--inputTextHighlight);
+        }
+
+    .rz-datepicker.rz-state-disabled .rz-button-icon-left {
+        color: var(--textLight);
+    }
+
+        .rz-datepicker.rz-state-disabled .rz-button-icon-left:hover {
+            color: var(--textLight);
+        }

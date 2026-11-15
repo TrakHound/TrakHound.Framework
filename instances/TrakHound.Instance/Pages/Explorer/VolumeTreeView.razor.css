@@ -1,0 +1,5 @@
+.volume-tree-empty {
+    padding: 10px 14px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}

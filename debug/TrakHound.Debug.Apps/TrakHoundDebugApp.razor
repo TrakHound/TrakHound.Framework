@@ -1,0 +1,78 @@
+@using TrakHound.Logging
+@inject TrakHoundDebugHost host
+
+@* Cascades the values the Instance gives App pages (see AppRoutes.razor in the Instance), from trakhound.debug.json.
+   Put it inside the Router's Found template, around the RouteView *@
+
+<CascadingValue Name="AppId" Value="@AppId">
+    <CascadingValue Name="AppName" Value="@AppId">
+        <CascadingValue Name="Client" Value="@host.Client">
+            <CascadingValue Name="Volume" Value="@host.Volume">
+                <CascadingValue Name="Variables" Value="@host.Variables">
+                    <CascadingValue Name="Logger" Value="@_logger">
+                        <CascadingValue Name="Parameters" Value="@_parameters">
+                            <TrakHoundTheme Key="@ThemeKey" />
+                            @{ RecoverOnNavigation(); }
+                            <ErrorBoundary @ref="_errorBoundary">
+                                <ChildContent>
+                                    <RouteView RouteData="@RouteData" DefaultLayout="@DefaultLayout" />
+                                </ChildContent>
+                                <ErrorContent Context="exception">
+                                    @* The Instance shows a Request ID here; the debug host shows the exception *@
+                                    <div class="trakhound-debug-exception" style="padding: 1rem;">
+                                        <h3>Unhandled Exception</h3>
+                                        <pre style="white-space: pre-wrap;">@exception</pre>
+                                    </div>
+                                </ErrorContent>
+                            </ErrorBoundary>
+                        </CascadingValue>
+                    </CascadingValue>
+                </CascadingValue>
+            </CascadingValue>
+        </CascadingValue>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+
+    /// <summary>
+    /// The local storage key of the debug host's Theme
+    /// </summary>
+    public const string ThemeKey = "trakhound.debug.theme";
+
+    private ITrakHoundLogger _logger;
+    private Dictionary<string, object> _parameters;
+    private ErrorBoundary _errorBoundary;
+    private RouteData _lastRouteData;
+
+
+    [Parameter]
+    public RouteData RouteData { get; set; }
+
+    [Parameter]
+    public Type DefaultLayout { get; set; }
+
+    private string AppId => host.Configuration.ConfigurationId;
+
+
+    protected override void OnInitialized()
+    {
+        // Write the pages' Log entries to the Console (the Instance writes them to its Logs)
+        var logger = new TrakHoundLogger(AppId);
+        logger.LogEntryReceived += (sender, item) => TrakHoundDebugHost.WriteLog(item);
+        _logger = logger;
+
+        // Each connection gets its own copy (pages can change them with SetParameter)
+        _parameters = host.GetParameters();
+    }
+
+    // An ErrorBoundary shows its Error Content until Recover is called, so a new Page clears the previous Page's exception
+    private void RecoverOnNavigation()
+    {
+        if (!ReferenceEquals(RouteData, _lastRouteData))
+        {
+            _lastRouteData = RouteData;
+            _errorBoundary?.Recover();
+        }
+    }
+}
