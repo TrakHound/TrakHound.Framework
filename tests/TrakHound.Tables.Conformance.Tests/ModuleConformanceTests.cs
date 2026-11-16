@@ -220,6 +220,30 @@ namespace TrakHound.Tables.Conformance.Tests
         }
 
         [SkippableFact]
+        public async Task Retention_KeepsTheRunsOfOtherInstances()
+        {
+            var service = _database.Create();
+            _context.Client.Services.Use(service);
+            RegisterFunction();
+
+            // Instances can share the database, so an expired Run of another Instance is left for that Instance to delete
+            var instanceId = _context.InstanceId;
+            _context.InstanceId = "other-instance";
+            var otherController = await _context.CreateApiController<TrakHound.Functions.Controller>();
+            await Run(otherController, "other", DateTime.UtcNow.AddDays(-60));
+            _context.InstanceId = instanceId;
+
+            var controller = await _context.CreateApiController<TrakHound.Functions.Controller>();
+            await Run(controller, "old", DateTime.UtcNow.AddDays(-60));
+
+            var result = await _context.RunFunction<global::Function>(new Dictionary<string, string> { ["days"] = "30" });
+            Assert.Equal(200, result.StatusCode);
+
+            Assert.Equal(404, (await controller.GetFunctionRunInput(FunctionId, "old")).StatusCode);
+            AssertOk(await otherController.GetFunctionRunInput(FunctionId, "other"));
+        }
+
+        [SkippableFact]
         public async Task Retention_SkipsTablesThatDontExist()
         {
             _context.Client.Services.Use(_database.Create());

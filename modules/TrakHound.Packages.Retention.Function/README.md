@@ -18,12 +18,12 @@ The Function calls the Packages Api on the same Instance, at the route `packages
 
 1. Reads the Organizations (`GET /packages/organizations`).
 2. For each Organization, reads its packages (`GET /packages/{organization}/latest`).
-3. For each package, reads its versions (`GET /packages/{organization}/{id}/versions`) and orders them newest first.
+3. For each package, reads its versions (`GET /packages/{organization}/{id}/versions`) and orders them newest first, in semantic versioning order.
 4. Deletes each version after the first `keep` (`DELETE /packages/{organization}?packageUuid={uuid}`), which removes its file, table rows and cache entry.
 
 Every Organization and package is cleaned up: there's no parameter to limit it to one. Each deletion is logged with its result, and a failed deletion is logged as an Error without stopping the Run. Deleted versions can't be recovered.
 
-**Prereleases:** versions are compared as plain version numbers, so a prerelease version (ex. `1.2.4-dev.20261114153000`) can't be ordered or deleted. If a package has more than `keep` versions and any of them is a prerelease, the Run fails when it reaches that package. Don't run the Function on a server that stores prereleases.
+**Prereleases** (ex. `1.2.4-dev.20261114153000`) count as versions like any other. A prerelease is newer than the versions before it and older than its stable release, so `1.2.4-dev.1` is kept over `1.2.3` but not over `1.2.4`.
 
 ## Requirements
 - `TrakHound.Packages.Api` configured on the same Instance with the route `packages`.
@@ -40,10 +40,12 @@ Run it from the Admin interface (Functions, Run tab), or on a schedule with a Sc
 | `TrakHound.ScheduledTasks.Worker` | Runs Functions on a CRON schedule |
 
 ## Development
-`Program.cs` runs the Function once against an Instance at `localhost:8472`, using a local `volume` folder, and prints the log and the response. It doesn't apply the `keep` default: pass the parameters as JSON in the third argument, ex.
+`Program.cs` runs the Function once with the debug host (`TrakHoundDebugHost`), which connects to the Instance at `localhost:8472` (or `instanceUrl` in `trakhound.debug.json`), and prints the log and the response. Pass the input Parameters as JSON in the first argument, or leave them out to use the defaults:
 
 ```bash
-dotnet run --project TrakHound.Packages.Retention.Function.csproj -- _ _ "{\"keep\":\"5\"}"
+dotnet run --project TrakHound.Packages.Retention.Function.csproj -- "{\"keep\":\"5\"}"
 ```
+
+The Function deletes versions on that Instance's package server, so run it against a test Instance.
 
 See https://www.trakhound.com/docs/trakhound-framework/debugging.

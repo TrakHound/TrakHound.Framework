@@ -125,5 +125,17 @@ namespace TrakHound.Common.Tests
             Assert.IsType<long>(Value("timestamp"));
             Assert.Equal(1, Value("enabled"));
         }
+
+        [Fact]
+        public void Transaction_False_IsSent()
+        {
+            // The client leaves out default values, and Transaction defaults to true, so a Batched Delete over HTTP was refused
+            var builder = new TrakHoundTableRequestBuilder();
+            builder.AppendDeleteBatched("test", "item", "\"target\".\"id\" = 'a'");
+
+            var request = Json.Convert<TrakHoundTableRequest>(Json.Convert(builder.Build(useTransaction: false)));
+
+            Assert.False(request.Transaction);
+        }
     }
 }

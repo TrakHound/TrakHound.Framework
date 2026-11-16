@@ -28,7 +28,7 @@ The Function deletes rows from these Tables in the `trakhound` Schema, which `Tr
 
 Jobs, Scheduled Tasks and Schedule Board columns are not deleted. Tables that don't exist yet are skipped.
 
-Rows of every Instance in the database are deleted, not only the Instance that runs the Function. When Instances share a database, run it on one of them.
+Only the rows of the Instance that runs the Function are deleted. When Instances share a database, run the Function on each of them.
 
 Rows are deleted in batches of 5000 without a transaction, so each batch commits on its own and locks are held briefly. The command can run for up to an hour, so a large backlog can be deleted in one Run.
 
@@ -42,6 +42,12 @@ The Function uses the Instance's Table Service (`ansi` Table Requests). It needs
 | `TrakHound.ScheduledTasks.Worker` | Runs this Function on a schedule. Add the Scheduled Task (and a Job to set `days`) on the Function's Schedule tab in the Admin interface |
 
 ## Development
-`Program.cs` runs the Function once against a TrakHound Instance at `localhost:8472`, with a local Volume in the `volume` folder of the build output, and prints its log and response. The Input Parameters are read as JSON from the third command line argument. Pass `days`, since this `Program.cs` doesn't apply the Parameter's default.
+`Program.cs` runs the Function once with the debug host (`TrakHoundDebugHost`), which connects to the Instance at `localhost:8472` (or `instanceUrl` in `trakhound.debug.json`), and prints its log and response. Pass the input Parameters as JSON in the first argument, or leave them out to use the defaults:
+
+```bash
+dotnet run --project TrakHound.Functions.Retention.Function.csproj -- "{\"days\":\"30\"}"
+```
+
+The Function deletes that Instance's Runs, so run it against a test Instance.
 
 See https://www.trakhound.com/docs/trakhound-framework/functions and https://www.trakhound.com/docs/trakhound-framework/debugging.

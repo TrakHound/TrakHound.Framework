@@ -9,6 +9,11 @@
 		<ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
 	</ItemGroup>
 
+	<!-- The debug host (Program.cs). th packages dotnet removes these when it builds the package -->
+	<ItemGroup Label="references-trakhound-debug">
+		<ProjectReference Include="..\..\debug\TrakHound.Debug\TrakHound.Debug.csproj" />
+	</ItemGroup>
+
 	<ItemGroup>
 	  <Content Remove="trakhound.package.json" />
 	  <Content Remove="trakhound.package.publish.json" />

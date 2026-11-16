@@ -34,6 +34,7 @@ namespace TrakHound.Services.Tables
         /// True if the steps run in one Transaction, so that either all of them apply or none do
         /// </summary>
         [JsonPropertyName("transaction")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.Never)] // Defaults to true, so false must be sent or it reads back as true
         public bool Transaction { get; set; } = true;
 
         /// <summary>

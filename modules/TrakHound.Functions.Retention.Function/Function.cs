@@ -23,18 +23,22 @@ public class Function : TrakHoundFunction
         var days = int.Parse(parameters["days"]); // Checked by the Instance (an Integer, 30 when not passed)
         if (days < 1) return BadRequest("days must be at least 1");
 
+        // Instances can share the database, and each one only deletes its own rows
+        if (string.IsNullOrEmpty(InstanceId)) return BadRequest("The Instance ID isn't set");
+
         var timestamp = DateTime.Today.AddDays(-days);
 
         // Run inputs and outputs have no start column, so they are deleted (by the keys of their Run) before the Runs
         var builder = new TrakHoundTableRequestBuilder();
         builder.Parameters.Add("cutoff", TrakHoundTableDataType.Int64, timestamp.ToUnixTime());
+        builder.Parameters.Add("instanceId", TrakHoundTableDataType.String, InstanceId);
 
         // Tables that don't exist yet are skipped
         var tables = (await Client.Services.Tables.List()).Result?.Where(o => o.Schema == _schema).Select(o => o.Name).ToHashSet() ?? new HashSet<string>();
 
         void Delete(string table, string where)
         {
-            if (tables.Contains(table)) builder.AppendDeleteBatched(_schema, table, where);
+            if (tables.Contains(table)) builder.AppendDeleteBatched(_schema, table, $"\"target\".\"instance_id\" = @instanceId and {where}");
         }
 
         var runIsExpired = $"exists (select 1 from \"{_schema}\".\"function_run\" as \"run\" where \"run\".\"instance_id\" = \"target\".\"instance_id\" and \"run\".\"function_id\" = \"target\".\"function_id\" and \"run\".\"id\" = \"target\".\"run_id\" and \"run\".\"start\" < @cutoff)";

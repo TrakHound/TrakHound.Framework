@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using TrakHound;
 using TrakHound.Clients;
+using TrakHound.Extensions;
 using TrakHound.Functions;
 using TrakHound.Packages;
 using TrakHound.Volumes;
@@ -37,12 +38,13 @@ public class Function : TrakHoundFunction
                         var versions = await Client.Api.GetJson<IEnumerable<string>>($"/packages/{organization}/{package.Id}/versions");
                         if (!versions.IsNullOrEmpty())
                         {
-                            foreach (var version in versions.Select(o => o.ToVersion()).OrderByDescending(o => o).Skip(limit))
+                            // Semantic Versioning order, so Prereleases are kept or deleted like any other version
+                            foreach (var version in versions.OrderByDescending(o => o, VersionComparer.Default).Skip(limit))
                             {
                                 var logLine = "=> " + version + " : Deleting..";
                                 var error = false;
 
-                                var packageUuid = TrakHoundPackage.GenerateUuid(package.Id, version.ToString());
+                                var packageUuid = TrakHoundPackage.GenerateUuid(package.Id, version);
 
                                 var deleteRoute = $"/packages/{organization}";
                                 deleteRoute = Url.AddQueryParameter(deleteRoute, "packageUuid", packageUuid);
