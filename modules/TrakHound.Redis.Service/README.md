@@ -52,14 +52,15 @@ Errors are returned with a Status Code that tells a Service Router whether to tr
 |---|---|
 | `400` Bad Request | Missing collection, pattern, keys or entries |
 | `404` Not Found | `ListCollections()` or `ListKeys()` found nothing |
-| `503` Not Available | `server` isn't set, or no primary server is connected (`ListCollections()`, `ListKeys()` and `Count()`) |
-| `500` Internal Error | Any other error, including a server that can't be reached during `Read()`, `Publish()` or `Delete()` |
+| `503` Not Available | `server` isn't set, or the server can't be reached |
+| `504` Timeout | The server didn't answer in time (5 seconds) |
+| `500` Internal Error | Any other error |
 
 ## Availability
 `CheckAvailability()` connects (if it isn't connected yet) and sends a `PING`. The result isn't cached. Without `server`, it reports `Redis Connection Not Configured`.
 
 ## Tests
-`tests/TrakHound.Redis.Service.Tests` runs against a Redis server when `TRAKHOUND_REDIS_TEST_SERVER` is set (with `TRAKHOUND_REDIS_TEST_PORT` and `TRAKHOUND_REDIS_TEST_PASSWORD` if needed). Each test uses its own Collections and deletes its Keys, so any database can be used. For example:
+`tests/TrakHound.Redis.Service.Tests` checks that a server that can't be reached returns `503` without any setup, and runs the other tests against a Redis server when `TRAKHOUND_REDIS_TEST_SERVER` is set (with `TRAKHOUND_REDIS_TEST_PORT` and `TRAKHOUND_REDIS_TEST_PASSWORD` if needed). Each test uses its own Collections and deletes its Keys, so any database can be used. For example:
 
 ```bash
 docker run -d --rm --name redis -p 6379:6379 redis:7

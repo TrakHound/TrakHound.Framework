@@ -68,16 +68,10 @@ namespace TrakHound.Mqtt.Service
         public string ClientId { get; set; }
 
         /// <summary>
-        /// Sets the CleanSession flag (true or false)
+        /// Sets the CleanSession flag (true or false). False keeps a Persistent Session on the Broker, which only applies with a set Client ID
         /// </summary>
         [JsonPropertyName("cleanSession")]
-        public bool CleanSession { get; set; }
-
-        /// <summary>
-        /// Sets the Quality Of Service (Qos) to use. 0 = At Most Once, 1 = At least Once, 2 = Exactly Once.
-        /// Not currently used: the QoS is specified on each Publish and Subscribe request.
-        /// </summary>
-        [JsonPropertyName("qos")]
-        public int Qos { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+        public bool CleanSession { get; set; } = true;
     }
 }

@@ -20,7 +20,9 @@ namespace TrakHound.Mqtt.Service
 
         public static IMqttClient CreateClient() => _factory.CreateMqttClient();
 
-        public static MqttClientOptions CreateOptions(MqttConnectionConfiguration configuration, string clientId)
+        /// <param name="clientIdIsGenerated">True when the Client ID is a new GUID. Its connection always uses a Clean Session, since the
+        /// Broker would keep a Persistent Session for it that nothing ever resumes</param>
+        public static MqttClientOptions CreateOptions(MqttConnectionConfiguration configuration, string clientId, bool clientIdIsGenerated)
         {
             var builder = new MqttClientOptionsBuilder();
 
@@ -40,7 +42,8 @@ namespace TrakHound.Mqtt.Service
                 builder.WithCredentials(configuration.Username, configuration.Password);
             }
 
-            if (configuration.CleanSession) builder.WithCleanSession();
+            // Set either way: MQTTnet starts with a Clean Session, so only setting it when true would leave false with no effect
+            builder.WithCleanSession(configuration.CleanSession || clientIdIsGenerated);
 
             // Client ID
             if (!string.IsNullOrEmpty(clientId)) builder.WithClientId(clientId);

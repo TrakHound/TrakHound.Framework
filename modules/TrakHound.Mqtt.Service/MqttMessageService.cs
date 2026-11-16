@@ -22,7 +22,8 @@ namespace TrakHound.Mqtt.Service
 
         public MqttMessageService(ITrakHoundServiceConfiguration configuration) : base(configuration)
         {
-            if (configuration != null)
+            // Without a Hostname there is nothing to connect to, so requests return 503 (Not Configured) instead of failing to connect
+            if (configuration != null && !string.IsNullOrEmpty(configuration.GetParameter("hostname")))
             {
                 var connectionConfiguration = new MqttConnectionConfiguration();
                 connectionConfiguration.Hostname = configuration.GetParameter("hostname");
@@ -30,10 +31,9 @@ namespace TrakHound.Mqtt.Service
                 connectionConfiguration.ClientId = configuration.GetParameter("clientId");
                 connectionConfiguration.Username = configuration.GetParameter("username");
                 connectionConfiguration.Password = configuration.GetParameter("password");
-                connectionConfiguration.Qos = configuration.GetParameter<int>("qos");
                 connectionConfiguration.Timeout = configuration.GetParameter<int>("timeout");
                 connectionConfiguration.ReconnectInterval = configuration.GetParameter<int>("reconnectInterval");
-                connectionConfiguration.CleanSession = configuration.GetParameter<bool>("cleanSession");
+                connectionConfiguration.CleanSession = !bool.TryParse(configuration.GetParameter("cleanSession"), out var cleanSession) || cleanSession; // True unless set to false
                 connectionConfiguration.UseTls = configuration.GetParameter<bool>("useTls");
                 _connectionConfiguration = connectionConfiguration;
 
@@ -132,6 +132,20 @@ namespace TrakHound.Mqtt.Service
             catch (Exception ex)
             {
                 return TrakHoundServiceResponse.BadRequest($"Invalid Topic ({topic}) : {ex.Message}");
+            }
+
+            try
+            {
+                await _publishClient.EnsureConnected(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 503 so that a Service Router can try its next Target
+                return TrakHoundServiceResponse.NotAvailable($"Connection Error : {ex.Message}");
             }
 
             try

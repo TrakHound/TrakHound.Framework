@@ -18,6 +18,7 @@ namespace TrakHound.Mqtt.Service
         private readonly MqttConnectionConfiguration _connectionConfiguration;
         private readonly ConcurrentDictionary<string, MqttSubscription> _subscriptions = new ConcurrentDictionary<string, MqttSubscription>();
         private readonly string _clientId;
+        private readonly bool _clientIdIsGenerated;
         private readonly IMqttClient _mqttClient;
         private readonly object _lock = new object();
         private CancellationTokenSource _stop;
@@ -63,7 +64,8 @@ namespace TrakHound.Mqtt.Service
         {
             Id = Guid.NewGuid().ToString();
             _connectionConfiguration = connectionConfiguration ?? throw new ArgumentNullException(nameof(connectionConfiguration));
-            _clientId = !string.IsNullOrEmpty(clientId) ? clientId : Guid.NewGuid().ToString();
+            _clientIdIsGenerated = string.IsNullOrEmpty(clientId);
+            _clientId = !_clientIdIsGenerated ? clientId : Guid.NewGuid().ToString();
             OnLog = onLogFunction;
 
             _mqttClient = MqttClientFactory.CreateClient();
@@ -186,7 +188,7 @@ namespace TrakHound.Mqtt.Service
                 timeout.CancelAfter(MqttClientFactory.GetTimeout(_connectionConfiguration));
 
                 Log(TrakHoundLogLevel.Debug, "Connecting to Broker..");
-                await _mqttClient.ConnectAsync(MqttClientFactory.CreateOptions(_connectionConfiguration, _clientId), timeout.Token);
+                await _mqttClient.ConnectAsync(MqttClientFactory.CreateOptions(_connectionConfiguration, _clientId, _clientIdIsGenerated), timeout.Token);
                 Log(TrakHoundLogLevel.Debug, "Connected to Broker Successfully");
             }
         }

@@ -9,6 +9,6 @@
     "repositoryDirectory": "modules/TrakHound.Mqtt.Service",
     ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultVolumeId": "trakhound.mqtt.service.configuration",
-    ".configurationParameters": "hostname,port,clientId,username,password,qos,timeout,reconnectInterval,cleanSession,useTls"
+    ".configurationParameters": "hostname,port,clientId,username,password,timeout,reconnectInterval,cleanSession,useTls"
   }
 }

@@ -124,7 +124,7 @@ namespace TrakHound.Redis.Driver
             }
             catch (Exception ex)
             {
-                return TrakHoundServiceResponse<IEnumerable<string>>.InternalError(ex.Message);
+                return Error<IEnumerable<string>>(ex);
             }
         }
 
@@ -166,7 +166,7 @@ namespace TrakHound.Redis.Driver
                 }
                 catch (Exception ex)
                 {
-                    return TrakHoundServiceResponse<IEnumerable<string>>.InternalError(ex.Message);
+                    return Error<IEnumerable<string>>(ex);
                 }
             }
             else
@@ -216,9 +216,13 @@ namespace TrakHound.Redis.Driver
                         return TrakHoundServiceResponse<TrakHoundKeyValueResponse>.NotFound();
                     }
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
-                    return TrakHoundServiceResponse<TrakHoundKeyValueResponse>.InternalError(ex.Message);
+                    return Error<TrakHoundKeyValueResponse>(ex);
                 }
             }
             else
@@ -248,7 +252,7 @@ namespace TrakHound.Redis.Driver
                 }
                 catch (Exception ex)
                 {
-                    return TrakHoundServiceResponse<int>.InternalError(ex.Message);
+                    return Error<int>(ex);
                 }
             }
             else
@@ -291,9 +295,13 @@ namespace TrakHound.Redis.Driver
                         return TrakHoundServiceResponse.InternalError("Error During Add");
                     }
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
-                    return TrakHoundServiceResponse.InternalError(ex.Message);
+                    return Error(ex);
                 }
             }
             else
@@ -319,9 +327,13 @@ namespace TrakHound.Redis.Driver
                     var count = await database.KeyDeleteAsync(redisKeys);
                     return TrakHoundServiceResponse.Ok($"{count} Keys Deleted Successfully");
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
-                    return TrakHoundServiceResponse.InternalError(ex.Message);
+                    return Error(ex);
                 }
             }
             else
@@ -329,6 +341,22 @@ namespace TrakHound.Redis.Driver
                 return TrakHoundServiceResponse.BadRequest();
             }
         }
+
+
+        // 503 when Redis can't be reached and 504 when it doesn't answer in time, so that a Service Router can try its next Target
+        private static TrakHoundServiceResponse Error(Exception ex) => ex switch
+        {
+            RedisTimeoutException => TrakHoundServiceResponse.Timeout(ex.Message),
+            RedisConnectionException => TrakHoundServiceResponse.NotAvailable(ex.Message),
+            _ => TrakHoundServiceResponse.InternalError(ex.Message)
+        };
+
+        private static TrakHoundServiceResponse<T> Error<T>(Exception ex) => ex switch
+        {
+            RedisTimeoutException => TrakHoundServiceResponse<T>.Timeout(ex.Message),
+            RedisConnectionException => TrakHoundServiceResponse<T>.NotAvailable(ex.Message),
+            _ => TrakHoundServiceResponse<T>.InternalError(ex.Message)
+        };
 
 
         /// <summary>
