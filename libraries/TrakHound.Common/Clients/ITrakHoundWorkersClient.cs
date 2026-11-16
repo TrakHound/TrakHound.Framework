@@ -57,12 +57,12 @@ namespace TrakHound.Clients
         /// <summary>
         /// Gets the Lifecycle, Error and CPU Metrics for each Worker
         /// </summary>
-        Task<IEnumerable<TrakHoundWorkerMetrics>> GetMetrics() => Task.FromResult<IEnumerable<TrakHoundWorkerMetrics>>(null);
+        Task<IEnumerable<TrakHoundWorkerMetrics>> GetMetrics();
 
         /// <summary>
         /// Gets the Metrics, including the Recent Status changes, for the specified Worker (null if it is unknown)
         /// </summary>
-        Task<TrakHoundWorkerMetrics> GetMetrics(string workerId) => Task.FromResult<TrakHoundWorkerMetrics>(null);
+        Task<TrakHoundWorkerMetrics> GetMetrics(string workerId);
 
 
         /// <summary>

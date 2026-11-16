@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -532,6 +533,45 @@ namespace TrakHound.Packages
         }
 
         /// <summary>
+        /// Returns true if the target Version matches the match Version. In a wildcard match Version, the parts before the '*' must equal
+        /// the target's parts (ex. "1.*" matches 1.x.x but not 2.0.0, "1.2.*" matches 1.2.x, "*" matches any Version), and the target's Prerelease Label is ignored
+        /// (ex. "1.*" matches 1.2.3-beta). A "-*" suffix doesn't change what matches (ex. "*-*" is the same as "*", and "1.2.3-*" matches 1.2.3 and its Prereleases).
+        /// It only changes which match <see cref="SelectVersion"/> selects. Otherwise the strings must be equal
+        /// </summary>
+        public static bool MatchVersion(string targetVersion, string matchVersion)
+        {
+            if (string.IsNullOrEmpty(targetVersion) || string.IsNullOrEmpty(matchVersion)) return false;
+
+            if (!matchVersion.Contains('*')) return targetVersion == matchVersion;
+
+            var target = targetVersion.ToBaseVersion();
+            if (target == null) return false;
+
+            var parts = matchVersion.EndsWith(PrereleaseWildcardSuffix)
+                ? matchVersion.Substring(0, matchVersion.Length - PrereleaseWildcardSuffix.Length).Split('.')
+                : matchVersion.Split('.');
+
+            for (var i = 0; i < parts.Length; i++)
+            {
+                if (parts[i] == "*") return true;
+
+                if (!int.TryParse(parts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var value)) return false;
+
+                var targetPart = i switch
+                {
+                    0 => target.Major,
+                    1 => target.Minor,
+                    2 => target.Build,
+                    3 => target.Revision,
+                    _ => -1
+                };
+                if (targetPart != value) return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Select the Version that a requested Version resolves to. "*" (or nothing) and patterns (ex. "1.2.*") select the newest Stable Version that matches,
         /// or the newest Prerelease if no Stable Version matches. With a "-*" suffix (ex. "*-*" or "1.2.*-*") they select the newest of both. Returns null if nothing matches
         /// </summary>
@@ -544,7 +584,7 @@ namespace TrakHound.Packages
             var requested = !string.IsNullOrEmpty(requestedVersion) ? requestedVersion : WilcardVersion;
             var comparer = requested.EndsWith(PrereleaseWildcardSuffix) ? VersionComparer.Default : VersionComparer.PreferStable;
 
-            return versions.Where(o => StringFunctions.MatchVersion(o, requested)).OrderByDescending(o => o, comparer).FirstOrDefault();
+            return versions.Where(o => MatchVersion(o, requested)).OrderByDescending(o => o, comparer).FirstOrDefault();
         }
 
         /// <summary>
@@ -1344,7 +1384,7 @@ namespace TrakHound.Packages
                     {
                         TrakHoundPackagesFileItem packageInformation;
 
-                        if (!string.IsNullOrEmpty(packageVersion)) packageInformation = packagesInformation.Packages.FirstOrDefault(o => o.Id.ToLower() == packageId.ToLower() && StringFunctions.MatchVersion(o.Version, packageVersion));
+                        if (!string.IsNullOrEmpty(packageVersion)) packageInformation = packagesInformation.Packages.FirstOrDefault(o => o.Id.ToLower() == packageId.ToLower() && MatchVersion(o.Version, packageVersion));
                         else packageInformation = packagesInformation.Packages.FirstOrDefault(o => o.Id.ToLower() == packageId.ToLower());
 
                         if (packageInformation != null)

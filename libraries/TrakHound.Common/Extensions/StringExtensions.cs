@@ -23,15 +23,36 @@ namespace TrakHound
         private static readonly string[] _dayNames = { "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" };
 
 
-        [GeneratedRegex(@"^(.+)-ago$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-        private static partial Regex AgoRegex();
+        private const string AgoPattern = @"^(.+)-ago$";
+        private const RegexOptions AgoOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
         // Long forms (ex. "5 minutes") and short forms (ex. "5m", "1h30m"). Longer units are listed first so "ms" isn't read as "m"
-        [GeneratedRegex(@"(?<value>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>years?|months?|weeks?|days?|hours?|minutes?|milliseconds?|microseconds?|seconds?|ticks?|ms|µs|y|w|d|h|m|s)(?![a-zµ])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        private const string DurationPattern = @"(?<value>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>years?|months?|weeks?|days?|hours?|minutes?|milliseconds?|microseconds?|seconds?|ticks?|ms|µs|y|w|d|h|m|s)(?![a-zµ])";
+        private const RegexOptions DurationOptions = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+
+        private const string HtmlPattern = @"<\s*([^ >]+)[^>]*>.*?<\s*/\s*\1\s*>";
+        private const RegexOptions HtmlOptions = RegexOptions.Singleline | RegexOptions.CultureInvariant;
+        private const int HtmlTimeout = 1000;
+
+        // TrakHound.Client copies this file and also builds it for .NET Standard 2.0, which has no Regex source generator
+#if NET
+        [GeneratedRegex(AgoPattern, AgoOptions)]
+        private static partial Regex AgoRegex();
+
+        [GeneratedRegex(DurationPattern, DurationOptions)]
         private static partial Regex DurationRegex();
 
-        [GeneratedRegex(@"<\s*([^ >]+)[^>]*>.*?<\s*/\s*\1\s*>", RegexOptions.Singleline | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+        [GeneratedRegex(HtmlPattern, HtmlOptions, matchTimeoutMilliseconds: HtmlTimeout)]
         private static partial Regex HtmlRegex();
+#else
+        private static readonly Regex _agoRegex = new Regex(AgoPattern, AgoOptions | RegexOptions.Compiled);
+        private static readonly Regex _durationRegex = new Regex(DurationPattern, DurationOptions | RegexOptions.Compiled);
+        private static readonly Regex _htmlRegex = new Regex(HtmlPattern, HtmlOptions | RegexOptions.Compiled, TimeSpan.FromMilliseconds(HtmlTimeout));
+
+        private static Regex AgoRegex() => _agoRegex;
+        private static Regex DurationRegex() => _durationRegex;
+        private static Regex HtmlRegex() => _htmlRegex;
+#endif
 
 
         /// <summary>
@@ -608,45 +629,6 @@ namespace TrakHound
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// Returns true if the target Version matches the match Version. In a wildcard match Version, the parts before the '*' must equal
-        /// the target's parts (ex. "1.*" matches 1.x.x but not 2.0.0, "1.2.*" matches 1.2.x, "*" matches any Version), and the target's Prerelease Label is ignored
-        /// (ex. "1.*" matches 1.2.3-beta). A "-*" suffix doesn't change what matches (ex. "*-*" is the same as "*", and "1.2.3-*" matches 1.2.3 and its Prereleases).
-        /// It only changes which match <see cref="Packages.TrakHoundPackage.SelectVersion"/> selects. Otherwise the strings must be equal
-        /// </summary>
-        public static bool MatchVersion(string targetVersion, string matchVersion)
-        {
-            if (string.IsNullOrEmpty(targetVersion) || string.IsNullOrEmpty(matchVersion)) return false;
-
-            if (!matchVersion.Contains('*')) return targetVersion == matchVersion;
-
-            var target = targetVersion.ToBaseVersion();
-            if (target == null) return false;
-
-            var parts = matchVersion.EndsWith(Packages.TrakHoundPackage.PrereleaseWildcardSuffix)
-                ? matchVersion.Substring(0, matchVersion.Length - Packages.TrakHoundPackage.PrereleaseWildcardSuffix.Length).Split('.')
-                : matchVersion.Split('.');
-
-            for (var i = 0; i < parts.Length; i++)
-            {
-                if (parts[i] == "*") return true;
-
-                if (!int.TryParse(parts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var value)) return false;
-
-                var targetPart = i switch
-                {
-                    0 => target.Major,
-                    1 => target.Minor,
-                    2 => target.Build,
-                    3 => target.Revision,
-                    _ => -1
-                };
-                if (targetPart != value) return false;
-            }
-
-            return true;
         }
 
         /// <summary>

@@ -243,7 +243,7 @@ namespace TrakHound.Workers
             {
                 foreach (var item in items)
                 {
-                    var information = TrakHoundWorkerInformation.Create(item.Configuration, item.Module.ModuleTypes?.FirstOrDefault(), item.Module.Package, item.VolumeId, item.Module.PackageReadMe);
+                    var information = TrakHoundWorkerInformationFactory.Create(item.Configuration, item.Module.ModuleTypes?.FirstOrDefault(), item.Module.Package, item.VolumeId, item.Module.PackageReadMe);
                     if (information != null)
                     {
                         information.Id = GenerateWorkerId(_instance.Id, item.Module.Package.Id, item.Configuration.Id);
@@ -288,7 +288,7 @@ namespace TrakHound.Workers
                 lock (_lock) item = _workers.GetValueOrDefault(workerKey);
                 if (item != null)
                 {
-                    information = TrakHoundWorkerInformation.Create(item.Configuration, item.Module.ModuleTypes?.FirstOrDefault(), item.Module.Package, item.VolumeId, item.Module.PackageReadMe);
+                    information = TrakHoundWorkerInformationFactory.Create(item.Configuration, item.Module.ModuleTypes?.FirstOrDefault(), item.Module.Package, item.VolumeId, item.Module.PackageReadMe);
                     if (information != null)
                     {
                         information.Id = GenerateWorkerId(_instance.Id, item.Module.Package.Id, item.Configuration.Id);

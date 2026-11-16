@@ -32,12 +32,12 @@ namespace TrakHound.Clients
         /// <summary>
         /// Gets the Run Metrics for each Function that has been Run
         /// </summary>
-        Task<IEnumerable<TrakHoundFunctionMetrics>> GetMetrics() => Task.FromResult<IEnumerable<TrakHoundFunctionMetrics>>(null);
+        Task<IEnumerable<TrakHoundFunctionMetrics>> GetMetrics();
 
         /// <summary>
         /// Gets the Run Metrics, including the Recent Runs, for the specified Function (null if it has not been Run)
         /// </summary>
-        Task<TrakHoundFunctionMetrics> GetMetrics(string functionId) => Task.FromResult<TrakHoundFunctionMetrics>(null);
+        Task<TrakHoundFunctionMetrics> GetMetrics(string functionId);
 
 
         /// <summary>
@@ -58,6 +58,6 @@ namespace TrakHound.Clients
         /// <summary>
         /// Request that a running Function stop. Returns false if the Run was not found or cancellation is not supported.
         /// </summary>
-        Task<bool> CancelRun(string functionId, string runId) => Task.FromResult(false);
+        Task<bool> CancelRun(string functionId, string runId);
     }
 }

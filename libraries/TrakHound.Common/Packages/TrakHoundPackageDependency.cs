@@ -68,7 +68,7 @@ namespace TrakHound.Packages
             if (dependency == null || string.IsNullOrEmpty(packageVersion)) return false;
 
             var matchVersion = !string.IsNullOrEmpty(dependency.Version) ? dependency.Version : TrakHoundPackage.WilcardVersion;
-            if (!StringFunctions.MatchVersion(packageVersion, matchVersion)) return false;
+            if (!TrakHoundPackage.MatchVersion(packageVersion, matchVersion)) return false;
 
             var minimumVersion = dependency.MinimumVersion.ToVersion();
             if (minimumVersion != null)

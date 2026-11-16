@@ -73,50 +73,6 @@ namespace TrakHound.Clients
         #region "Headers"
 
         /// <summary>
-        /// Sends a GET Request with query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Get(string route, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.GET, route, null, null, queryParameters, headers, cancellationToken);
-
-        /// <summary>
-        /// Sends a POST Request with a body serialized as JSON (by default), query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Post(string route, object requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.POST, route, TrakHoundApiResponse.GetJsonContentStream(requestBody), contentType, queryParameters, headers, cancellationToken);
-        /// <summary>
-        /// Sends a POST Request with a byte array body, query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Post(string route, byte[] requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.POST, route, TrakHoundApiResponse.GetContentStream(requestBody), contentType, queryParameters, headers, cancellationToken);
-        /// <summary>
-        /// Sends a POST Request with a Stream body, query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Post(string route, Stream requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.POST, route, requestBody, contentType, queryParameters, headers, cancellationToken);
-
-        /// <summary>
-        /// Sends a PUT Request with a body serialized as JSON (by default), query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Put(string route, object requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.PUT, route, TrakHoundApiResponse.GetJsonContentStream(requestBody), contentType, queryParameters, headers, cancellationToken);
-        /// <summary>
-        /// Sends a PUT Request with a byte array body, query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Put(string route, byte[] requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.PUT, route, TrakHoundApiResponse.GetContentStream(requestBody), contentType, queryParameters, headers, cancellationToken);
-        /// <summary>
-        /// Sends a PUT Request with a Stream body, query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Put(string route, Stream requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.PUT, route, requestBody, contentType, queryParameters, headers, cancellationToken);
-
-        /// <summary>
-        /// Sends a DELETE Request with query parameters and Headers to the specified Api route and returns the Api Response
-        /// </summary>
-        Task<TrakHoundApiResponse> Delete(string route, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
-            => Send(TrakHoundApiMethod.DELETE, route, null, null, queryParameters, headers, cancellationToken);
-
-        /// <summary>
         /// Opens a bidirectional Stream with query parameters and Headers to the specified Api route, receiving Api Responses
         /// </summary>
         Task<ITrakHoundStream<TrakHoundApiResponse>> Stream(string route, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default);

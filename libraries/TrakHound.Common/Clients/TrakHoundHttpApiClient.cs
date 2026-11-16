@@ -35,7 +35,7 @@ namespace TrakHound.Clients
 
         public async Task<TrakHoundApiResponse> Send(TrakHoundApiMethod requestMethod, string requestRoute, Stream requestBody, string contentType, Dictionary<string, string> queryParameters, IDictionary<string, string> headers, CancellationToken cancellationToken = default)
         {
-            var httpMethod = TrakHoundApi.GetHttpMethod(requestMethod);
+            var httpMethod = requestMethod.ToHttpMethod();
 
             var url = Url.Combine(HttpBaseUrl, requestRoute);
 

@@ -1122,7 +1122,7 @@ namespace TrakHound.Packages
 
                 // The highest installed Version that matches the Version (but not the Minimum Version)
                 var matchVersion = !string.IsNullOrEmpty(dependency.Version) ? dependency.Version : TrakHoundPackage.WilcardVersion;
-                var belowMinimum = installedVersions.FirstOrDefault(o => StringFunctions.MatchVersion(o, matchVersion));
+                var belowMinimum = installedVersions.FirstOrDefault(o => TrakHoundPackage.MatchVersion(o, matchVersion));
                 if (belowMinimum != null)
                 {
                     return $"v{belowMinimum} is installed, below the minimum {dependency.MinimumVersion}";

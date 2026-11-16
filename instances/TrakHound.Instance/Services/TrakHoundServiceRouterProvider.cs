@@ -160,7 +160,7 @@ namespace TrakHound.Services
 
             foreach (var router in _routerSet.Routers.Values)
             {
-                var information = TrakHoundServiceRouterInformation.Create(router);
+                var information = TrakHoundServiceRouterInformationFactory.Create(router);
                 if (information != null) informations.Add(information);
             }
 
@@ -174,7 +174,7 @@ namespace TrakHound.Services
                 var router = _routerSet.Routers.GetValueOrDefault(routerId);
                 if (router != null)
                 {
-                    return TrakHoundServiceRouterInformation.Create(router);
+                    return TrakHoundServiceRouterInformationFactory.Create(router);
                 }
             }
 

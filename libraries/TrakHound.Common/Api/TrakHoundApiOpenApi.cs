@@ -454,7 +454,7 @@ namespace TrakHound.Api
                 tool["readOnly"] = readOnly;
                 tool["destructive"] = destructive;
                 tool["controllerId"] = TrakHoundApiInformation.GetControllerId(_configuration.Id, controllerType);
-                tool["endpointId"] = TrakHoundApiInformation.GetEndpointId(routeAttribute);
+                tool["endpointId"] = TrakHoundApiInformationFactory.GetEndpointId(routeAttribute);
                 return tool;
             }
 

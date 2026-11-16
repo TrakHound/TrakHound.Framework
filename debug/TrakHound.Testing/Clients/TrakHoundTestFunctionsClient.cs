@@ -77,6 +77,13 @@ namespace TrakHound.Testing.Clients
             return results;
         }
 
+        // Runs aren't timed or counted, and a Run can't be cancelled because Run returns when the Function completes
+        public Task<IEnumerable<TrakHoundFunctionMetrics>> GetMetrics() => Task.FromResult<IEnumerable<TrakHoundFunctionMetrics>>(null);
+
+        public Task<TrakHoundFunctionMetrics> GetMetrics(string functionId) => Task.FromResult<TrakHoundFunctionMetrics>(null);
+
+        public Task<bool> CancelRun(string functionId, string runId) => Task.FromResult(false);
+
         public Task<ITrakHoundStream<TrakHoundFunctionStatusResponse>> SubscribeRunStatus(string runId)
         {
             throw new NotSupportedException("TrakHoundTestClient doesn't fake Client.Functions.SubscribeRunStatus (Run returns when the Function completes)");

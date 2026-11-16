@@ -20,22 +20,22 @@ namespace TrakHound.Clients
         /// <summary>
         /// Gets the overall Health of the Instance and the result of each Health Check
         /// </summary>
-        Task<TrakHoundInstanceHealth> GetHealth() => Task.FromResult<TrakHoundInstanceHealth>(null);
+        Task<TrakHoundInstanceHealth> GetHealth();
 
         /// <summary>
         /// Gets the CPU used by the Instance process, by Module Type and by Module, with the CPU not measured for any Module (null if not supported by the Client)
         /// </summary>
-        Task<TrakHoundCpuUsage> GetCpuUsage() => Task.FromResult<TrakHoundCpuUsage>(null);
+        Task<TrakHoundCpuUsage> GetCpuUsage();
 
         /// <summary>
         /// Gets the recent Boots of the Instance process, newest first (null if not supported by the Client)
         /// </summary>
-        Task<IEnumerable<TrakHoundInstanceBoot>> GetBoots(int take = 100) => Task.FromResult<IEnumerable<TrakHoundInstanceBoot>>(null);
+        Task<IEnumerable<TrakHoundInstanceBoot>> GetBoots(int take = 100);
 
         /// <summary>
         /// Gets a Boot of the Instance process by its ID (null if not found or not supported by the Client)
         /// </summary>
-        Task<TrakHoundInstanceBoot> GetBoot(string bootId) => Task.FromResult<TrakHoundInstanceBoot>(null);
+        Task<TrakHoundInstanceBoot> GetBoot(string bootId);
 
         /// <summary>
         /// Subscribes to Information updates for the specified Instance (null if not supported by the Client)

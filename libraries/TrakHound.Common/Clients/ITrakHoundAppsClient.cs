@@ -42,17 +42,17 @@ namespace TrakHound.Clients
         /// <summary>
         /// Gets the Page View Metrics for each App that has been viewed
         /// </summary>
-        Task<IEnumerable<TrakHoundAppMetrics>> GetMetrics() => Task.FromResult<IEnumerable<TrakHoundAppMetrics>>(null);
+        Task<IEnumerable<TrakHoundAppMetrics>> GetMetrics();
 
         /// <summary>
         /// Gets the Page View Metrics for the specified App (null if it has not been viewed)
         /// </summary>
-        Task<TrakHoundAppMetrics> GetMetrics(string appId) => Task.FromResult<TrakHoundAppMetrics>(null);
+        Task<TrakHoundAppMetrics> GetMetrics(string appId);
 
         /// <summary>
         /// Gets the Page View Metrics for each Client Connection (optionally only those that viewed the specified App)
         /// </summary>
-        Task<IEnumerable<TrakHoundAppConnectionMetrics>> GetConnectionMetrics(string appId = null) => Task.FromResult<IEnumerable<TrakHoundAppConnectionMetrics>>(null);
+        Task<IEnumerable<TrakHoundAppConnectionMetrics>> GetConnectionMetrics(string appId = null);
 
 
         /// <summary>

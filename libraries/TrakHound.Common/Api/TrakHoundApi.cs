@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
 
@@ -85,27 +84,6 @@ namespace TrakHound.Api
             }
         }
 
-
-        /// <summary>
-        /// Converts a TrakHoundApiMethod to an HttpMethod
-        /// </summary>
-        public static HttpMethod GetHttpMethod(TrakHoundApiMethod apiMethod)
-        {
-            switch (apiMethod)
-            {
-                case TrakHoundApiMethod.CONNECT: return HttpMethod.Connect;
-                case TrakHoundApiMethod.DELETE: return HttpMethod.Delete;
-                case TrakHoundApiMethod.GET: return HttpMethod.Get;
-                case TrakHoundApiMethod.HEAD: return HttpMethod.Head;
-                case TrakHoundApiMethod.OPTIONS: return HttpMethod.Options;
-                case TrakHoundApiMethod.PATCH: return HttpMethod.Patch;
-                case TrakHoundApiMethod.POST: return HttpMethod.Post;
-                case TrakHoundApiMethod.PUT: return HttpMethod.Put;
-                case TrakHoundApiMethod.TRACE: return HttpMethod.Trace;
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// Converts an HTTP Method name (case-insensitive) to a TrakHoundApiMethod. Returns GET if not recognized

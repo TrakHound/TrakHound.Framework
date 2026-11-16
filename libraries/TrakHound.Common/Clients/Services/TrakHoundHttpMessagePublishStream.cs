@@ -19,7 +19,7 @@ namespace TrakHound.Clients.Services
         private readonly FrameStream _webSocket;
         private readonly Func<T, byte[]> _createFrame;
         private readonly Func<T, string> _getTopic;
-        private TaskCompletionSource _connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        private TaskCompletionSource<bool> _connected = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _started;
 
 
@@ -80,7 +80,7 @@ namespace TrakHound.Clients.Services
             var connected = Volatile.Read(ref _connected);
             if (connected.Task.IsCompleted)
             {
-                var next = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var next = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 connected = Interlocked.CompareExchange(ref _connected, next, connected) == connected ? next : Volatile.Read(ref _connected);
             }
 
@@ -109,7 +109,7 @@ namespace TrakHound.Clients.Services
 
         private void WebSocketConnected(object sender, string streamId)
         {
-            Volatile.Read(ref _connected).TrySetResult();
+            Volatile.Read(ref _connected).TrySetResult(true);
         }
 
         private void FailureReceived(byte[] content)

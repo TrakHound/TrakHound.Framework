@@ -37,24 +37,16 @@ namespace TrakHound.Clients
         /// <summary>
         /// Query Log History with filtering (Levels, Search, Code) and paging (HasMore / Cursor)
         /// </summary>
-        async Task<TrakHoundLogQueryResult> Query(TrakHoundLogQuery query)
-        {
-            // Default for Clients that only support the basic Query
-            if (query == null) return null;
-
-            var pattern = query.Patterns != null ? System.Linq.Enumerable.FirstOrDefault(query.Patterns) : null;
-            var items = await Query(pattern, query.From, query.To, query.MinimumLevel, query.Skip, query.Take, query.SortOrder);
-            return new TrakHoundLogQueryResult { Items = items ?? new List<TrakHoundLogItem>() };
-        }
+        Task<TrakHoundLogQueryResult> Query(TrakHoundLogQuery query);
 
         /// <summary>
         /// Count the entries matching the Query, by Logger and Level
         /// </summary>
-        Task<IEnumerable<TrakHoundLoggerLogCount>> QueryCounts(TrakHoundLogQuery query) => Task.FromResult<IEnumerable<TrakHoundLoggerLogCount>>(null);
+        Task<IEnumerable<TrakHoundLoggerLogCount>> QueryCounts(TrakHoundLogQuery query);
 
         /// <summary>
         /// Get the Loggers known to the Log History (including Loggers from previous runs)
         /// </summary>
-        Task<IEnumerable<TrakHoundLoggerInformation>> QueryLoggers(string pattern) => Task.FromResult<IEnumerable<TrakHoundLoggerInformation>>(null);
+        Task<IEnumerable<TrakHoundLoggerInformation>> QueryLoggers(string pattern);
     }
 }

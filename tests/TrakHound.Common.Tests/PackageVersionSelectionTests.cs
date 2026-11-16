@@ -260,7 +260,7 @@ namespace TrakHound.Common.Tests
         [InlineData("not-a-version", "*", false)]
         public void MatchVersion_IgnoresPrereleaseLabel_ForWildcards(string target, string match, bool expected)
         {
-            Assert.Equal(expected, StringFunctions.MatchVersion(target, match));
+            Assert.Equal(expected, TrakHoundPackage.MatchVersion(target, match));
         }
 
         [Fact]

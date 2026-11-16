@@ -722,7 +722,7 @@ namespace TrakHound.Api
             var configurationId = route.Configuration.Id;
             Func<Type, TrakHoundApiEndpointRouteAttribute, (bool Allowed, bool AuthenticationRequired)> getAccess = (controllerType, routeAttribute) =>
             {
-                var resourceId = TrakHoundApiInformation.GetEndpointResourceId(configurationId, TrakHoundApiInformation.GetControllerId(configurationId, controllerType), TrakHoundApiInformation.GetEndpointId(routeAttribute));
+                var resourceId = TrakHoundApiInformation.GetEndpointResourceId(configurationId, TrakHoundApiInformation.GetControllerId(configurationId, controllerType), TrakHoundApiInformationFactory.GetEndpointId(routeAttribute));
                 return GetCatalogAccess(authorizer, identity, resourceId);
             };
 
@@ -821,7 +821,7 @@ namespace TrakHound.Api
 
         private static TrakHoundApiInformation CreateInformation(ApiRouteConfiguration route)
         {
-            return TrakHoundApiInformation.Create(route.Controllers, route.Configuration, route.Package, route.VolumeId, route.PackageReadMe);
+            return TrakHoundApiInformationFactory.Create(route.Controllers, route.Configuration, route.Package, route.VolumeId, route.PackageReadMe);
         }
 
         #endregion
@@ -1845,7 +1845,7 @@ namespace TrakHound.Api
                         var controller = CreateInstance(module, moduleType);
                         if (controller != null)
                         {
-                            var controllerInformation = TrakHoundApiInformation.CreateControllerInformation(configuration, moduleType);
+                            var controllerInformation = TrakHoundApiInformationFactory.CreateControllerInformation(configuration, moduleType);
 
                             var controllerRoute = !string.IsNullOrEmpty(controllerInformation.Route) && controllerInformation.Route != "/" ? controllerInformation.Route : ":";
                             if (!controllerRoute.StartsWith('/')) controllerRoute = '/' + controllerRoute;

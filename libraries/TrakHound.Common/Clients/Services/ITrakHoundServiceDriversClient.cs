@@ -26,11 +26,11 @@ namespace TrakHound.Clients.Services
         /// <summary>
         /// Gets the Request Metrics for each Service that has received requests
         /// </summary>
-        Task<IEnumerable<TrakHoundServiceMetrics>> GetMetrics() => Task.FromResult<IEnumerable<TrakHoundServiceMetrics>>(null);
+        Task<IEnumerable<TrakHoundServiceMetrics>> GetMetrics();
 
         /// <summary>
         /// Gets the Request Metrics for the specified Service (null if it has not received any requests)
         /// </summary>
-        Task<TrakHoundServiceMetrics> GetMetrics(string configurationId) => Task.FromResult<TrakHoundServiceMetrics>(null);
+        Task<TrakHoundServiceMetrics> GetMetrics(string configurationId);
     }
 }

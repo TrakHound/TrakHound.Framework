@@ -208,11 +208,14 @@ namespace TrakHound.Http
                             foreach (var header in Headers) _client.Options.SetRequestHeader(header.Key, header.Value);
                         }
 
-                        // Ignore Certificate Validation Errors (probably shouldn't be used in production)
+                        // Ignore Certificate Validation Errors (probably shouldn't be used in production). .NET Standard 2.0 (the TrakHound.Client
+                        // build for .NET Framework) can't set this per WebSocket, so there the certificate must be trusted
+#if NET
                         _client.Options.RemoteCertificateValidationCallback = (httpRequestMessage, cert, cetChain, policyErrors) =>
                         {
                             return true; // Allow Untrusted Server Certificate
                         };
+#endif
 
                         await _client.ConnectAsync(new Uri(_url), _stop.Token);
 

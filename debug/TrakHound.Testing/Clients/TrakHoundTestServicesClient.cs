@@ -34,6 +34,8 @@ namespace TrakHound.Testing.Clients
 
         public ITrakHoundServiceDriversClient Drivers { get; set; }
 
+        public ITrakHoundServiceConfigurationsClient Configurations { get; set; }
+
 
         public TrakHoundTestServicesClient()
         {

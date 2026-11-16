@@ -923,7 +923,7 @@ namespace TrakHound.Instances
         private static bool AcceptsVersion(string requestedVersion, string version)
         {
             if (string.IsNullOrEmpty(requestedVersion) || requestedVersion == "*") return true;
-            return requestedVersion.Contains('*') && StringFunctions.MatchVersion(version, requestedVersion);
+            return requestedVersion.Contains('*') && TrakHoundPackage.MatchVersion(version, requestedVersion);
         }
 
         private void AddPackageUsage<TConfiguration>(List<TrakHoundPackageUsage> usages, string category, Func<TConfiguration, string> getPackageId, Func<TConfiguration, string> getPackageVersion, Func<TConfiguration, string> getName) where TConfiguration : ITrakHoundConfiguration

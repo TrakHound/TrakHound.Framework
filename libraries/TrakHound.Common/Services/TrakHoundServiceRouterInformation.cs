@@ -27,24 +27,5 @@ namespace TrakHound.Services
         /// </summary>
         [JsonPropertyName("description")]
         public string Description { get; set; }
-
-
-        /// <summary>
-        /// Creates the information for the specified Router (null if the Router or its Configuration is null)
-        /// </summary>
-        public static TrakHoundServiceRouterInformation Create(TrakHoundServiceRouter router)
-        {
-            if (router != null && router.Configuration != null)
-            {
-                var information = new TrakHoundServiceRouterInformation();
-                information.Id = router.Configuration.Id;
-                information.Name = router.Configuration.Name;
-                information.Description = router.Configuration.Description;
-
-                return information;
-            }
-
-            return null;
-        }
     }
 }

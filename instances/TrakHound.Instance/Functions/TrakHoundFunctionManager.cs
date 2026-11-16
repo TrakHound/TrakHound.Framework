@@ -232,7 +232,7 @@ namespace TrakHound.Functions
             {
                 foreach (var functionItem in functionItems)
                 {
-                    var information = TrakHoundFunctionInformation.Create(functionItem.Configuration, functionItem.Module.ModuleTypes?.FirstOrDefault(), functionItem.Module.Package, functionItem.VolumeId, functionItem.Module.PackageReadMe);
+                    var information = TrakHoundFunctionInformationFactory.Create(functionItem.Configuration, functionItem.Module.ModuleTypes?.FirstOrDefault(), functionItem.Module.Package, functionItem.VolumeId, functionItem.Module.PackageReadMe);
                     if (information != null)
                     {
                         informations.Add(information);
@@ -254,7 +254,7 @@ namespace TrakHound.Functions
                 var functionItem = _functionsSnapshot.GetValueOrDefault(functionKey);
                 if (functionItem != null)
                 {
-                    information = TrakHoundFunctionInformation.Create(functionItem.Configuration, functionItem.Module.ModuleTypes?.FirstOrDefault(), functionItem.Module.Package, functionItem.VolumeId, functionItem.Module.PackageReadMe);
+                    information = TrakHoundFunctionInformationFactory.Create(functionItem.Configuration, functionItem.Module.ModuleTypes?.FirstOrDefault(), functionItem.Module.Package, functionItem.VolumeId, functionItem.Module.PackageReadMe);
                 }
             }     
 

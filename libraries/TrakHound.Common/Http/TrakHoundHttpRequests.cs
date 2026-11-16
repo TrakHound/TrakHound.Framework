@@ -22,19 +22,7 @@ namespace TrakHound.Http
     {
         private const int DefaultTimeout = 300000;
 
-        private static readonly HttpClient httpClient = new HttpClient(
-            new SocketsHttpHandler
-            {
-                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-                SslOptions = new SslClientAuthenticationOptions
-                {
-                    RemoteCertificateValidationCallback = (sender, cert, certChain, policyErrors) =>
-                    {
-                        return AllowUntrustedCertificates || policyErrors == SslPolicyErrors.None;
-                    }
-                }
-            })
+        private static readonly HttpClient httpClient = new HttpClient(CreateHandler())
         {
             // Timeout is enforced per request (see SendCore) so that changes to the Timeout property take effect
             Timeout = System.Threading.Timeout.InfiniteTimeSpan
@@ -49,6 +37,35 @@ namespace TrakHound.Http
         /// Allow connections to servers with untrusted (ex. self-signed) certificates
         /// </summary>
         public static bool AllowUntrustedCertificates { get; set; } = true;
+
+
+        // TrakHound.Client copies this file and also builds it for .NET Standard 2.0 (ex. .NET Framework), which has no SocketsHttpHandler or Brotli
+        private static HttpMessageHandler CreateHandler()
+        {
+#if NET
+            return new SocketsHttpHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+                SslOptions = new SslClientAuthenticationOptions
+                {
+                    RemoteCertificateValidationCallback = (sender, cert, certChain, policyErrors) =>
+                    {
+                        return AllowUntrustedCertificates || policyErrors == SslPolicyErrors.None;
+                    }
+                }
+            };
+#else
+            return new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                ServerCertificateCustomValidationCallback = (request, cert, certChain, policyErrors) =>
+                {
+                    return AllowUntrustedCertificates || policyErrors == SslPolicyErrors.None;
+                }
+            };
+#endif
+        }
 
 
         #region "Send"
@@ -730,9 +747,13 @@ namespace TrakHound.Http
             }
 
             public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+#if NET
             public override int Read(Span<byte> buffer) => _inner.Read(buffer);
+#endif
             public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _inner.ReadAsync(buffer, offset, count, cancellationToken);
+#if NET
             public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => _inner.ReadAsync(buffer, cancellationToken);
+#endif
             public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) => _inner.CopyToAsync(destination, bufferSize, cancellationToken);
 
             public override void Flush() { }

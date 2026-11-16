@@ -11,12 +11,8 @@ namespace TrakHound.Api
     /// </summary>
     public static class TrakHoundApiHeaders
     {
-        /// <summary>
-        /// Headers that are never passed to an Api, because they carry the caller's credentials for the Instance
-        /// (the Admin Session Cookie, Api Keys, Bearer Tokens, Module Tokens and the Token Identity Provider's Token).
-        /// An Api that could read them could act as its caller
-        /// </summary>
-        public static readonly IReadOnlySet<string> Withheld = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        // A HashSet for IsWithheld. Withheld is exposed as IReadOnlyCollection because IReadOnlySet isn't in .NET Standard 2.0 (TrakHound.Client)
+        private static readonly HashSet<string> _withheld = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Cookie",
             "Authorization",
@@ -26,11 +22,18 @@ namespace TrakHound.Api
             "token"
         };
 
+        /// <summary>
+        /// Headers that are never passed to an Api, because they carry the caller's credentials for the Instance
+        /// (the Admin Session Cookie, Api Keys, Bearer Tokens, Module Tokens and the Token Identity Provider's Token).
+        /// An Api that could read them could act as its caller
+        /// </summary>
+        public static readonly IReadOnlyCollection<string> Withheld = _withheld;
+
 
         /// <summary>
         /// Returns true if the Header is never passed to an Api (case-insensitive)
         /// </summary>
-        public static bool IsWithheld(string name) => !string.IsNullOrEmpty(name) && Withheld.Contains(name);
+        public static bool IsWithheld(string name) => !string.IsNullOrEmpty(name) && _withheld.Contains(name);
 
         /// <summary>
         /// Copies the Headers that may be passed to an Api into a case-insensitive Dictionary (Withheld Headers are removed).

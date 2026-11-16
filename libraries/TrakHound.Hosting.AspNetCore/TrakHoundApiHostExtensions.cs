@@ -335,7 +335,7 @@ namespace TrakHound.Hosting
 
             if (routeAttribute != null && routeAttribute.Method.HasValue)
             {
-                methods.Add(TrakHoundApi.GetHttpMethod(routeAttribute.Method.Value).ToString());
+                methods.Add(routeAttribute.Method.Value.ToHttpMethod().ToString());
             }
 
             return methods.ToArray();

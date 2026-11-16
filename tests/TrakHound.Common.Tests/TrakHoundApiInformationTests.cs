@@ -44,7 +44,7 @@ namespace TrakHound.Common.Tests
         private static Dictionary<string, TrakHoundApiParameterInformation> GetParameters(string route)
         {
             var configuration = new TrakHoundApiConfiguration { Id = "test", Route = "test" };
-            var endpoint = TrakHoundApiInformation.GetEndpointInformation(configuration, typeof(TestController)).Single(o => o.Route == route);
+            var endpoint = TrakHoundApiInformationFactory.GetEndpointInformation(configuration, typeof(TestController)).Single(o => o.Route == route);
             return endpoint.Parameters.ToDictionary(o => o.Name);
         }
 

@@ -23,7 +23,7 @@ namespace TrakHound.Clients
         /// <summary>
         /// The Service and Router Configurations (null if the Client doesn't support them)
         /// </summary>
-        ITrakHoundServiceConfigurationsClient Configurations => null;
+        ITrakHoundServiceConfigurationsClient Configurations { get; }
 
         /// <summary>
         /// Client used to access the Blob Service
