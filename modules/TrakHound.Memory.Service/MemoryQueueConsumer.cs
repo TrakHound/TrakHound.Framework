@@ -19,6 +19,7 @@ namespace TrakHound.Memory.Service
         private readonly object _lock = new object();
         private Channel<TrakHoundQueueMessage> _buffer;
         private CancellationTokenSource _stop;
+        private bool _workerStarted;
         private bool _disposed;
 
 
@@ -73,7 +74,11 @@ namespace TrakHound.Memory.Service
         }
 
 
-        public void Start()
+        /// <summary>
+        /// Joins the Queue: Messages are delivered to the buffer from now on, but aren't raised until Start() is called,
+        /// so none are raised before the caller attaches its handlers
+        /// </summary>
+        internal void Attach()
         {
             lock (_lock)
             {
@@ -81,12 +86,24 @@ namespace TrakHound.Memory.Service
 
                 _buffer = Channel.CreateUnbounded<TrakHoundQueueMessage>(new UnboundedChannelOptions { SingleReader = true });
                 _stop = new CancellationTokenSource();
+            }
+
+            _queue.AddConsumer(this);
+        }
+
+        public void Start()
+        {
+            Attach(); // Rejoins the Queue if it was Stopped
+
+            lock (_lock)
+            {
+                if (_disposed || _stop == null || _workerStarted) return;
+
+                _workerStarted = true;
                 var buffer = _buffer;
                 var token = _stop.Token;
                 _ = Task.Run(() => Worker(buffer, token));
             }
-
-            _queue.AddConsumer(this);
         }
 
         public void Stop()
@@ -97,6 +114,7 @@ namespace TrakHound.Memory.Service
 
                 _stop.Cancel();
                 _stop = null;
+                _workerStarted = false;
                 _buffer.Writer.TryComplete();
             }
 

@@ -14,9 +14,13 @@ jobs:
     env:
       TRAKHOUND_SIGNING_KEY: ${{ secrets.TRAKHOUND_SIGNING_KEY }}
       TRAKHOUND_BUILDER: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      PACKAGE_OUTPUT: ${{ runner.temp }}/packages
 
     steps:
+      # The runner context isn't available in a job's env, so the output folder is set here
+      - name: Set the Package output
+        shell: pwsh
+        run: '"PACKAGE_OUTPUT=$env:RUNNER_TEMP/packages" >> $env:GITHUB_ENV'
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-dotnet@v4

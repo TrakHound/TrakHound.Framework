@@ -66,7 +66,7 @@ namespace TrakHound.Memory.Service
             if (_disposed) return Task.FromResult(NotAvailable<ITrakHoundStream<TrakHoundQueueMessage>>("Service Disposed"));
 
             var consumer = new MemoryQueueConsumer(GetQueue(queue), autoAcknowledge, prefetch > 0 ? prefetch : _prefetch, (level, message) => Log(level, message));
-            consumer.Start();
+            consumer.Attach(); // Messages are raised once the caller attaches its handlers and calls Start()
 
             Log(TrakHoundLogLevel.Debug, $"Memory Message Queues : Subscribed : ({queue}) : {consumer.Id}");
 
