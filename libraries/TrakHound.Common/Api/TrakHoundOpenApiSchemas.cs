@@ -15,8 +15,8 @@ using System.Text.RegularExpressions;
 namespace TrakHound.Api
 {
     /// <summary>
-    /// Creates the JSON Schemas of the Types used by an OpenAPI Document. Types with properties are added once to Schemas (the Document's
-    /// "components/schemas") and referenced. Create one for each Document (the Type cache would otherwise keep Module Types loaded after their Module is unloaded)
+    /// Creates the JSON Schemas of the Types used by an OpenAPI Document. Types with properties, and the objects and enums they contain, are
+    /// added once to Schemas (the Document's "components/schemas") under their Type's name and referenced. Create one for each Document (the Type cache would otherwise keep Module Types loaded after their Module is unloaded)
     /// </summary>
     public class TrakHoundOpenApiSchemas
     {
@@ -63,19 +63,26 @@ namespace TrakHound.Api
                 return new JsonObject { ["type"] = "string", ["format"] = "binary" };
             }
 
-            // Component Schemas are referenced (and created once)
-            if (_schemaNames.TryGetValue(underlyingType, out var existingName))
+            return GetComponent(underlyingType, false) ?? ExportSchema(underlyingType);
+        }
+
+        /// <summary>
+        /// A reference to the Component Schema of the Type, created the first time. A Type whose Schema has no properties (ex. a collection
+        /// of referenced items, or an enum when force is false) isn't made a Component, and null is returned
+        /// </summary>
+        private JsonObject GetComponent(Type type, bool force)
+        {
+            if (_schemaNames.TryGetValue(type, out var existingName)) return CreateReference(existingName);
+
+            // The name is reserved before the Type is exported, so a Type that it contains which contains it in turn (ex. A > B > A)
+            // references this Component instead of exporting the Type again
+            var name = CreateSchemaName(type);
+            _schemaNames[type] = name;
+
+            var schema = ExportSchema(type);
+
+            if (force || HasProperties(schema))
             {
-                return CreateReference(existingName);
-            }
-
-            var schema = ExportSchema(underlyingType);
-
-            if (HasProperties(schema))
-            {
-                var name = CreateSchemaName(underlyingType);
-                _schemaNames[underlyingType] = name;
-
                 // Recursive Types reference their own Schema ("#" in an exported Schema is the Schema itself)
                 RewriteReferences(schema, $"#/components/schemas/{name}");
                 _schemas[name] = schema;
@@ -83,20 +90,101 @@ namespace TrakHound.Api
                 return CreateReference(name);
             }
 
-            return schema;
+            _schemaNames.Remove(type);
+            return null;
         }
 
         private JsonNode ExportSchema(Type type)
         {
             try
             {
-                var schema = _schemaOptions.GetJsonSchemaAsNode(type, _exporterOptions);
+                var exporterOptions = new JsonSchemaExporterOptions
+                {
+                    TreatNullObliviousAsNonNullable = _exporterOptions.TreatNullObliviousAsNonNullable,
+                    TransformSchemaNode = ReferenceNamedTypes
+                };
+
+                var schema = _schemaOptions.GetJsonSchemaAsNode(type, exporterOptions);
                 if (schema is JsonObject) return schema;
             }
             catch { }
 
             // "true" (any value), or a Type that can't be described
             return new JsonObject();
+        }
+
+        // Objects and enums inside a Schema (ex. a property, or a collection's items) become Components of their own and are referenced,
+        // so each Type is described once, under its own name. Inline, a client generator would have to make up a name (ex. "Page1")
+        // and would generate a collection's item Type again for each collection
+        private JsonNode ReferenceNamedTypes(JsonSchemaExporterContext context, JsonNode node)
+        {
+            // The root is the Type being exported
+            if (context.Path.IsEmpty || node is not JsonObject schema) return node;
+
+            var type = Nullable.GetUnderlyingType(context.TypeInfo.Type) ?? context.TypeInfo.Type;
+
+            // The exporter describes a Type it has already described in this Schema (ex. a second property of the same Type, or a
+            // recursive one) with a pointer to the first ("#/properties/open/items"). A Type with a Component references it instead
+            if (schema.ContainsKey("$ref"))
+            {
+                return _schemaNames.TryGetValue(type, out var componentName) ? CreateReference(componentName) : node;
+            }
+
+            var isEnum = type.IsEnum;
+            var isObject = context.TypeInfo.Kind == JsonTypeInfoKind.Object && schema.ContainsKey("properties");
+            if (!isEnum && !isObject) return node;
+
+            var reference = isEnum ? GetEnumComponent(type, schema) : GetComponent(type, false);
+            if (reference == null) return node;
+
+            // A nullable property keeps allowing null. A collection's items are referenced as they are (a generator would wrap
+            // "anyOf [item, null]" items in a Type of their own, and the collections don't hold null items)
+            var isItem = context.Path.Length > 0 && context.Path[^1] == "items";
+            if (!isItem && IsNullable(schema))
+            {
+                return new JsonObject { ["anyOf"] = new JsonArray(reference, new JsonObject { ["type"] = "null" }) };
+            }
+
+            return reference;
+        }
+
+        // An enum's Component is made from the property's Schema rather than by exporting the enum Type: how an enum is written is often set
+        // on the property (ex. [JsonConverter(typeof(JsonStringEnumConverter))]), so the Type alone would describe it as a number. A property
+        // that writes the enum differently from its Component (ex. as a number) keeps its own Schema (null)
+        private JsonObject GetEnumComponent(Type type, JsonObject propertySchema)
+        {
+            var schema = (JsonObject)propertySchema.DeepClone();
+
+            // The Component describes the enum's values. Whether a property allows null stays with the property
+            if (schema["type"] is JsonArray types)
+            {
+                var nonNull = types.Where(o => !(o is JsonValue value && value.TryGetValue<string>(out var s) && s == "null")).Select(o => o.GetValue<string>()).ToList();
+                if (nonNull.Count == 1) schema["type"] = nonNull[0];
+                else schema["type"] = new JsonArray(nonNull.Select(o => (JsonNode)o).ToArray());
+            }
+            if (schema["enum"] is JsonArray values)
+            {
+                schema["enum"] = new JsonArray(values.Where(o => o != null).Select(o => o.DeepClone()).ToArray());
+            }
+
+            if (_schemaNames.TryGetValue(type, out var existingName))
+            {
+                return JsonNode.DeepEquals(_schemas[existingName], schema) ? CreateReference(existingName) : null;
+            }
+
+            var name = CreateSchemaName(type);
+            _schemaNames[type] = name;
+            _schemas[name] = schema;
+
+            return CreateReference(name);
+        }
+
+        // "null" in the type (ex. ["object", "null"]), or a null value in an enum (a string enum's Schema has no type)
+        private static bool IsNullable(JsonObject schema)
+        {
+            if (schema["type"] is JsonArray types && types.Any(o => o is JsonValue value && value.TryGetValue<string>(out var s) && s == "null")) return true;
+            if (schema["enum"] is JsonArray values && values.Any(o => o == null)) return true;
+            return false;
         }
 
         private static bool HasProperties(JsonNode schema)
@@ -115,7 +203,8 @@ namespace TrakHound.Api
         {
             if (node is JsonObject jsonObject)
             {
-                if (jsonObject["$ref"] is JsonValue refValue && refValue.TryGetValue<string>(out var reference) && reference.StartsWith('#'))
+                // Only the exporter's own pointers ("#" and "#/properties/..."), not references to other Components
+                if (jsonObject["$ref"] is JsonValue refValue && refValue.TryGetValue<string>(out var reference) && reference.StartsWith('#') && !reference.StartsWith("#/components/"))
                 {
                     jsonObject["$ref"] = basePointer + reference.Substring(1);
                 }
@@ -141,9 +230,10 @@ namespace TrakHound.Api
             var baseName = _componentNameRegex.Replace(GetTypeName(type), "");
             if (string.IsNullOrEmpty(baseName)) baseName = "Schema";
 
+            // Names are reserved (in _schemaNames) before their Schemas are added
             var name = baseName;
             var i = 2;
-            while (_schemas.ContainsKey(name))
+            while (_schemas.ContainsKey(name) || _schemaNames.ContainsValue(name))
             {
                 name = $"{baseName}{i++}";
             }
