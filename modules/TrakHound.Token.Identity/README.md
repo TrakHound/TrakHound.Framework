@@ -29,7 +29,7 @@ Add the provider on Security > Providers > **Add Identity Provider**, choose thi
 | Parameter | Required | Default | Description |
 |---|---|---|---|
 | `token` | Yes | | The token clients must send. Without it, every request with a `token` is refused |
-| `userId` | No | | The User ID that requests with the token are signed in as |
+| `userId` | No | The provider's ID | The User ID that requests with the token are signed in as. It's shown in the logs and the Audit Log |
 | `roles` | No | | Comma separated Roles (ex. `operators,engineers`) |
 
 Example Parameters:

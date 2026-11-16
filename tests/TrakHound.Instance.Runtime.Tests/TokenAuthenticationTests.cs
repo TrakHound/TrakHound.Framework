@@ -30,18 +30,18 @@ namespace TrakHound.Instance.Runtime.Tests
             public Task<string> GetFormValue(string name) => Task.FromResult<string>(null);
         }
 
-        private static ITrakHoundIdentityProvider TokenProvider(string id, string token, string roles)
+        private static ITrakHoundIdentityProvider TokenProvider(string id, string token, string roles, string userId = null)
         {
             var configuration = new TrakHoundIdentityProviderConfiguration { Id = id };
             configuration.SetParameter("token", token);
-            configuration.SetParameter("userId", id);
+            if (userId != null) configuration.SetParameter("userId", userId);
             configuration.SetParameter("roles", roles);
             return new TrakHound.Token.Identity.Module(configuration, null, null, null);
         }
 
         private static readonly ITrakHoundIdentityProvider[] _providers =
         {
-            TokenProvider("machines", "token-a", "operators"),
+            TokenProvider("machines", "token-a", "operators", "line3-gateway"),
             TokenProvider("dashboards", "token-b", "viewers")
         };
 
@@ -58,6 +58,7 @@ namespace TrakHound.Instance.Runtime.Tests
 
             Assert.True(result.IsSuccess);
             Assert.Equal("machines", result.Identity.ProviderId);
+            Assert.Equal("line3-gateway", result.Identity.UserId);
             Assert.Equal(new[] { "operators" }, result.Identity.Roles);
         }
 
@@ -68,6 +69,7 @@ namespace TrakHound.Instance.Runtime.Tests
 
             Assert.True(result.IsSuccess);
             Assert.Equal("dashboards", result.Identity.ProviderId);
+            Assert.Equal("dashboards", result.Identity.UserId); // No userId is set, so it's the provider's ID
             Assert.Equal(new[] { "viewers" }, result.Identity.Roles);
         }
 

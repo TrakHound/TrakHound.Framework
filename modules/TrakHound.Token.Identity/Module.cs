@@ -38,7 +38,7 @@ namespace TrakHound.Token.Identity
             {
                 var identity = new TrakHoundIdentity();
                 identity.ProviderId = Id;
-                identity.UserId = Configuration.GetParameter(_userIdParameterKey);
+                identity.UserId = GetUserId();
                 identity.Type = TrakHoundIdentityUserType.Origin;
                 identity.Roles = GetRoles();
 
@@ -48,6 +48,13 @@ namespace TrakHound.Token.Identity
             return Task.FromResult(TrakHoundIdentityResult.Fail("Invalid Token"));
         }
 
+
+        // Without a User ID, requests are signed in as the provider, so logs and the Audit Log still show who made them
+        private string GetUserId()
+        {
+            var userId = Configuration.GetParameter(_userIdParameterKey);
+            return !string.IsNullOrEmpty(userId) ? userId : Id;
+        }
 
         // Roles are configured as a comma separated list (ex. "operators,engineers")
         private string[] GetRoles() => GetListParameter(_rolesParameterKey);
