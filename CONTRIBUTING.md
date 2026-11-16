@@ -49,7 +49,7 @@ To run an Instance from source, see [Getting Started](README.md#getting-started)
 4. Write commit messages with a short imperative subject (ex. "Add Zones to limit what Modules can reach") and a body that explains what changed and why.
 5. Open the pull request against `main` and fill in the template.
 
-CI builds every project, runs the tests (on Linux) and scans the changes for secrets. It has to pass before a pull request is merged. A maintainer reviews each pull request. Changes are merged by fast-forwarding `main`, so you may be asked to rebase onto the latest `main`.
+A maintainer reviews each pull request. Changes are merged by fast-forwarding `main`, so you may be asked to rebase onto the latest `main`.
 
 ## License
 
