@@ -23,4 +23,10 @@
 	  <PackageReference Include="System.DirectoryServices.Protocols" Version="10.0.12" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="README.md" TargetPath="Readme.md">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

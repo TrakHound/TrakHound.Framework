@@ -70,7 +70,7 @@ The packages each package depends on (the `dependencies` in its `package.json`).
 
 **`[trakhound].[package_latest_view]`**
 
-A view (created from [Scripts/package_latest_view.sql](Scripts/package_latest_view.sql)) that returns the most recently **built** version (max `build_date`) of each package `id` per organization. It is used by the `latest` and `category` query endpoints.
+A view (created from `Scripts/package_latest_view.sql`) that returns the most recently **built** version (max `build_date`) of each package `id` per organization. It is used by the `latest` and `category` query endpoints.
 
 ### Blobs
 Package contents are stored in the `trakhound.packages` blob collection using the key `SHA256("{organization}:{packageUuid}")`.
@@ -174,15 +174,15 @@ curl -X POST "http://localhost:8472/packages/Public" \
 | 500 | Error communicating with the Tables, Blobs, or KeyValues services |
 
 ## Development
-The project can be run standalone for debugging using `TrakHound.Debug.AspNetCore`. [Program.cs](Program.cs) connects to a TrakHound Instance at `localhost:8472`, maps the API endpoints and streams, and serves the Api Debugger at `/_debug`.
+The project can be run standalone for debugging using `TrakHound.Debug.AspNetCore`. `Program.cs` connects to a TrakHound Instance at `localhost:8472`, maps the API endpoints and streams, and serves the Api Debugger at `/_debug`.
 
 ```bash
 dotnet run --project TrakHound.Packages.Api.csproj
 ```
 
-> **Note:** [Service.cs](Service.cs) is legacy code that is excluded from compilation and kept for reference only.
+> **Note:** `Service.cs` is legacy code that is excluded from compilation and kept for reference only.
 
 The tests are in `tests/TrakHound.Packages.Api.Tests`. The endpoint tests need a SQL Server, and are skipped unless `TRAKHOUND_SQLSERVER_TEST_SERVER` names one (ex. `(localdb)\MSSQLLocalDB`). They create their own database and drop it after.
 
 ## Publishing
-Package information is defined in [trakhound.package.json](trakhound.package.json). Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see the [CLI README](../../cli/README.md#versions)).
+Package information is defined in `trakhound.package.json`. Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see [Versions from Git](https://www.trakhound.com/docs/trakhound-framework/packages#package-versions)).

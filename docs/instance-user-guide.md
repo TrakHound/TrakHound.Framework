@@ -158,7 +158,7 @@ The **Schedule Board** has a column per schedule. Drag a Function, or one of its
 
 **Export** and **Import** (on the Schedule Board, and on a Function's Schedule tab for that Function) copy Jobs and Scheduled Tasks between Instances as a `.json` file, which can also be written by hand. Export saves the Tasks with the Jobs they use. Import opens a file and checks it first without writing anything (a dry run), listing what would be added, replaced or kept, and any Task whose Job is missing. Choose what happens **When a Job or Task already exists**: **Don't import (show the differences)**, **Keep the existing one** or **Replace it**, then click **Import**.
 
-The Summary, Jobs, Schedule and Schedule Board need the `TrakHound.Functions.Api` package, and scheduling needs `TrakHound.ScheduledTasks`.
+The Summary, Jobs, Schedule and Schedule Board need the `TrakHound.Functions.Api` package, and scheduling also needs `TrakHound.ScheduledTasks.Api` and `TrakHound.ScheduledTasks.Worker`.
 
 #### 2.3.5 Workers
 

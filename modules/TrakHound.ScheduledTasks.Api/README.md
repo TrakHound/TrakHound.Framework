@@ -141,11 +141,11 @@ curl -X POST "http://localhost:8472/scheduled-tasks/api/import?mode=overwrite&dr
 | `TrakHound.Functions.Api` | Uses this API (`scheduled-tasks/api`) to create, update, and delete Scheduled Tasks for Functions, manages Jobs, and exports / imports Jobs with their Tasks (`functions/schedules/export` and `functions/schedules/import`) |
 
 ## Development
-The project can be run standalone for debugging using `TrakHound.Debug.AspNetCore`. [Program.cs](Program.cs) connects to a TrakHound Instance at `localhost:8472`, uses a local Volume located in the `volume` directory of the build output, maps the API endpoints and streams, and serves the Api Debugger at `/_debug`.
+The project can be run standalone for debugging using `TrakHound.Debug.AspNetCore`. `Program.cs` connects to a TrakHound Instance at `localhost:8472`, uses a local Volume located in the `volume` directory of the build output, maps the API endpoints and streams, and serves the Api Debugger at `/_debug`.
 
 ```bash
 dotnet run --project TrakHound.ScheduledTasks.Api.csproj
 ```
 
 ## Publishing
-Package information is defined in [trakhound.package.json](trakhound.package.json). Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see the [CLI README](../../cli/README.md#versions)).
+Package information is defined in `trakhound.package.json`. Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see [Versions from Git](https://www.trakhound.com/docs/trakhound-framework/packages#package-versions)).

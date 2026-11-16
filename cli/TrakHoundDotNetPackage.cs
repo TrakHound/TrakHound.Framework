@@ -212,6 +212,8 @@ namespace TrakHound.Packages
                 var fontAwesomeDir = Path.Combine(distDir, "wwwroot", "_content", "TrakHound.Blazor.Hosting", "css", "font-awesome");
                 if (Directory.Exists(fontAwesomeDir)) Directory.Delete(fontAwesomeDir, true);
 
+                CopyReadMeToRoot(distDir, packageTempDir);
+
                 if (settings.IncludeSource)
                 {
                     // Copy Source files and compress to "src.zip"
@@ -287,6 +289,28 @@ namespace TrakHound.Packages
             catch
             {
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Copy the Readme in the 'dist' directory (Readme.md or Readme.txt, any case) to the root of the Package as Readme.md or Readme.txt.
+        /// The Instance reads it from 'dist', and package servers (ex. packages.trakhound.com) read it from the root without extracting 'dist'
+        /// </summary>
+        private static void CopyReadMeToRoot(string distDir, string packageDir)
+        {
+            if (!Directory.Exists(distDir)) return;
+
+            foreach (var extension in TrakHoundPackage.ReadMeFileExtensions)
+            {
+                var filename = TrakHoundPackage.ReadMeFilename + extension;
+                var readMePath = Directory.GetFiles(distDir, "*", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault(o => string.Equals(Path.GetFileName(o), filename, StringComparison.OrdinalIgnoreCase));
+
+                if (readMePath != null)
+                {
+                    File.Copy(readMePath, Path.Combine(packageDir, filename), true);
+                    return;
+                }
             }
         }
 

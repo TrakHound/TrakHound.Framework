@@ -16,4 +16,10 @@
 	  <None Include="trakhound.package.publish.json" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="README.md" TargetPath="Readme.md">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

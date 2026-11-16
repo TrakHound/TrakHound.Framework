@@ -126,4 +126,4 @@ A Queue is created the first time it is used, and Queue names are case-sensitive
 | 409 | The Queue is full (`maxQueueLength`) |
 
 ## Publishing
-Package information is defined in [trakhound.package.json](trakhound.package.json). Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see the [CLI README](../../cli/README.md#versions)).
+Package information is defined in `trakhound.package.json`. Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see [Versions from Git](https://www.trakhound.com/docs/trakhound-framework/packages#package-versions)).

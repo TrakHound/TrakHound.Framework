@@ -22,4 +22,10 @@
 	  <ProjectReference Include="..\..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="README.md" TargetPath="Readme.md">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

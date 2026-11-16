@@ -25,4 +25,10 @@
 		<ProjectReference Include="..\..\debug\TrakHound.Debug.AspNetCore\TrakHound.Debug.AspNetCore.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="README.md" TargetPath="Readme.md">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

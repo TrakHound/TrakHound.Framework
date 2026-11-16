@@ -15,4 +15,10 @@
 		<InternalsVisibleTo Include="TrakHound.ScheduledTasks.Worker.Tests" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <None Update="README.md" TargetPath="Readme.md">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
 </Project>

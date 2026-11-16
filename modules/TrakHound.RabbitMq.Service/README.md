@@ -49,4 +49,4 @@ docker run -d --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-manage
 ```
 
 ## Publishing
-Package information is defined in [trakhound.package.json](trakhound.package.json). Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see the [CLI README](../../cli/README.md#versions)).
+Package information is defined in `trakhound.package.json`. Its version is the `version` prefix in that file plus the git height, and the TrakHound CLI publishes it to the Publish Target in the nearest `trakhound.package.publish.json` (see [Versions from Git](https://www.trakhound.com/docs/trakhound-framework/packages#package-versions)).
