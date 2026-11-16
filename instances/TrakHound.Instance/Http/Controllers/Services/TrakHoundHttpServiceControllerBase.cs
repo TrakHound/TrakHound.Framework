@@ -38,7 +38,7 @@ namespace TrakHound.Http
             }
 
             var result = new ContentResult();
-            result.StatusCode = serviceResponse.StatusCode;
+            result.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
             result.Content = serviceResponse.Message;
             result.ContentType = "text/plain";
             return result;
@@ -67,7 +67,7 @@ namespace TrakHound.Http
             else
             {
                 var result = new ContentResult();
-                result.StatusCode = serviceResponse.StatusCode;
+                result.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
                 result.Content = serviceResponse.Message;
                 result.ContentType = "text/plain";
                 return result;
@@ -76,7 +76,7 @@ namespace TrakHound.Http
 
         protected async Task ProcessServiceResponse(HttpResponse httpResponse, TrakHoundServiceResponse serviceResponse)
         {
-            httpResponse.StatusCode = serviceResponse.StatusCode;
+            httpResponse.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
 
             if (!string.IsNullOrEmpty(serviceResponse.RouterId))
             {
@@ -99,7 +99,7 @@ namespace TrakHound.Http
 
         protected async Task ProcessServiceResponse<TResult>(HttpResponse httpResponse, TrakHoundServiceResponse<TResult> serviceResponse)
         {
-            httpResponse.StatusCode = serviceResponse.StatusCode;
+            httpResponse.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
 
             if (!string.IsNullOrEmpty(serviceResponse.RouterId))
             {
@@ -118,6 +118,17 @@ namespace TrakHound.Http
                 var responseBytes = serviceResponse.Message.ToUtf8Bytes();
                 await Response.Body.WriteAsync(responseBytes);
             }
+        }
+
+
+        /// <summary>
+        /// The HTTP Status Code to answer with for a Service Response's Status Code. A code that isn't a final HTTP status
+        /// (ex. 0 from a Response that was never set) would be written as an invalid status line that clients can't read,
+        /// so it's answered as 503 (no Service handled the Request)
+        /// </summary>
+        internal static int GetHttpStatusCode(int serviceStatusCode)
+        {
+            return serviceStatusCode >= 200 && serviceStatusCode <= 599 ? serviceStatusCode : StatusCodes.Status503ServiceUnavailable;
         }
 
 

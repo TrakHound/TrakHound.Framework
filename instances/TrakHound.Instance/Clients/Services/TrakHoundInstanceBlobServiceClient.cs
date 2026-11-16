@@ -42,7 +42,7 @@ namespace TrakHound.Clients.Services
                 return await router.Blobs.ListCollections(cancellationToken: cancellationToken);
             }
 
-            return default;
+            return TrakHoundServiceResponse<IEnumerable<TrakHoundBlobCollection>>.BadRequest($"Invalid Router ID : {routerId}");
         }
 
         public async Task<TrakHoundServiceResponse<IEnumerable<string>>> ListKeys(string collection, int skip, int take, string routerId = null, CancellationToken cancellationToken = default)
@@ -54,9 +54,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.Blobs.ListKeys(collection, skip, take, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse<IEnumerable<string>>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<IEnumerable<string>>.BadRequest("Collection Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse<IEnumerable<TrakHoundBlob>>> List(string collection, int skip, int take, string routerId = null, CancellationToken cancellationToken = default)
@@ -68,9 +69,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.Blobs.List(collection, skip, take, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse<IEnumerable<TrakHoundBlob>>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<IEnumerable<TrakHoundBlob>>.BadRequest("Collection Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse<TrakHoundBlob>> Read(string collection, string key, string routerId = null, CancellationToken cancellationToken = default)
@@ -82,9 +84,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.Blobs.Read(collection, key, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse<TrakHoundBlob>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<TrakHoundBlob>.BadRequest("Key Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse<Stream>> Download(string collection, string key, string routerId = null, CancellationToken cancellationToken = default)
@@ -104,9 +107,10 @@ namespace TrakHound.Clients.Services
                     }
                     return response;
                 }
+                else return TrakHoundServiceResponse<Stream>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<Stream>.BadRequest("Key Not Specified");
         }
 
         /// <summary>
@@ -147,9 +151,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.Blobs.Upload(collection, key, content, contentType, metadata, overwrite, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse.BadRequest("Key Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse> Delete(string collection, string key, string routerId = null, CancellationToken cancellationToken = default)
@@ -161,9 +166,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.Blobs.Delete(collection, key, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse.BadRequest("Key Not Specified");
         }
     }
 }

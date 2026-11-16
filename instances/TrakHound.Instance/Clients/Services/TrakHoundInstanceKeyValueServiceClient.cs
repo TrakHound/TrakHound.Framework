@@ -48,7 +48,7 @@ namespace TrakHound.Clients.Services
                 return outputResponse;
             }
 
-            return default;
+            return TrakHoundServiceResponse<IEnumerable<string>>.BadRequest($"Invalid Router ID : {routerId}");
         }
 
         public async Task<TrakHoundServiceResponse<IEnumerable<string>>> ListKeys(string collection, string pattern, int skip, int take, string routerId = null, CancellationToken cancellationToken = default)
@@ -66,9 +66,10 @@ namespace TrakHound.Clients.Services
                     outputResponse.Result = response.Result;
                     return outputResponse;
                 }
+                else return TrakHoundServiceResponse<IEnumerable<string>>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<IEnumerable<string>>.BadRequest("Collection or Pattern Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse<string>> Read(string collection, string key, string routerId = null, CancellationToken cancellationToken = default)
@@ -93,9 +94,10 @@ namespace TrakHound.Clients.Services
 
                     return outputResponse;
                 }
+                else return TrakHoundServiceResponse<string>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<string>.BadRequest("Collection or Key Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse<TrakHoundKeyValueResponse>> Read(string collection, IEnumerable<string> keys, string routerId = null, CancellationToken cancellationToken = default)
@@ -107,9 +109,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.KeyValues.Read(collection, keys, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse<TrakHoundKeyValueResponse>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<TrakHoundKeyValueResponse>.BadRequest("Collection or Keys Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse<int>> Count(string collection, string routerId = null, CancellationToken cancellationToken = default)
@@ -128,9 +131,10 @@ namespace TrakHound.Clients.Services
 
                     return outputResponse;
                 }
+                else return TrakHoundServiceResponse<int>.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse<int>.BadRequest("Collection Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse> Publish(string collection, string key, string value, string routerId = null, CancellationToken cancellationToken = default)
@@ -145,9 +149,10 @@ namespace TrakHound.Clients.Services
 
                     return await router.KeyValues.Publish(collection, entries, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse.BadRequest("Key or Value Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse> Publish(string collection, IReadOnlyDictionary<string, string> entries, string routerId = null, CancellationToken cancellationToken = default)
@@ -159,9 +164,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.KeyValues.Publish(collection, entries, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse.BadRequest("Entries Not Specified");
         }
 
         public async Task<TrakHoundServiceResponse> Delete(string collection, IEnumerable<string> keys, string routerId = null, CancellationToken cancellationToken = default)
@@ -173,9 +179,10 @@ namespace TrakHound.Clients.Services
                 {
                     return await router.KeyValues.Delete(collection, keys, cancellationToken: cancellationToken);
                 }
+                else return TrakHoundServiceResponse.BadRequest($"Invalid Router ID : {routerId}");
             }
 
-            return default;
+            return TrakHoundServiceResponse.BadRequest("Keys Not Specified");
         }
     }
 }
