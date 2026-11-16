@@ -4,9 +4,10 @@
   "version": "0.3",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Provide Authentication through a configurable static Token",
+    "description": "Authenticate requests with a static Token set in its configuration",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Token.Identity",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".configurationParameters": "userId,token,roles"
   }
 }

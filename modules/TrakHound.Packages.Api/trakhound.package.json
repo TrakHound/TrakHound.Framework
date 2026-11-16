@@ -4,10 +4,10 @@
   "version": "0.4",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Download, Upload, & Manage Packages in the TrakHound Framework",
+    "description": "Download, upload and manage Packages on a TrakHound Package Server",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Packages.Api",
     ".defaultRoute": "packages",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png"
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg"
   }
 }

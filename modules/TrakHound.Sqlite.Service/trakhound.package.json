@@ -4,10 +4,10 @@
   "version": "0.1",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "SQLite Services for use in the TrakHound Framework",
+    "description": "SQLite Table Services for the TrakHound Framework",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Sqlite.Service",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".configurationParameters": "database"
   }
 }

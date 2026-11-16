@@ -3,10 +3,12 @@
   "category": "app",
   "version": "0.2",
   "metadata": {
-    "publisher": "",
-    "description": "",
+    "publisher": "TrakHound Inc.",
+    "description": "Upload, download and copy Packages between Package Servers",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Packages.App",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
+    ".defaultName": "Package Manager",
     ".defaultRoute": "trakhound/packages"
   }
 }

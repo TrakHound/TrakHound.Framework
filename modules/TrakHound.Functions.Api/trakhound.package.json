@@ -4,10 +4,10 @@
   "version": "0.4",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Functions Api for viewing and managing Functions in the TrakHound Framework",
+    "description": "Run Functions and manage their Runs, Logs, Jobs and Scheduled Tasks",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Functions.Api",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultRoute": "functions"
   }
 }

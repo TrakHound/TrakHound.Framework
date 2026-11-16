@@ -4,9 +4,9 @@
   "version": "0.1",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Delete Older Packages in the TrakHound Framework",
+    "description": "Delete older versions of each Package, keeping the latest ones",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Packages.Retention.Function",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png"
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg"
   }
 }

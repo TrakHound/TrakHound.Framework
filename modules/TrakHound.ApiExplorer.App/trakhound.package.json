@@ -7,6 +7,8 @@
     "description": "Browse the APIs you can use, try them out, and download their OpenAPI documents",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.ApiExplorer.App",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
+    ".defaultName": "API Explorer",
     ".defaultRoute": "api-explorer"
   }
 }

@@ -4,10 +4,11 @@
   "version": "0.3",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Schedule Functions to run at a schedule using a CRON pattern",
+    "description": "Run Functions on the CRON schedules of the Scheduled Tasks",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.ScheduledTasks.Worker",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
-    ".defaultVolumeId": "trakhound.scheduled-tasks"
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
+    ".defaultVolumeId": "trakhound.scheduled-tasks",
+    ".configurationParameters": "maxConcurrentRuns,maxConcurrentRunsPerTask,overlapPolicy"
   }
 }

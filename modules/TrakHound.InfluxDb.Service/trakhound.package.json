@@ -4,10 +4,10 @@
   "version": "0.1",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "InfluxDB 3 Time Series Services for use in the TrakHound Framework",
+    "description": "InfluxDB 3 Time Series Services for the TrakHound Framework",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.InfluxDb.Service",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".configurationParameters": "url,database,token,timeout,maxTimeWeightedPoints"
   }
 }

@@ -6,6 +6,7 @@
     "description": "Example Function that summarizes the recent readings written by TrakHound.Example.Worker",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "examples/TrakHound.Example.Function",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultVolumeId": "trakhound.example"
   }
 }

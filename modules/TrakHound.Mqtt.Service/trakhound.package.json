@@ -4,11 +4,11 @@
   "version": "0.4",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "MQTT Services for the TrakHound Framework",
+    "description": "MQTT Message Services for the TrakHound Framework",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Mqtt.Service",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultVolumeId": "trakhound.mqtt.service.configuration",
-    ".configurationParameters": "hostname,port,clientId,qos,timeout,cleanSession,useTls"
+    ".configurationParameters": "hostname,port,clientId,username,password,qos,timeout,reconnectInterval,cleanSession,useTls"
   }
 }

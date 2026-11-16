@@ -6,6 +6,7 @@
     "description": "Example Worker that reads a simulated sensor and writes the recent readings to a Volume",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "examples/TrakHound.Example.Worker",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultVolumeId": "trakhound.example"
   }
 }

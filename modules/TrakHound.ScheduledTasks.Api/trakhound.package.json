@@ -4,10 +4,10 @@
   "version": "0.2",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Manage Scheduled Tasks that run Functions at a schedule using a CRON pattern",
+    "description": "Manage Scheduled Tasks that run Functions on a CRON schedule",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.ScheduledTasks.Api",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultRoute": "scheduled-tasks/api",
     ".defaultVolumeId": "trakhound.scheduled-tasks"
   }

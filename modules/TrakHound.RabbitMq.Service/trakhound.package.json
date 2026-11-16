@@ -4,10 +4,10 @@
   "version": "0.3",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "RabbitMQ Services for the TrakHound Framework",
+    "description": "RabbitMQ Message Queue Services for the TrakHound Framework",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.RabbitMq.Service",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultVolumeId": "trakhound.rabbitmq.service.configuration",
     ".configurationParameters": "hostname,port,virtualHost,username,password,ssl,connectionTimeout,prefetch,publishConfirm,managementPort,managementUrl"
   }

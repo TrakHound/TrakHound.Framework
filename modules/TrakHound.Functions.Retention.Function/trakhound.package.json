@@ -3,9 +3,10 @@
   "category": "function",
   "version": "0.2",
   "metadata": {
-    "publisher": "",
-    "description": "",
+    "publisher": "TrakHound Inc.",
+    "description": "Delete Function Runs and Logs older than a number of days",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
-    "repositoryDirectory": "modules/TrakHound.Functions.Retention.Function"
+    "repositoryDirectory": "modules/TrakHound.Functions.Retention.Function",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg"
   }
 }

@@ -7,6 +7,7 @@
     "description": "Sign in with a Username and Password verified by an LDAP server (ex. Active Directory)",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Ldap.Identity",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".configurationParameters": "server,port,useSsl,startTls,bindDnFormat,serviceBindDn,serviceBindPassword,searchBase,userFilter,groupAttribute,nameAttribute,roleFormat"
   }
 }

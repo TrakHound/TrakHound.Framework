@@ -6,6 +6,7 @@
     "description": "Example App that shows the readings served by TrakHound.Example.Api. Installs the Example Api, Function and Worker",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "examples/TrakHound.Example.App",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".defaultName": "Example",
     ".defaultRoute": "example"
   },

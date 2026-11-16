@@ -4,10 +4,10 @@
   "version": "0.1",
   "metadata": {
     "publisher": "TrakHound Inc.",
-    "description": "Redis Services for the TrakHound Framework",
+    "description": "Redis Key-Value Services for the TrakHound Framework",
     "repository": "https://github.com/TrakHound/TrakHound.Framework",
     "repositoryDirectory": "modules/TrakHound.Redis.Service",
-    ".image": "https://static.trakhound.com/trakhound-logo-background-sm.png",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg",
     ".configurationParameters": "server,port,database,user,password,useSsl"
   }
 }
