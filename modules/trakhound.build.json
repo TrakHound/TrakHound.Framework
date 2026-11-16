@@ -17,17 +17,17 @@
     { "path": "TrakHound.Packages.Api" },
     { "path": "TrakHound.Packages.App" },
     { "path": "TrakHound.Packages.Retention.Function" },
+    { "path": "TrakHound.Postgres.Service" },
     { "path": "TrakHound.RabbitMq.Service" },
     { "path": "TrakHound.Redis.Service" },
     { "path": "TrakHound.ScheduledTasks.Api" },
     { "path": "TrakHound.ScheduledTasks.Worker" },
+    { "path": "TrakHound.Sqlite.Service" },
     { "path": "TrakHound.SqlServer.Service" },
     { "path": "TrakHound.Timescale.Service" },
     { "path": "TrakHound.Ldap.Identity" },
     { "path": "TrakHound.Oidc.Identity" },
     { "path": "TrakHound.Token.Identity" },
-
-    // Not published, so only build the package file
-    { "path": "TrakHound.Welcome.App", "publish": false, "output": "../build/output/packages" }
+    { "path": "TrakHound.Welcome.App" }
   ]
 }
