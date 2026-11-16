@@ -987,7 +987,7 @@ It clones the recorded `repository`, checks out the commit, builds the project i
 - **NuGet versions:** a floating version (`1.*`) can resolve differently later, which shows as a difference. Use exact versions in projects you want to check. A signed build also stops if it can't find the TrakHound version the project references.
 - `src.zip` is compared by its contents, and the `Last-Modified` headers in an App's static asset list are ignored, because they only record when the files were checked out.
 
-`th packages dotnet` also adds `sbom.cdx.json`, a CycloneDX list of the NuGet packages and versions the package was built with. It's covered by the manifest and signature. Set the `TRAKHOUND_BUILDER` environment variable to record what built the package, ex. the URL of a CI run; `.github/workflows/build-packages.yml` does this.
+`th packages dotnet` also adds `sbom.cdx.json`, a CycloneDX list of the NuGet packages and versions the package was built with. It's covered by the manifest and signature. Set the `TRAKHOUND_BUILDER` environment variable to record what built the package, ex. the URL of a CI run.
 
 **Reading manifests from a package server:** IT tools can see who signed a package without downloading it, using the `TrakHound.Packages.Api` module:
 
