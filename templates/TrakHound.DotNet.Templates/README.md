@@ -49,6 +49,7 @@ Each generated project contains:
 | --- | --- |
 | `trakhound.package.json` | Package manifest (id, category, and metadata) |
 | `trakhound.package.publish.json` | The Publish Targets (where to publish). Can instead be set once for several projects in a parent directory (see the [CLI README](https://github.com/TrakHound/TrakHound.Framework/tree/main/cli#publish-targets)). The version is the `version` prefix in `trakhound.package.json` plus the git height |
+| `README.md` | What the package does and how to configure it. It's copied to the package as `Readme.md` and shown with the package on the Instance and on the package server (ex. packages.trakhound.com), so fill in its placeholder text and use absolute links |
 | `Program.cs` | Debug host that runs the package without an Instance (left out of the package) |
 | `publish-package.bat` / `publish-package.sh` | Packs and publishes the package using the [TrakHound CLI](https://github.com/TrakHound/TrakHound.Framework/tree/main/cli) |
 | `.gitignore` | Leaves build output, the debug `volume` folder and `.thp` files out of source control |

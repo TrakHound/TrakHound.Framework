@@ -27,6 +27,7 @@ Developer guide: https://github.com/TrakHound/TrakHound.Framework/blob/main/docs
 | `Properties/launchSettings.json` | The launch profile for `dotnet run`, Visual Studio and VS Code (port 5092, Development environment) |
 | `trakhound.package.json` | The package manifest: `id`, `category`, `metadata` (publisher, description, ...) and `dependencies` |
 | `trakhound.package.publish.json` | Where to publish : the Publish Targets (only created when a package server was given; otherwise the nearest one in a parent folder is used) |
+| `README.md` | What the package does and how to configure it, shown with the package on the Instance and the package server |
 | `UserPackageId.csproj` | The project. The assembly must stay named `UserPackageId.dll` (the package ID) |
 
 ## Writing pages
@@ -45,7 +46,7 @@ Developer guide: https://github.com/TrakHound/TrakHound.Framework/blob/main/docs
 
 - `Client.Services.Blobs`, `KeyValues`, `Messages`, `MessageQueues`, `Tables` and `TimeSeries`; `Client.Functions.Run(...)`; `Client.Api.GetJson<T>(route)` / `Post(...)` for other Apis; `Client.Volumes`.
 - Every call returns a response with `Success`. Check it before using the content, and log the failure. Don't assume a call worked.
-- An administrator can put the package in a **Zone**, which limits what it can reach through `Client`. A denied call returns 403 "Zone Access Denied". List what the package calls in its `Readme.md` so administrators can allow it.
+- An administrator can put the package in a **Zone**, which limits what it can reach through `Client`. A denied call returns 403 "Zone Access Denied". List what the package calls in its `README.md` so administrators can allow it.
 
 ## Parameters, storage and logging
 
@@ -64,7 +65,7 @@ Put tests in a separate test project that references this project and the `TrakH
 - **TrakHound version:** reference the TrakHound version of the Instance the package will run on, or older. The Instance provides `TrakHound.Common` (and `TrakHound.Blazor`) at run time, so a package built against a newer version fails to load. Don't copy TrakHound assemblies into the package.
 - **Package ID:** don't rename the project or assembly without changing `id` in `trakhound.package.json` to match.
 - **Debug host:** the debug host files are left out of the package by `th packages dotnet`. Don't put package code in them.
-- **Readme:** a `Readme.md` (set to copy to the output directory) is shown with the package on the Instance. Describe what the package does, its configuration parameters, and what it calls through `Client`.
+- **Readme:** `README.md` is copied to the package as `Readme.md` and shown with the package on the Instance and on the package server (ex. packages.trakhound.com). Write it for the people who install the package: what it does, its configuration parameters, and what it calls through `Client`. Replace the placeholder text, keep its tables the same as the code, and use absolute links (`https://...`), since relative links and HTML don't work there.
 - **Source control:** `bin`, `obj`, the debug `volume` folder and `.thp` files stay out of it (see `.gitignore`).
 
 ## Troubleshooting

@@ -25,4 +25,9 @@
 	  <None Include="trakhound.package.publish.json" />
 	</ItemGroup>
 
+	<!-- Shown with the package on the Instance and the package server. The Instance reads it as Readme.md -->
+	<ItemGroup>
+		<None Update="README.md" TargetPath="Readme.md" CopyToOutputDirectory="Always" />
+	</ItemGroup>
+
 </Project>
