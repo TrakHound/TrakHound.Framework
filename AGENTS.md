@@ -45,6 +45,7 @@ A modular .NET 10 platform: a TrakHound **Instance** (ASP.NET Core / Blazor host
   ```
 
   Mark endpoints that are safe for AI agents with `[ApiMcpTool]` (Developer Guide, section 4.1).
+- **TrakHound.Client:** the [TrakHound.Client](https://github.com/TrakHound/TrakHound.Client) repository copies the client interfaces, the HTTP clients and their models from `libraries/TrakHound.Common` (the list is its `sync/sync-files.txt`) and also builds them for .NET Standard 2.0. Keep those files free of module, package, Service Router, Security and Zone code and of default interface members (put factories that need them in Common, ex. `TrakHoundApiInformationFactory`), and use `#if NET` only where a shim in that repository can't work. After changing one, run that repository's `sync/sync.ps1` and its contract tests.
 - **Table queries:** modules use Table Requests with the `ansi` subset, not T-SQL or `ExecuteQuery(string)`, so they run on every Table Service (Developer Guide, section 5).
 - **Docs:** update the matching guide in `docs/` (and module READMEs) when behavior, settings or endpoints change. Write in plain, direct sentences.
 - **Style:** match the surrounding code (naming, comment style, indentation, which is tabs in some files and spaces in others). Comments explain why, briefly.
