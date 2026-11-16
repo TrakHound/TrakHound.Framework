@@ -422,7 +422,8 @@ namespace TrakHound
             {
                 try
                 {
-                    await using var stream = File.OpenRead(path);
+                    // A synchronous Dispose is enough for a read, and FileStream has no DisposeAsync on .NET Standard 2.0 (TrakHound.Client)
+                    using var stream = File.OpenRead(path);
                     return await JsonSerializer.DeserializeAsync<T>(stream, _options, cancellationToken);
                 }
                 catch { }

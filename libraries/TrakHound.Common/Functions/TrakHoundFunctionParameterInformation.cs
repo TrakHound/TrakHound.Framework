@@ -93,7 +93,8 @@ namespace TrakHound.Functions
         /// </summary>
         public static Dictionary<string, string> ApplyDefaults(IEnumerable<TrakHoundFunctionParameterInformation> definitions, IReadOnlyDictionary<string, string> parameters)
         {
-            var result = parameters != null ? new Dictionary<string, string>(parameters) : new Dictionary<string, string>();
+            // ToDictionary rather than the Dictionary constructor, which can't take an IReadOnlyDictionary on .NET Standard 2.0 (TrakHound.Client)
+            var result = parameters != null ? parameters.ToDictionary(o => o.Key, o => o.Value) : new Dictionary<string, string>();
 
             if (definitions != null)
             {
