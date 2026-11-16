@@ -151,11 +151,20 @@ namespace TrakHound.Security
         }
 
 
-        public async Task<TrakHoundIdentityResult> Authenticate(TrakHoundIdentityContext context)
+        public Task<TrakHoundIdentityResult> Authenticate(TrakHoundIdentityContext context) => Authenticate(_providers, context, _logger);
+
+        /// <summary>
+        /// Asks each Token Identity Provider in order to verify the Request's credentials, and returns the first Success. A Provider can't
+        /// always tell that credentials belong to another Provider (ex. a Token Identity Provider only knows its own Token), so a Fail or Error
+        /// doesn't stop the others from being asked. It's returned (the first one) only when no Provider succeeds
+        /// </summary>
+        public static async Task<TrakHoundIdentityResult> Authenticate(IEnumerable<ITrakHoundIdentityProvider> providers, TrakHoundIdentityContext context, ITrakHoundLogger logger = null)
         {
-            if (context != null)
+            TrakHoundIdentityResult? rejection = null;
+
+            if (context != null && providers != null)
             {
-                foreach (var provider in _providers)
+                foreach (var provider in providers)
                 {
                     if (!provider.Features.HasFlag(TrakHoundIdentityProviderFeatures.Token)) continue;
 
@@ -166,20 +175,22 @@ namespace TrakHound.Security
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError($"Identity Provider ({provider.Id}) Authenticate Error : {ex.Message}");
+                        logger?.LogError($"Identity Provider ({provider.Id}) Authenticate Error : {ex.Message}");
                         result = TrakHoundIdentityResult.Error(ex.Message);
                     }
 
-                    if (result.Status != TrakHoundIdentityResultStatus.NoResult)
+                    if (result.IsSuccess)
                     {
                         // The Identity always belongs to the Identity Provider that verified it
-                        if (result.IsSuccess) result.Identity.ProviderId = provider.Id;
+                        result.Identity.ProviderId = provider.Id;
                         return result;
                     }
+
+                    if (result.Status != TrakHoundIdentityResultStatus.NoResult) rejection ??= result;
                 }
             }
 
-            return TrakHoundIdentityResult.NoResult();
+            return rejection ?? TrakHoundIdentityResult.NoResult();
         }
 
         private const string _uncoveredMessage = "No Identity Profile Found for the Resource";

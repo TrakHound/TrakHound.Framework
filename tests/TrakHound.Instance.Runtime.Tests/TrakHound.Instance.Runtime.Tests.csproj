@@ -18,6 +18,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\instances\TrakHound.Instance\TrakHound.Instance.csproj" />
+		<ProjectReference Include="..\..\modules\TrakHound.Token.Identity\TrakHound.Token.Identity.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
