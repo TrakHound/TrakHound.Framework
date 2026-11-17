@@ -49,4 +49,4 @@ Each project runs on its own with `dotnet run` (or F5), using the settings in it
 th packages build examples
 ```
 
-builds each project in `trakhound.build.json` and publishes it to the Publish Target in the nearest `trakhound.package.publish.json`. The examples have no version prefix, so set one with `--version` (ex. `th packages build examples --version 0.1.0`, or `"version"` in the build file's `defaults`). To only build a package file, run `th packages dotnet --version 0.1.0 --output ./out` in a project directory.
+builds each project in `trakhound.build.json` and publishes it to the Publish Target in the nearest `trakhound.package.publish.json`. Each example's version is the prefix in its `trakhound.package.json` (`0.1`) plus the git height, like the modules. To only build a package file, run `th packages dotnet --output ./out` in a project directory.

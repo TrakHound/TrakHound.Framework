@@ -1,6 +1,7 @@
 {
   "id": "TrakHound.Example.App",
   "category": "app",
+  "version": "0.1",
   "metadata": {
     "publisher": "TrakHound Inc.",
     "description": "Example App that shows the readings served by TrakHound.Example.Api. Installs the Example Api, Function and Worker",

@@ -1,6 +1,7 @@
 {
   "id": "TrakHound.Example.Function",
   "category": "function",
+  "version": "0.1",
   "metadata": {
     "publisher": "TrakHound Inc.",
     "description": "Example Function that summarizes the recent readings written by TrakHound.Example.Worker",
