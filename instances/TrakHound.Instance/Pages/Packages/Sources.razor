@@ -25,6 +25,7 @@
                 <span class="empty-title">No Package Sources</span>
                 <span class="empty-description">Add a Package Source to browse and install Packages, or to check installed Packages for updates.</span>
                 <div class="empty-actions">
+                    <button class="admin-write btn btn-light" @onclick="AddPublic" disabled="@saving" title="@($"Add {PublicSource.BaseUrl} ({PublicSource.Organization} Organization)")"><span class="icon fa-solid fa-sharp fa-globe"></span>Add @PublicSource.Name</button>
                     <button class="admin-write btn btn-primary" @onclick="OpenAdd"><span class="icon fa-solid fa-sharp fa-plus"></span>Add Source</button>
                 </div>
             </div>
@@ -111,6 +112,13 @@
             <span class="modal-header-title">@(editOriginalId != null ? $"Edit {editOriginalId}" : copyFromId != null ? $"Copy {copyFromId}" : "Add Package Source")</span>
         </HeaderContent>
         <BodyContent>
+            @if (editOriginalId == null && copyFromId == null && !HasPublic())
+            {
+                <div class="preset-panel">
+                    <span class="field-hint">Adding the TrakHound public Package Server?</span>
+                    <button class="btn btn-link" type="button" @onclick="FillPublic"><span class="icon fa-solid fa-sharp fa-globe"></span>Use @PublicSource.Name</button>
+                </div>
+            }
             <div class="form-row">
                 <div class="form-field">
                     <label>Name</label>
@@ -458,6 +466,61 @@
 
             // Reload the selected Source (it may be the one that was edited, or the first Source added)
             await Packages.SelectSource(selectedId ?? source.Id);
+        }
+    }
+
+    #endregion
+
+    #region "TrakHound Public"
+
+    // The same Source the Instance adds on first run, so the two can't drift apart
+    private static readonly RemoteConfiguration PublicSource = RemotesConfiguration.GetDefault().Remotes.First();
+
+    // Compared by Base URL and Organization (not ID, since the ID can be changed)
+    private bool HasPublic()
+    {
+        return remotesConfiguration.Remotes?.Any(o =>
+            string.Equals(o.BaseUrl?.TrimEnd('/'), PublicSource.BaseUrl, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(o.Organization, PublicSource.Organization, StringComparison.OrdinalIgnoreCase)) == true;
+    }
+
+    private string GetPublicId()
+    {
+        var id = PublicSource.Id;
+        for (var i = 2; remotesConfiguration.Remotes?.Any(o => o.Id == id) == true; i++) id = $"{PublicSource.Id}-{i}";
+        return id;
+    }
+
+    // Fill the Add form (without saving), so an Access Token or Package Manager can still be set and the connection tested
+    private void FillPublic()
+    {
+        editId = GetPublicId();
+        editName = PublicSource.Name;
+        editBaseUrl = PublicSource.BaseUrl;
+        editOrganization = PublicSource.Organization;
+        idEdited = true;
+        submitted = false;
+        editTest = null;
+    }
+
+    private async Task AddPublic()
+    {
+        if (HasPublic()) return;
+
+        var source = new RemoteConfiguration
+        {
+            Id = GetPublicId(),
+            Name = PublicSource.Name,
+            BaseUrl = PublicSource.BaseUrl,
+            Organization = PublicSource.Organization
+        };
+
+        var sources = remotesConfiguration.Remotes?.ToList() ?? new List<RemoteConfiguration>();
+        sources.Add(source);
+
+        if (await Save(sources, $"Added {source.Name}"))
+        {
+            await Packages.SelectSource(Packages.SelectedSource?.Id ?? source.Id);
         }
     }
 
