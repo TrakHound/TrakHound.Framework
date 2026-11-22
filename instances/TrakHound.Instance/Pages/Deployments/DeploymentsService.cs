@@ -32,14 +32,14 @@ namespace TrakHound.Instance.Pages.Deployments
         public string VolumesPath => _instance.VolumesPath;
 
         /// <summary>
-        /// The Package Variables directory
+        /// The Package Variables directory (may be set by TRAKHOUND_VARIABLE_PATH)
         /// </summary>
         public string VariablesPath => _instance.VariablesPath;
 
         /// <summary>
-        /// Where the installed Deployment Information file is kept
+        /// Where the installed Deployment Information file is kept (in the Configuration directory)
         /// </summary>
-        public string InformationPath => TrakHoundStartupDeployments.InformationPath;
+        public string InformationPath => TrakHoundStartupDeployments.GetInformationPath(ConfigurationPath);
 
         public string BackupPath => TrakHoundStartupDeployments.BackupPath;
 

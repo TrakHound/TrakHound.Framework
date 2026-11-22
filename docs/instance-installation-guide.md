@@ -85,10 +85,11 @@ Run the installer (`trakhound-instance-<version>-install.exe`) as an administrat
 | Configuration | `C:\ProgramData\TrakHound\Instance\config\default` |
 | Packages | `C:\ProgramData\TrakHound\Instance\packages` |
 | Volumes (package data) | `C:\ProgramData\TrakHound\Instance\volumes` |
+| Variables (package values) | `C:\ProgramData\TrakHound\Instance\variables` |
 | Logs | `C:\Program Files\TrakHound\Instance\logs` |
 | Windows Service | `TrakHound-Instance` (display name TrakHound Instance), runs as Local System, restarts automatically if it fails |
 
-The ProgramData folder is restricted to SYSTEM and Administrators. The service finds it through environment variables set on the service (`TRAKHOUND_CONFIGURATION_PATH`, `TRAKHOUND_PACKAGE_PATH`, `TRAKHOUND_VOLUME_PATH`).
+The ProgramData folder is restricted to SYSTEM and Administrators. The service finds it through environment variables set on the service (`TRAKHOUND_CONFIGURATION_PATH`, `TRAKHOUND_PACKAGE_PATH`, `TRAKHOUND_VOLUME_PATH`). The Variables folder is kept beside the configuration folder unless `TRAKHOUND_VARIABLE_PATH` sets another one, and the installed deployment's information (`trakhound-deployment.json`) is kept in the configuration folder.
 
 ## 4. Install in IIS
 
@@ -318,6 +319,8 @@ When the Instance starts with no admin account, it creates the first one (an Own
 | `TRAKHOUND_ADMIN_PASSWORD_FILE` | A file whose first line is the password (ex. a Docker secret, `/run/secrets/trakhound_admin_password`). The file is read, not changed or deleted |
 
 They're ignored once any admin account exists, so changing them doesn't change the account; use Security > Admin Accounts or `set-admin` for that. A password in an environment variable itself isn't supported, since it's visible to anyone who can inspect the process or container. If the account can't be created (ex. the file is missing), the reason is logged and shown as a notification.
+
+In a container, also set `TRAKHOUND_DEVICE_ID` to a stable value (ex. the deployment's name) before requesting licenses. Licenses are issued for the Device ID, which otherwise comes from the container's hostname, and that changes whenever the container is recreated (ex. to update the image). Keep the configuration, packages, volumes and variables on a volume (the Docker image keeps them all in `/var/lib/trakhound/instance`).
 
 Next, install packages and add configurations: see the TrakHound Instance User Guide. To script them, use the TrakHound CLI: `th packages install` installs packages, `th config` adds and changes configurations and variables, `th instance set` changes the Instance settings (ex. the HTTP port), and `th config validate` checks the result (see the CLI README).
 

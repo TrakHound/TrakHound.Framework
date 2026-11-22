@@ -72,6 +72,7 @@ namespace TrakHound.Instance
         private readonly string _configurationPath;
         private readonly string _packagePath;
         private readonly string _volumePath;
+        private readonly string _variablePath;
         private readonly TrakHoundStartupDeployments _startupDeployments;
 
         private Logger _logger;
@@ -85,13 +86,15 @@ namespace TrakHound.Instance
 
         /// <param name="configurationProfileId">The Configuration Profile (a directory in the Configuration Path)</param>
         /// <param name="configurationRootPath">The Configuration Path (the parent of the Profile directories)</param>
-        public TrakHoundInstanceHost(string configurationProfileId, string configurationRootPath, string packagePath, string volumePath, TrakHoundStartupDeployments startupDeployments)
+        /// <param name="variablePath">The Variable directory (see InstanceApplication.GetDefaultVariablePath)</param>
+        public TrakHoundInstanceHost(string configurationProfileId, string configurationRootPath, string packagePath, string volumePath, string variablePath, TrakHoundStartupDeployments startupDeployments)
         {
             _configurationProfileId = configurationProfileId;
             _configurationRootPath = configurationRootPath;
             _configurationPath = Path.Combine(configurationRootPath, configurationProfileId);
             _packagePath = packagePath;
             _volumePath = volumePath;
+            _variablePath = variablePath;
             _startupDeployments = startupDeployments;
         }
 
@@ -119,7 +122,7 @@ namespace TrakHound.Instance
                 bootLog = new TrakHoundBootLogCollector(logProvider);
 
                 // Created before the Services are added, since many of them use it
-                _instance = new TrakHoundInstance(instanceConfiguration, logProvider, _configurationPath, _packagePath, _volumePath);
+                _instance = new TrakHoundInstance(instanceConfiguration, logProvider, _configurationPath, _packagePath, _volumePath, _variablePath);
 
                 // Admin Roles that are limited to Zones are checked against the running Instance's Zones
                 TrakHoundAdminScope.ZoneManager = () => _instance.ZoneManager;
@@ -356,8 +359,8 @@ namespace TrakHound.Instance
                 ConfigurationPath = _configurationRootPath,
                 PackagesPath = _packagePath,
                 VolumesPath = new TrakHound.Volumes.TrakHoundVolumeProvider(_volumePath).BasePath,
-                VariablesPath = new TrakHound.Variables.TrakHoundVariableProvider().BasePath,
-                InformationPath = TrakHoundStartupDeployments.InformationPath,
+                VariablesPath = new TrakHound.Variables.TrakHoundVariableProvider(_variablePath).BasePath,
+                InformationPath = _startupDeployments.InformationPath,
                 BackupPath = TrakHoundStartupDeployments.BackupPath
             }, LogManager.GetLogger("TrakHound.Instance.Deployments"));
 

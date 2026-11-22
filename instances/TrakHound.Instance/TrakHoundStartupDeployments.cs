@@ -41,9 +41,11 @@ namespace TrakHound.Instance
         public static string BackupPath => Path.Combine(AppContext.BaseDirectory, "backup", "deployments");
 
         /// <summary>
-        /// Where the installed Deployment Information file is kept
+        /// Where the installed Deployment Information file is kept : the Configuration directory (not the program directory),
+        /// like the Startup Record, so that it is kept with the configuration it describes (ex. a Docker volume)
         /// </summary>
-        public static string InformationPath => AppContext.BaseDirectory;
+        /// <param name="configurationPath">The directory containing the Configuration Profile directories</param>
+        public static string GetInformationPath(string configurationPath) => configurationPath;
 
 
         /// <summary>
@@ -52,6 +54,11 @@ namespace TrakHound.Instance
         public string SourcePath { get; }
 
         public string RecordPath { get; }
+
+        /// <summary>
+        /// Where the installed Deployment Information file is kept (see GetInformationPath)
+        /// </summary>
+        public string InformationPath { get; }
 
         /// <summary>
         /// The Deployments installed (or that failed) when this Instance started
@@ -65,6 +72,7 @@ namespace TrakHound.Instance
         {
             SourcePath = !string.IsNullOrEmpty(sourcePath) ? Path.GetFullPath(sourcePath) : DefaultPath;
             RecordPath = Path.Combine(configurationPath, RecordFilename);
+            InformationPath = GetInformationPath(configurationPath);
         }
 
 

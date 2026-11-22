@@ -56,6 +56,23 @@ namespace TrakHound.Instance.Deployments.Tests
         }
 
         [Fact]
+        public void InformationPath_IsTheConfigurationDirectory()
+        {
+            // Kept with the configuration (ex. a Docker volume), not in the program directory that a new image replaces
+            var startup = new TrakHoundStartupDeployments(_sourcePath, _configurationPath);
+
+            Assert.Equal(_configurationPath, startup.InformationPath);
+            Assert.Equal(Path.GetDirectoryName(startup.RecordPath), startup.InformationPath);
+        }
+
+        [Fact]
+        public void DefaultVariablePath_IsBesideTheConfigurationDirectory()
+        {
+            Assert.Equal(Path.Combine(_root, "target", "variables"), InstanceApplication.GetDefaultVariablePath(_configurationPath));
+            Assert.Equal(Path.Combine(_root, "target", "variables"), InstanceApplication.GetDefaultVariablePath(_configurationPath + Path.DirectorySeparatorChar));
+        }
+
+        [Fact]
         public void Install_InvalidFile_RecordsFailureAndMovesToFailed()
         {
             File.WriteAllText(Path.Combine(_sourcePath, "broken.thd"), "not a deployment");
