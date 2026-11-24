@@ -235,6 +235,52 @@ namespace TrakHound.Common.Tests
             }
         }
 
+        /// <summary>
+        /// Denies every Permission with the specified log Message and Client Message
+        /// </summary>
+        private class DenyingAuthorizer : ITrakHoundAuthorizer
+        {
+            private readonly string _message;
+            private readonly string _clientMessage;
+
+            public DenyingAuthorizer(string message, string clientMessage)
+            {
+                _message = message;
+                _clientMessage = clientMessage;
+            }
+
+            public TrakHoundAuthorizationResult Authorize(TrakHoundIdentity identity, string resourceId, string permission = null) => TrakHoundAuthorizationResult.Forbidden(_message, _clientMessage);
+        }
+
+        [Fact]
+        public async Task A_Denial_Sends_Only_Its_Client_Message()
+        {
+            var router = Create("TimeSeries", new TestService("db"));
+
+            using (TrakHoundSecurityContext.Begin(new DenyingAuthorizer("(user-1) has no Assignment for service:db", "Not allowed here"), null))
+            {
+                var response = await router.TimeSeries.ListMeasurements();
+
+                Assert.Equal(403, response.StatusCode);
+                Assert.Equal("Not allowed here", response.Message);
+            }
+        }
+
+        [Fact]
+        public async Task A_Denial_Without_A_Client_Message_Sends_No_Message()
+        {
+            // The log Message names the Identity and Resource, so it never goes back to the caller
+            var router = Create("TimeSeries", new TestService("db"));
+
+            using (TrakHoundSecurityContext.Begin(new DenyingAuthorizer("(user-1) has no Assignment for service:db", null), null))
+            {
+                var response = await router.TimeSeries.ListMeasurements();
+
+                Assert.Equal(403, response.StatusCode);
+                Assert.True(string.IsNullOrEmpty(response.Message));
+            }
+        }
+
         [Fact]
         public async Task A_Zone_That_Only_Allows_Reading_Blocks_A_Module_Writing()
         {

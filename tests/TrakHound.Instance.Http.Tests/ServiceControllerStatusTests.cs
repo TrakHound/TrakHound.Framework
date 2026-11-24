@@ -87,5 +87,54 @@ namespace TrakHound.Instance.Http.Tests
             Assert.Equal(statusCode, await GetStatusCode(new TestServiceController().Process(new TrakHoundServiceResponse<string[]>(statusCode: statusCode))));
             Assert.Equal(statusCode, await new TestServiceController().ProcessStream(new TrakHoundServiceResponse<string[]>(statusCode: statusCode)));
         }
+
+
+        private static TrakHoundServiceResponse<string[]> CreateResponse(int statusCode, string message = null)
+        {
+            var response = new TrakHoundServiceResponse<string[]>(statusCode: statusCode, message: message);
+            response.RouterId = "default";
+            response.ServiceId = "sqlserver";
+            return response;
+        }
+
+        [Theory]
+        [InlineData(401)]
+        [InlineData(403)]
+        public async Task A_Refused_Request_Does_Not_Name_The_Router_Or_Service(int statusCode)
+        {
+            // A caller that isn't allowed to use the Service doesn't learn how the Instance routes it
+            var controller = new TestServiceController();
+            controller.Process(CreateResponse(statusCode));
+            Assert.False(controller.Response.Headers.ContainsKey(TrakHoundHttpConstants.RouterIdHeader));
+            Assert.False(controller.Response.Headers.ContainsKey(TrakHoundHttpConstants.ServiceIdHeader));
+
+            var streamController = new TestServiceController();
+            await streamController.ProcessStream(CreateResponse(statusCode));
+            Assert.False(streamController.Response.Headers.ContainsKey(TrakHoundHttpConstants.RouterIdHeader));
+            Assert.False(streamController.Response.Headers.ContainsKey(TrakHoundHttpConstants.ServiceIdHeader));
+        }
+
+        [Theory]
+        [InlineData(200)]
+        [InlineData(400)]
+        [InlineData(404)]
+        [InlineData(503)]
+        public void Other_Responses_Name_The_Router_And_Service(int statusCode)
+        {
+            var controller = new TestServiceController();
+            controller.Process(CreateResponse(statusCode));
+
+            Assert.Equal("default", controller.Response.Headers[TrakHoundHttpConstants.RouterIdHeader].ToString());
+            Assert.Equal("sqlserver", controller.Response.Headers[TrakHoundHttpConstants.ServiceIdHeader].ToString());
+        }
+
+        [Fact]
+        public void A_Forbidden_Response_Sends_Its_Message()
+        {
+            var result = Assert.IsType<ContentResult>(new TestServiceController().Process(CreateResponse(403, "Remote access is not allowed")));
+
+            Assert.Equal(403, result.StatusCode);
+            Assert.Equal("Remote access is not allowed", result.Content);
+        }
     }
 }

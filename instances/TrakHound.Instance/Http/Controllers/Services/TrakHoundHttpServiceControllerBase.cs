@@ -25,17 +25,7 @@ namespace TrakHound.Http
 
         protected IActionResult ProcessServiceResponse(TrakHoundServiceResponse serviceResponse)
         {
-            if (!string.IsNullOrEmpty(serviceResponse.RouterId))
-            {
-                // Set Router ID
-                Response.Headers[TrakHoundHttpConstants.RouterIdHeader] = serviceResponse.RouterId;
-            }
-
-            if (!string.IsNullOrEmpty(serviceResponse.ServiceId))
-            {
-                // Set Service ID
-                Response.Headers[TrakHoundHttpConstants.ServiceIdHeader] = serviceResponse.ServiceId;
-            }
+            SetServiceHeaders(Response, serviceResponse.RouterId, serviceResponse.ServiceId, serviceResponse.StatusCode);
 
             var result = new ContentResult();
             result.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
@@ -46,17 +36,7 @@ namespace TrakHound.Http
 
         protected IActionResult ProcessServiceResponse<TResult>(TrakHoundServiceResponse<TResult> serviceResponse)
         {
-            if (!string.IsNullOrEmpty(serviceResponse.RouterId))
-            {
-                // Set Router ID
-                Response.Headers[TrakHoundHttpConstants.RouterIdHeader] = serviceResponse.RouterId;
-            }
-
-            if (!string.IsNullOrEmpty(serviceResponse.ServiceId))
-            {
-                // Set Service ID
-                Response.Headers[TrakHoundHttpConstants.ServiceIdHeader] = serviceResponse.ServiceId;
-            }
+            SetServiceHeaders(Response, serviceResponse.RouterId, serviceResponse.ServiceId, serviceResponse.StatusCode);
 
             if (serviceResponse.StatusCode >= 200 && serviceResponse.StatusCode < 400)
             {
@@ -78,17 +58,7 @@ namespace TrakHound.Http
         {
             httpResponse.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
 
-            if (!string.IsNullOrEmpty(serviceResponse.RouterId))
-            {
-                // Set Router ID
-                httpResponse.Headers[TrakHoundHttpConstants.RouterIdHeader] = serviceResponse.RouterId;
-            }
-
-            if (!string.IsNullOrEmpty(serviceResponse.ServiceId))
-            {
-                // Set Service ID
-                httpResponse.Headers[TrakHoundHttpConstants.ServiceIdHeader] = serviceResponse.ServiceId;
-            }
+            SetServiceHeaders(httpResponse, serviceResponse.RouterId, serviceResponse.ServiceId, serviceResponse.StatusCode);
 
             if (!string.IsNullOrEmpty(serviceResponse.Message))
             {
@@ -101,23 +71,26 @@ namespace TrakHound.Http
         {
             httpResponse.StatusCode = GetHttpStatusCode(serviceResponse.StatusCode);
 
-            if (!string.IsNullOrEmpty(serviceResponse.RouterId))
-            {
-                // Set Router ID
-                httpResponse.Headers[TrakHoundHttpConstants.RouterIdHeader] = serviceResponse.RouterId;
-            }
-
-            if (!string.IsNullOrEmpty(serviceResponse.ServiceId))
-            {
-                // Set Service ID
-                httpResponse.Headers[TrakHoundHttpConstants.ServiceIdHeader] = serviceResponse.ServiceId;
-            }
+            SetServiceHeaders(httpResponse, serviceResponse.RouterId, serviceResponse.ServiceId, serviceResponse.StatusCode);
 
             if (!string.IsNullOrEmpty(serviceResponse.Message))
             {
                 var responseBytes = serviceResponse.Message.ToUtf8Bytes();
                 await Response.Body.WriteAsync(responseBytes);
             }
+        }
+
+
+        /// <summary>
+        /// Name the Router and Service that answered (ex. for a client to tell which Target handled a Request). Not sent with a
+        /// 401 or 403, so a caller that isn't allowed to use the Service doesn't learn how the Instance routes it
+        /// </summary>
+        internal static void SetServiceHeaders(HttpResponse httpResponse, string routerId, string serviceId, int statusCode)
+        {
+            if (statusCode == StatusCodes.Status401Unauthorized || statusCode == StatusCodes.Status403Forbidden) return;
+
+            if (!string.IsNullOrEmpty(routerId)) httpResponse.Headers[TrakHoundHttpConstants.RouterIdHeader] = routerId;
+            if (!string.IsNullOrEmpty(serviceId)) httpResponse.Headers[TrakHoundHttpConstants.ServiceIdHeader] = serviceId;
         }
 
 

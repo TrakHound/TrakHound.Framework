@@ -95,6 +95,11 @@ namespace TrakHound.Instance.Http.Tests
             var result = authorizer.Authorize(null, "system:logs", "read");
 
             Assert.Equal(TrakHoundAuthorizationStatus.Forbidden, result.Status);
+
+            // The caller gets the same fixed explanation as the System API routes, and only the log names the Resource
+            Assert.Equal(TrakHoundSystemApiProtection.DeniedMessage, result.ClientMessage);
+            Assert.Contains("system:logs", result.Message);
+            Assert.DoesNotContain("system:logs", result.ClientMessage);
         }
 
         [Fact]

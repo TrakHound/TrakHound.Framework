@@ -17,7 +17,7 @@ namespace TrakHound.Instance.Security
         /// <summary>
         /// Sent with the 403 response, since an unprotected Resource is otherwise reachable and the reason isn't obvious from the client
         /// </summary>
-        public const string DeniedMessage = "Remote access to an unprotected System Resource is not allowed. Protect it with an Identity Profile (Security > Profiles) or allow unprotected remote access (Settings > Interfaces).";
+        public const string DeniedMessage = "Remote access to an unprotected System Resource is not allowed. Protect it with a Security Profile (Config > Security Profiles) or allow unprotected remote access (Settings > Interfaces).";
 
 
         /// <summary>
@@ -51,7 +51,8 @@ namespace TrakHound.Instance.Security
         public TrakHoundAuthorizationResult Authorize(TrakHoundIdentity identity, string resourceId, string permission = null)
         {
             var result = _authorizer.Authorize(identity, resourceId, permission);
-            if (result.IsUncovered) return TrakHoundAuthorizationResult.Forbidden($"Remote access to an unprotected Resource : {resourceId}");
+            // The client gets the same fixed message as the System API routes (it names no Resource), and the log gets the Resource
+            if (result.IsUncovered) return TrakHoundAuthorizationResult.Forbidden($"Remote access to an unprotected Resource : {resourceId}", TrakHoundSystemApiProtection.DeniedMessage);
 
             return result;
         }

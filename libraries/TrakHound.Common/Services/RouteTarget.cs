@@ -293,7 +293,8 @@ namespace TrakHound.Services
                     var authorization = AuthorizeService<TService>(request, service, ref resourceId);
                     if (!authorization.IsAllowed)
                     {
-                        var deniedResponse = authorization.Status == TrakHoundAuthorizationStatus.AuthenticationRequired ? TrakHoundServiceResponse.Unauthorized() : TrakHoundServiceResponse.Forbidden();
+                        // Only the ClientMessage goes back to the caller; the Message (which names the Identity and Resource) is only logged
+                        var deniedResponse = authorization.Status == TrakHoundAuthorizationStatus.AuthenticationRequired ? TrakHoundServiceResponse.Unauthorized() : TrakHoundServiceResponse.Forbidden(authorization.ClientMessage);
                         RecordMetrics<TService>(routerId, request, service, deniedResponse.StatusCode, authorization.Message, stpw.Elapsed);
                         logger.LogDebug($"{request.Id} : Router ({routerId}) : {request.Name} => ({service.Id}) : Not Authorized : {authorization.Message}");
                         return deniedResponse;
@@ -354,7 +355,8 @@ namespace TrakHound.Services
                     var authorization = AuthorizeService<TService>(request, service, ref resourceId);
                     if (!authorization.IsAllowed)
                     {
-                        var deniedResponse = authorization.Status == TrakHoundAuthorizationStatus.AuthenticationRequired ? TrakHoundServiceResponse<TResult>.Unauthorized() : TrakHoundServiceResponse<TResult>.Forbidden();
+                        // Only the ClientMessage goes back to the caller; the Message (which names the Identity and Resource) is only logged
+                        var deniedResponse = authorization.Status == TrakHoundAuthorizationStatus.AuthenticationRequired ? TrakHoundServiceResponse<TResult>.Unauthorized() : TrakHoundServiceResponse<TResult>.Forbidden(authorization.ClientMessage);
                         deniedResponse.RouterId = routerId;
                         deniedResponse.ServiceId = service.Configuration?.Id;
                         RecordMetrics<TService>(routerId, request, service, deniedResponse.StatusCode, authorization.Message, stpw.Elapsed);

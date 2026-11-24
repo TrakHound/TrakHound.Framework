@@ -55,6 +55,12 @@ namespace TrakHound.Security
         /// </summary>
         public string Message { get; }
 
+        /// <summary>
+        /// A message that is safe to send to the client with a denial (ex. which setting refuses every caller), or null to send none.
+        /// It must be the same for every Identity and Resource, so it never shows how the Instance's access is configured
+        /// </summary>
+        public string ClientMessage { get; }
+
 
         /// <summary>
         /// True if access is allowed
@@ -67,13 +73,14 @@ namespace TrakHound.Security
         public bool IsUncovered { get; }
 
 
-        private TrakHoundAuthorizationResult(TrakHoundAuthorizationStatus status, IReadOnlyList<string> permissions, IReadOnlyList<string> providerIds, string message, bool uncovered = false)
+        private TrakHoundAuthorizationResult(TrakHoundAuthorizationStatus status, IReadOnlyList<string> permissions, IReadOnlyList<string> providerIds, string message, bool uncovered = false, string clientMessage = null)
         {
             Status = status;
             Permissions = permissions ?? Array.Empty<string>();
             ProviderIds = providerIds ?? Array.Empty<string>();
             Message = message;
             IsUncovered = uncovered;
+            ClientMessage = clientMessage;
         }
 
 
@@ -100,6 +107,8 @@ namespace TrakHound.Security
         /// <summary>
         /// The Identity does not have access
         /// </summary>
-        public static TrakHoundAuthorizationResult Forbidden(string message = null) => new TrakHoundAuthorizationResult(TrakHoundAuthorizationStatus.Forbidden, null, null, message);
+        /// <param name="message">Why, for the logs (never sent to the client)</param>
+        /// <param name="clientMessage">A message that is safe to send to the client (see ClientMessage), or null to send none</param>
+        public static TrakHoundAuthorizationResult Forbidden(string message = null, string clientMessage = null) => new TrakHoundAuthorizationResult(TrakHoundAuthorizationStatus.Forbidden, null, null, message, false, clientMessage);
     }
 }
