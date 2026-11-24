@@ -1,10 +1,11 @@
 ﻿@using TrakHound.Instances
 @inject TrakHoundInstanceConfiguration instanceConfiguration
 
-@* Shown by trakhound-blazor.js while the Blazor circuit is disconnected (the elements are found by ID, the state is set as data-state on the panel) *@
+@* Shown by trakhound-blazor.js while the Blazor circuit is disconnected (the elements are found by ID, the state is set as data-state on the panel).
+   Not a <main>: the page has its own, and this one (hidden, and first in the document) would be taken for it *@
 
 <div id="reconnection-panel" class="disconnection-page" style="display: none;" role="alertdialog" aria-modal="true" aria-labelledby="reconnection-panel-title" aria-describedby="reconnection-panel-description">
-    <main class="disconnection-main">
+    <div class="disconnection-main">
         <div class="disconnection-container">
             <div class="disconnection-header">
                 <div class="logo-container">
@@ -38,7 +39,7 @@
                 </div>
             </div>
         </div>
-    </main>
+    </div>
 </div>
 
 @code {
