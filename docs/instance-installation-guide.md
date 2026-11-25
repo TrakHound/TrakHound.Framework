@@ -281,7 +281,7 @@ The first admin account is created on the machine the Instance runs on, never in
     - **Windows installer** (Windows Service or IIS): enter the account on the **Admin Account** page and Setup creates it with `set-admin` (required for a new install; on an upgrade the page is skipped if an account exists). For a silent install, pass `/ADMINUSER=` with `/ADMINPASSWORDFILE=` (first line of the file) or `/ADMINPASSWORD=`.
     - **Linux**: `install.sh` asks for the account when you run it in a terminal, or takes `--admin-user` (section 5.1).
     - **Any other install**, or to get back in later when no Owner can sign in: run the `set-admin` command from the program folder (section 6.1).
-    - **Containers**: set `TRAKHOUND_ADMIN_USERNAME` and `TRAKHOUND_ADMIN_PASSWORD_FILE` (section 6.2).
+    - **Containers**: set `TRAKHOUND_ADMIN_USERNAME` and `TRAKHOUND_ADMIN_PASSWORD_FILE` (section 6.2). Without them, a new container creates `admin` with a generated password and shows it once in the container's output.
 2. Open the Admin interface: `http://localhost:8472/_admin` for a Windows Service or Linux (use your port if you changed it), or `/_admin` on the IIS site or behind your reverse proxy. If no account exists yet, the page says how to create one.
 3. Sign in with that account. Sessions last 7 days and survive restarts.
 
@@ -319,6 +319,22 @@ When the Instance starts with no admin account, it creates the first one (an Own
 | `TRAKHOUND_ADMIN_PASSWORD_FILE` | A file whose first line is the password (ex. a Docker secret, `/run/secrets/trakhound_admin_password`). The file is read, not changed or deleted |
 
 They're ignored once any admin account exists, so changing them doesn't change the account; use Security > Admin Accounts or `set-admin` for that. A password in an environment variable itself isn't supported, since it's visible to anyone who can inspect the process or container. If the account can't be created (ex. the file is missing), the reason is logged and shown as a notification.
+
+In a container (`DOTNET_RUNNING_IN_CONTAINER=true`, which the .NET images set) with neither variable set, the Instance creates the first account itself, so trying the Docker image needs no setup: an Owner named `admin` with a generated password, shown once in the container's output (ex. `docker logs`, or the **Logs** tab in Docker Desktop):
+
+```
+==================================================================
+ TrakHound Admin Account created
+
+   Username : admin
+   Password : k7mq-2xpz
+```
+
+- Sign in with it, then change the password in Security > **Admin Accounts**. A notification in the Admin interface reminds you.
+- The password is random for each new volume, so there are still no default credentials. It's written only to the container's output, not to the Instance's log history, which other admins can read. Anyone who can read the container's output can already control the container.
+- It's shown once. If it's lost, set a new one with `set-admin` in the container (`docker exec -it <container> /opt/trakhound/docker-entrypoint.sh set-admin admin`).
+- Set `TRAKHOUND_ADMIN_GENERATE=false` to turn it off, and create the account with `set-admin` instead. Setting one of the two variables above also turns it off, and a mistake in them is reported rather than replaced by a generated password.
+- Installed Instances (Windows, Linux) don't generate one, since Setup creates the account.
 
 In a container, also set `TRAKHOUND_DEVICE_ID` to a stable value (ex. the deployment's name) before requesting licenses. Licenses are issued for the Device ID, which otherwise comes from the container's hostname, and that changes whenever the container is recreated (ex. to update the image). Keep the configuration, packages, volumes and variables on a volume (the Docker image keeps them all in `/var/lib/trakhound/instance`).
 

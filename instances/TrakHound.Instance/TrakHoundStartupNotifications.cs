@@ -94,7 +94,7 @@ namespace TrakHound.Instance
         }
 
         /// <summary>
-        /// Add a Notification if an Admin User Seed file (or Password file) was used when the Instance started
+        /// Add a Notification if an Admin User Seed file (or Password file, or a generated Password) was used when the Instance started
         /// </summary>
         public static void NotifyStartupAdminUser(TrakHoundInstanceNotificationService notificationService, TrakHoundStartupAdminUser startupAdminUser, string instanceId)
         {
@@ -104,8 +104,23 @@ namespace TrakHound.Instance
             var fromPasswordFile = startupAdminUser.Source == TrakHoundStartupAdminUser.SourceType.PasswordFile;
             if (fromPasswordFile && startupAdminUser.Result == TrakHoundStartupAdminUser.ResultType.Ignored) return;
 
+            var generated = startupAdminUser.Source == TrakHoundStartupAdminUser.SourceType.Generated;
+
             switch (startupAdminUser.Result)
             {
+                // A Warning, so the generated Password (which was written to the container's output) is changed
+                case TrakHoundStartupAdminUser.ResultType.Created when generated:
+                    notificationService.Notify(
+                        TrakHoundInstanceNotificationType.Warning,
+                        TrakHoundInstanceNotificationCategories.Configuration,
+                        "Change the Generated Password",
+                        $"The Admin User '{startupAdminUser.Username}' was created with a generated Password when the container started, and the Password was written to the container's output. Change it in Security > Admin Accounts.",
+                        "_admin/security/admins",
+                        "Admin Accounts",
+                        key
+                        );
+                    break;
+
                 case TrakHoundStartupAdminUser.ResultType.Created:
                     notificationService.Notify(
                         TrakHoundInstanceNotificationType.Success,
@@ -135,7 +150,9 @@ namespace TrakHound.Instance
                         "Setup Admin User Failed",
                         fromPasswordFile
                             ? $"The Admin User could not be created from {TrakHoundStartupAdminUser.PasswordFileEnvironmentVariable} : {startupAdminUser.Message}"
-                            : $"The Admin User from Setup could not be created : {startupAdminUser.Message}",
+                            : generated
+                                ? $"The Admin User with a generated Password could not be created : {startupAdminUser.Message}"
+                                : $"The Admin User from Setup could not be created : {startupAdminUser.Message}",
                         GetLogsLink(instanceId),
                         "View Logs",
                         key
