@@ -47,7 +47,7 @@ Options:
 
 Locations:
   Program files  $PROGRAM_DIR
-  Data           $DATA_DIR (configuration, packages and volumes)
+  Data           $DATA_DIR (configuration, packages, volumes, logs and backups)
 EOF
 }
 
