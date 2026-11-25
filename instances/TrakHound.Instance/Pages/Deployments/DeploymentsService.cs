@@ -43,7 +43,7 @@ namespace TrakHound.Instance.Pages.Deployments
 
         public string BackupPath => TrakHoundStartupDeployments.BackupPath;
 
-        public string OutputPath => Path.Combine(AppContext.BaseDirectory, "_temp", "deployments");
+        public string OutputPath => Path.Combine(TrakHoundTemp.GetDirectory(), "deployments");
 
         public string DeploymentConfigurationPath => Path.Combine(ConfigurationPath, DeploymentConfiguration.Filename);
 

@@ -1272,7 +1272,7 @@ namespace TrakHound.Blazor.Apps
 
                     if (!string.IsNullOrEmpty(stylesheet.PackageDirectory))
                     {
-                        var wwwRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_temp", "wwwroot");
+                        var wwwRoot = Path.Combine(TrakHoundTemp.GetDirectory(), "wwwroot");
                         var appRoot = Path.Combine(wwwRoot, _packagesDirectory);
                         var destinationDirectory = Path.Combine(appRoot, stylesheet.PackageId, stylesheet.PackageVersion);
 
@@ -1386,7 +1386,7 @@ namespace TrakHound.Blazor.Apps
 
                     if (!string.IsNullOrEmpty(stylesheet.PackageDirectory))
                     {
-                        var wwwRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_temp", "wwwroot");
+                        var wwwRoot = Path.Combine(TrakHoundTemp.GetDirectory(), "wwwroot");
                         var appRoot = Path.Combine(wwwRoot, _packagesDirectory);
                         var destinationDirectory = Path.Combine(appRoot, stylesheet.PackageId, stylesheet.PackageVersion);
 
@@ -1486,7 +1486,7 @@ namespace TrakHound.Blazor.Apps
                     if (!string.IsNullOrEmpty(asset.PackageDirectory))
                     {
                         var sourceRoot = Path.Combine(asset.PackageDirectory, "dist", "wwwroot");
-                        var wwwRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_temp", "wwwroot");
+                        var wwwRoot = Path.Combine(TrakHoundTemp.GetDirectory(), "wwwroot");
                         var appRoot = Path.Combine(wwwRoot, _packagesDirectory);
                         var destinationDirectory = Path.Combine(appRoot, asset.PackageId, asset.PackageVersion);
 
@@ -1544,7 +1544,7 @@ namespace TrakHound.Blazor.Apps
 
         public void ClearFiles()
         {
-            var wwwRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_temp", "wwwroot");
+            var wwwRoot = Path.Combine(TrakHoundTemp.GetDirectory(), "wwwroot");
             if (Directory.Exists(wwwRoot))    
             {
                 try

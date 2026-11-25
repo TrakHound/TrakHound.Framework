@@ -31,14 +31,14 @@ namespace TrakHound.Instance
 
 
         /// <summary>
-        /// The default Startup Deployment directory
+        /// The default Startup Deployment directory (in the Data Path, since installed files are moved to "installed" or "failed")
         /// </summary>
-        public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "deployments");
+        public static string DefaultPath => TrakHoundDataDirectory.GetPath("deployments");
 
         /// <summary>
         /// Where Deployment Backups are created (also used by the Admin Interface Backups page)
         /// </summary>
-        public static string BackupPath => Path.Combine(AppContext.BaseDirectory, "backup", "deployments");
+        public static string BackupPath => TrakHoundDataDirectory.GetPath("backup", "deployments");
 
         /// <summary>
         /// Where the installed Deployment Information file is kept : the Configuration directory (not the program directory),

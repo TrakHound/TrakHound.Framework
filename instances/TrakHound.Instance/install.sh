@@ -179,8 +179,10 @@ mkdir -p "$PROGRAM_DIR"
 cp -R "$SOURCE_DIR/." "$PROGRAM_DIR/"
 chmod +x "$PROGRAM_DIR/$EXECUTABLE"
 
-# The Instance writes its logs, temporary files and deployment backups next to the program files
-chown -R "$SERVICE_USER:$SERVICE_USER" "$PROGRAM_DIR"
+# The Instance writes everything (logs, temporary files and backups too) in its Data Folder, so the program files stay owned by
+# root and the service user can't change them
+chown -R root:root "$PROGRAM_DIR"
+chmod -R a+rX,go-w "$PROGRAM_DIR"
 
 
 # Create the Data Folder (only the service user can read it: the keys that protect sign-in cookies are stored unencrypted on Linux)
@@ -206,9 +208,9 @@ fi
 # Copy the Deployment (the Instance installs it the next time it starts)
 if [[ -n "$deployment" ]]; then
     info "Copying the deployment $(basename "$deployment")"
-    mkdir -p "$PROGRAM_DIR/deployments"
-    cp "$deployment" "$PROGRAM_DIR/deployments/"
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$PROGRAM_DIR/deployments"
+    mkdir -p "$DATA_DIR/deployments"
+    cp "$deployment" "$DATA_DIR/deployments/"
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR/deployments"
 fi
 
 

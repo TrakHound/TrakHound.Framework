@@ -27,7 +27,7 @@ namespace TrakHound.Instance.Http
         public TrakHoundPackageFilesMiddleware(RequestDelegate next)
         {
             _next = next;
-            _root = GetRoot(AppDomain.CurrentDomain.BaseDirectory);
+            _root = GetRoot(TrakHoundTemp.BaseDirectory);
         }
 
 

@@ -66,6 +66,14 @@ namespace TrakHound.Instance.Deployments.Tests
         }
 
         [Fact]
+        public void DefaultDataPath_HoldsTheConfigurationDirectory()
+        {
+            // [app]\config => [app] (unchanged for the default layout), /var/lib/trakhound/instance/config => /var/lib/trakhound/instance
+            Assert.Equal(Path.Combine(_root, "target"), InstanceApplication.GetDefaultDataPath(_configurationPath));
+            Assert.Equal(Path.Combine(_root, "target"), InstanceApplication.GetDefaultDataPath(_configurationPath + Path.DirectorySeparatorChar));
+        }
+
+        [Fact]
         public void DefaultVariablePath_IsBesideTheConfigurationDirectory()
         {
             Assert.Equal(Path.Combine(_root, "target", "variables"), InstanceApplication.GetDefaultVariablePath(_configurationPath));

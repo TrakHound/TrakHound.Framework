@@ -34,11 +34,9 @@ namespace TrakHound.Instance.Pages.Configuration
         {
             _instance = instance;
 
-            // {instance}/config/{profile} => {instance}/workspaces (outside 'config', so Deployments and Backups of the Instance leave them out)
-            var profilePath = instance.ConfigurationProfile?.Path?.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-            var configurationPath = !string.IsNullOrEmpty(profilePath) ? System.IO.Path.GetDirectoryName(profilePath) : null;
-            var basePath = !string.IsNullOrEmpty(configurationPath) ? System.IO.Path.GetDirectoryName(configurationPath) : null;
-            Path = System.IO.Path.Combine(basePath ?? AppContext.BaseDirectory, DirectoryName);
+            // [Data Path]/workspaces (by default the directory that holds 'config'), outside 'config' so Deployments and Backups of the
+            // Instance leave them out
+            Path = TrakHoundDataDirectory.GetPath(DirectoryName);
         }
 
         public void Dispose()

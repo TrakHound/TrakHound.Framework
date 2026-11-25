@@ -102,7 +102,7 @@ $@"# TrakHound Instance Log History
 # Storage : File (JSON Lines files, one per Logger per UTC day) or Sqlite (indexed database with full-text search)
 provider: {ProviderType}
 
-# Directory for Log History (relative to the Instance directory, or absolute)
+# Directory for Log History (relative to the Instance's Data Path, or absolute)
 path: {QuoteYaml(string.IsNullOrWhiteSpace(Path) ? "logs" : Path.Trim())}
 
 # Least severe level written to Log History (Critical, Error, Warning, Information, Debug, Trace)
@@ -144,12 +144,12 @@ maintenanceIntervalMinutes: {Math.Max(1, MaintenanceIntervalMinutes)}
         }
 
         /// <summary>
-        /// Get the full Log History directory (relative paths are relative to the Instance directory)
+        /// Get the full Log History directory (relative paths are relative to the Data Path)
         /// </summary>
         public string GetDirectory()
         {
             var path = string.IsNullOrWhiteSpace(Path) ? "logs" : Path;
-            return System.IO.Path.IsPathRooted(path) ? path : System.IO.Path.Combine(AppContext.BaseDirectory, path);
+            return TrakHoundDataDirectory.GetPath(path);
         }
 
 

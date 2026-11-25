@@ -378,7 +378,7 @@ namespace TrakHound.Instances
                 if (createBackup)
                 {
                     // Create Backup of Configuration File
-                    var backupDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, BackupDirectoryName);
+                    var backupDir = TrakHoundDataDirectory.GetPath(BackupDirectoryName);
                     if (!Directory.Exists(backupDir)) Directory.CreateDirectory(backupDir);
                     var backupFilename = System.IO.Path.ChangeExtension(UnixDateTime.Now.ToString(), ".backup.yaml");
                     var backupPath = System.IO.Path.Combine(backupDir, backupFilename);

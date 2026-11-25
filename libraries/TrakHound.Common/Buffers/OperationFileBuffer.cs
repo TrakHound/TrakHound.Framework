@@ -408,24 +408,23 @@ namespace TrakHound.Buffers
 
 
         /// <summary>
-        /// Gets whether the Buffer directory for the specified Id exists (resolved relative to the AppDomain Base Directory)
+        /// Gets whether the Buffer directory for the specified Id exists
         /// </summary>
         public bool GetDirectoryExists(string queueId)
         {
             string name = $"{queueId}".ToSnakeCase().ToLower();
-            string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DirectoryBuffer, name);
+            string dir = TrakHoundDataDirectory.GetPath(DirectoryBuffer, name);
 
             return Directory.Exists(dir);
         }
 
         /// <summary>
-        /// Gets the Buffer directory for the specified Id ("buffer/{snake_case_id}" next to the entry Assembly), creating it if requested
+        /// Gets the Buffer directory for the specified Id ("buffer/{snake_case_id}" in the Data Directory), creating it if requested
         /// </summary>
         public string GetDirectory(string queueId, bool createIfNotExists = true)
         {
             string name = $"{queueId}".ToSnakeCase().ToLower();
-            string dir = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), DirectoryBuffer, name);
-            //string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, DirectoryBuffer, name);
+            string dir = TrakHoundDataDirectory.GetPath(DirectoryBuffer, name);
             if (createIfNotExists && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
             return dir;

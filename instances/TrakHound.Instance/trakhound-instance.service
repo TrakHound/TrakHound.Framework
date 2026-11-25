@@ -1,7 +1,7 @@
 # TrakHound Instance systemd unit (see the Installation Guide, section 5)
 #
-# Program files: /opt/trakhound/instance (the Instance also writes logs, _temp, backup and deployments here)
-# Data:          /var/lib/trakhound/instance (configuration, packages and volumes)
+# Program files: /opt/trakhound/instance (read-only to the service)
+# Data:          /var/lib/trakhound/instance (configuration, packages, volumes, logs, backups and everything else the Instance writes)
 #
 # install.sh copies this file to /etc/systemd/system/ on every install and upgrade. To change a setting,
 # use 'sudo systemctl edit trakhound-instance', which keeps the change in a drop-in file that upgrades don't replace
@@ -22,6 +22,8 @@ ExecStart=/opt/trakhound/instance/TrakHound.Instance
 Environment=TRAKHOUND_CONFIGURATION_PATH=/var/lib/trakhound/instance/config
 Environment=TRAKHOUND_PACKAGE_PATH=/var/lib/trakhound/instance/packages
 Environment=TRAKHOUND_VOLUME_PATH=/var/lib/trakhound/instance/volumes
+# Logs, temporary files, backups and Startup Deployments (the program files in /opt/trakhound/instance are read-only to the service)
+Environment=TRAKHOUND_DATA_PATH=/var/lib/trakhound/instance
 Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
 
 # Startup can take a while the first time (packages are loaded and deployments installed)

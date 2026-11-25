@@ -12,11 +12,16 @@ namespace TrakHound
     public static class TrakHoundTemp
     {
         private const string _directory = "_temp";
+        private static string _baseDirectory;
 
         /// <summary>
-        /// The base directory that the "_temp" directory is created in (defaults to the AppDomain BaseDirectory)
+        /// The base directory that the "_temp" directory is created in (the Data Directory unless it has been set)
         /// </summary>
-        public static string BaseDirectory { get; set; } = AppDomain.CurrentDomain.BaseDirectory;
+        public static string BaseDirectory
+        {
+            get => !string.IsNullOrEmpty(_baseDirectory) ? _baseDirectory : TrakHoundDataDirectory.Path;
+            set => _baseDirectory = value;
+        }
 
 
         /// <summary>

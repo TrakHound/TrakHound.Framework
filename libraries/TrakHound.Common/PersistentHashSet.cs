@@ -32,7 +32,8 @@ namespace TrakHound
     public class PersistentHashSet<TValue> : IPersistentHashSet
     {
         private const string _defaultBaseDirectoryName = "cache";
-        private static readonly string _defaultBaseDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _defaultBaseDirectoryName);
+        // Read when used (not when the type is loaded), so it follows the Data Directory once a host has set it
+        private static string _defaultBaseDirectory => TrakHoundDataDirectory.GetPath(_defaultBaseDirectoryName);
 
         private readonly string _value;
         private readonly string _baseDirectory;
@@ -67,7 +68,7 @@ namespace TrakHound
             if (!string.IsNullOrEmpty(baseDirectory))
             {
                 _baseDirectory = baseDirectory;
-                if (!Path.IsPathRooted(_baseDirectory)) _baseDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _baseDirectory);
+                if (!Path.IsPathRooted(_baseDirectory)) _baseDirectory = TrakHoundDataDirectory.GetPath(_baseDirectory);
             }
             else
             {

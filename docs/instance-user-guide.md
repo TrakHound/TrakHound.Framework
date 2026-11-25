@@ -307,7 +307,7 @@ A deployment includes the profile's Variables (section 2.5), which are kept in `
 
 #### 2.6.1 Installing a deployment at startup
 
-The Instance installs deployment files from its `deployments` folder (next to the program files) when it starts, before it reads any configuration. Use this to set up a new Instance with a known set of configurations and packages: the installer's `/DEPLOYMENT` option copies a file there (see the TrakHound Instance Installation Guide), or copy a `.thd` file there yourself and restart the Instance.
+The Instance installs deployment files from the `deployments` folder in its data folder (the folder that holds its configuration folder) when it starts, before it reads any configuration. Use this to set up a new Instance with a known set of configurations and packages: the installer's `/DEPLOYMENT` option copies a file there (see the TrakHound Instance Installation Guide), or copy a `.thd` file there yourself and restart the Instance.
 
 - Files are installed in name order (ex. `01-base.thd` before `02-site.thd`). Only files directly in the folder are read.
 - Each install creates a backup first, which you can restore from **Backups**.
@@ -603,7 +603,7 @@ The page is meant for development. Remove the package, or its App configuration,
 
 ## 3. Configuring the Instance
 
-Instance settings live in `instance.config.yaml`, in the configuration folder. Edit it with a text editor, save it in place, then restart the Instance. Each save writes a backup to the `backup` folder next to the program files.
+Instance settings live in `instance.config.yaml`, in the configuration folder. Edit it with a text editor, save it in place, then restart the Instance. Each save writes a backup to the `backup` folder in the Instance's data folder (the folder that holds its configuration folder).
 
 You can also change most of these settings in the Admin interface under Settings (section 2.9), which saves them to the same files.
 
@@ -677,7 +677,7 @@ To limit the Admin interface to the computers that manage the Instance, list the
 
 ### 3.3 Logs
 
-Log history is written to the `logs` folder next to the program files, and you can view it in the Admin interface under Explorer > Diagnostics > Logs. Settings are in `logs.config.yaml` in the configuration folder:
+Log history is written to the `logs` folder in the Instance's data folder (the folder that holds its configuration folder, or `TRAKHOUND_DATA_PATH`), and you can view it in the Admin interface under Explorer > Diagnostics > Logs. Settings are in `logs.config.yaml` in the configuration folder:
 
 | Setting | Default |
 | --- | --- |
@@ -864,7 +864,7 @@ A package is used under `RequireApproval` if its files match its manifest, it's 
 
 ## 4. Troubleshooting
 
-Start with the logs: Explorer > Diagnostics > Logs in the Admin interface, or the `logs` folder next to the program files. For problems installing or starting the Instance, see the troubleshooting section of the TrakHound Instance Installation Guide.
+Start with the logs: Explorer > Diagnostics > Logs in the Admin interface, or the `logs` folder in the Instance's data folder. For problems installing or starting the Instance, see the troubleshooting section of the TrakHound Instance Installation Guide.
 
 | Problem | What to do |
 | --- | --- |

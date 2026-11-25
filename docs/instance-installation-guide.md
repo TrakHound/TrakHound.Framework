@@ -86,10 +86,10 @@ Run the installer (`trakhound-instance-<version>-install.exe`) as an administrat
 | Packages | `C:\ProgramData\TrakHound\Instance\packages` |
 | Volumes (package data) | `C:\ProgramData\TrakHound\Instance\volumes` |
 | Variables (package values) | `C:\ProgramData\TrakHound\Instance\variables` |
-| Logs | `C:\Program Files\TrakHound\Instance\logs` |
+| Logs | `C:\ProgramData\TrakHound\Instance\logs` |
 | Windows Service | `TrakHound-Instance` (display name TrakHound Instance), runs as Local System, restarts automatically if it fails |
 
-The ProgramData folder is restricted to SYSTEM and Administrators. The service finds it through environment variables set on the service (`TRAKHOUND_CONFIGURATION_PATH`, `TRAKHOUND_PACKAGE_PATH`, `TRAKHOUND_VOLUME_PATH`). The Variables folder is kept beside the configuration folder unless `TRAKHOUND_VARIABLE_PATH` sets another one, and the installed deployment's information (`trakhound-deployment.json`) is kept in the configuration folder.
+The ProgramData folder is restricted to SYSTEM and Administrators. The service finds it through environment variables set on the service (`TRAKHOUND_CONFIGURATION_PATH`, `TRAKHOUND_PACKAGE_PATH`, `TRAKHOUND_VOLUME_PATH`). Everything else the Instance writes goes in its data folder: the folder that holds the configuration folder (here `C:\ProgramData\TrakHound\Instance`), or the folder `TRAKHOUND_DATA_PATH` sets. That's the Variables (`variables`, or `TRAKHOUND_VARIABLE_PATH`), logs, backups (`backup`), startup deployments (`deployments`), temporary files (`_temp`) and copies of loaded packages (`_modules`). The program folder is only read. The installed deployment's information (`trakhound-deployment.json`) is kept in the configuration folder.
 
 ## 4. Install in IIS
 
@@ -157,7 +157,7 @@ You need:
 | Configuration | `/var/lib/trakhound/instance/config/default` |
 | Packages | `/var/lib/trakhound/instance/packages` |
 | Volumes (package data) | `/var/lib/trakhound/instance/volumes` |
-| Logs | `/opt/trakhound/instance/logs`, and the systemd journal |
+| Logs | `/var/lib/trakhound/instance/logs`, and the systemd journal |
 | Service | `trakhound-instance`, runs as the `trakhound` user, restarts automatically if it fails |
 
 ### 5.1 Install with install.sh
@@ -396,7 +396,7 @@ The installer accepts command-line options for unattended installs. Run it from 
 | `/TASKS="..."` | Tasks to run, comma-separated: `startmenuicon`, `desktopicon`, `autostart`, `startservice`, `firewall`. Tasks not listed are off |
 | `/LOG="path"` | Writes a Setup log to the file (Setup also logs to `%TEMP%` by default) |
 | `/DEFAULTPACKAGES=no` | Don't install the default packages. New installs install them (with their configurations) unless this is set |
-| `/DEPLOYMENT="path"` | A deployment file (`.thd`) to install. Setup copies it to the `deployments` folder in the install directory, and the Instance installs it when it starts (see below) |
+| `/DEPLOYMENT="path"` | A deployment file (`.thd`) to install. Setup copies it to the `deployments` folder in the Instance's data folder, and the Instance installs it when it starts (see below) |
 
 Example: a Windows Service on port 9000, started automatically, with a firewall rule:
 
@@ -418,7 +418,7 @@ To set up an Instance with specific configurations and packages, create a deploy
 trakhound-instance-<version>-install.exe /VERYSILENT /SUPPRESSMSGBOXES /HOSTING=Service /TASKS="autostart,startservice,firewall" /DEPLOYMENT="C:\Setup\site-a-1.0.0.thd"
 ```
 
-- Setup only copies the file (to `deployments` in the install directory), so the original can be moved or deleted after Setup finishes. The Instance installs it the next time it starts, before it reads its configuration, so a deployment that includes the Instance Settings can also change the port and other settings.
+- Setup only copies the file (to `deployments` in the data folder), so the original can be moved or deleted after Setup finishes. The Instance installs it the next time it starts, before it reads its configuration, so a deployment that includes the Instance Settings can also change the port and other settings.
 - The Instance backs up first. If the install fails, it restores the backup and starts without the deployment. A notification in the Admin interface shows the result either way.
 - Each file is installed once, so passing the same file again on an upgrade doesn't overwrite changes made since. A new version of the deployment is installed.
 - On IIS, the Instance installs the file on the site's first request after Setup. The Application Pool identity needs Modify permission on the install directory (see section 4).
@@ -438,7 +438,7 @@ Open **Settings > Apps > Installed apps**, find **TrakHound Instance** and choos
 
 ## 10. Troubleshooting installation
 
-Start with the Setup log in `%TEMP%` (`Setup Log <date> #<n>.txt`), the Instance's `logs` folder next to the program files, and Windows Event Viewer (Windows Logs > Application and System). On Linux, start with `systemctl status trakhound-instance` and `journalctl -u trakhound-instance`. For problems with a running Instance, see the troubleshooting section of the TrakHound Instance User Guide.
+Start with the Setup log in `%TEMP%` (`Setup Log <date> #<n>.txt`), the Instance's `logs` folder (in its data folder, `C:\ProgramData\TrakHound\Instance\logs` for a new install), and Windows Event Viewer (Windows Logs > Application and System). On Linux, start with `systemctl status trakhound-instance` and `journalctl -u trakhound-instance`. For problems with a running Instance, see the troubleshooting section of the TrakHound Instance User Guide.
 
 | Problem | What to do |
 | --- | --- |

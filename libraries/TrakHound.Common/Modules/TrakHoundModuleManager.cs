@@ -510,7 +510,7 @@ namespace TrakHound.Modules
             // Include a Stamp of the source files so a reinstalled Package (with the same Version) gets a fresh copy
             // instead of reusing the old files (which can't be overwritten while they are loaded)
             var sourceFiles = GetFiles(sourceDirectory);
-            var modulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _directory, $"{key}-{CreateStamp(sourceFiles, true)}");
+            var modulePath = TrakHoundDataDirectory.GetPath(_directory, $"{key}-{CreateStamp(sourceFiles, true)}");
             if (Directory.Exists(modulePath)) return modulePath;
 
             // Copy to a temp directory first and then move into place, so a partial copy is never used

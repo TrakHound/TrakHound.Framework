@@ -226,7 +226,7 @@ namespace TrakHound.Instances
         {
             return new[]
             {
-                ("Instance", AppContext.BaseDirectory),
+                ("Data", TrakHoundDataDirectory.Path),
                 ("Configuration", _configurationPath),
                 ("Packages", _packagesPath),
                 ("Volumes", _volumesPath),
