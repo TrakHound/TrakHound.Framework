@@ -21,6 +21,11 @@ namespace TrakHound.VisualStudio
         /// The Build File publishes the Package (otherwise it only builds the Package file)
         /// </summary>
         public bool Publish { get; set; }
+
+        /// <summary>
+        /// The Build File sets the Project's server (or its defaults do), so it isn't published to a Publish Target
+        /// </summary>
+        public bool SetsServer { get; set; }
     }
 
     /// <summary>
@@ -95,7 +100,9 @@ namespace TrakHound.VisualStudio
             var root = document.RootElement;
             var baseDirectory = Path.GetDirectoryName(Path.GetFullPath(buildFilePath));
 
-            var defaultPublish = TryGetProperty(root, "defaults", out var defaults) && GetBoolean(defaults, "publish") == true;
+            var hasDefaults = TryGetProperty(root, "defaults", out var defaults);
+            var defaultPublish = hasDefaults && GetBoolean(defaults, "publish") == true;
+            var defaultServer = hasDefaults && HasString(defaults, "server");
 
             var projects = new List<BuildFileProject>();
             if (TryGetProperty(root, "projects", out var items) && items.ValueKind == JsonValueKind.Array)
@@ -115,6 +122,7 @@ namespace TrakHound.VisualStudio
                     {
                         Directory = fullPath,
                         Publish = GetBoolean(item, "publish") ?? defaultPublish,
+                        SetsServer = HasString(item, "server") || defaultServer,
                     });
                 }
             }
@@ -139,6 +147,11 @@ namespace TrakHound.VisualStudio
 
             value = default;
             return false;
+        }
+
+        private static bool HasString(JsonElement element, string name)
+        {
+            return TryGetProperty(element, name, out var value) && value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(value.GetString());
         }
 
         private static bool? GetBoolean(JsonElement element, string name)

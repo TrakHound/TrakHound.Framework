@@ -80,10 +80,21 @@ namespace TrakHound.VisualStudio
                 var selected = data.Projects.Where(o => o.IsSelected).Select(o => o.Project).ToList();
                 if (selected.Count == 0) return;
 
+                // --target applies to every Project that publishes, so it isn't passed when the Build File sets a Project's server
+                // (the CLI publishes that one to the server, and refuses a Target for it)
+                var publishing = selected.Where(o => o.Publish).ToList();
+                string target = null;
+                if (publishing.Count > 0 && !publishing.Any(o => o.SetsServer))
+                {
+                    bool proceed;
+                    (proceed, target) = await SelectPublishTargetAsync(publishing.Select(o => o.Directory), cancellationToken);
+                    if (!proceed) return;
+                }
+
                 var cliPath = await FindCliAsync(cancellationToken);
                 if (cliPath == null) return;
 
-                await PublishAsync(cliPath, buildFilePath, selected, selected.Count == projects.Count, cancellationToken);
+                await PublishAsync(cliPath, buildFilePath, selected, selected.Count == projects.Count, target, cancellationToken);
             }
             finally
             {
@@ -91,9 +102,10 @@ namespace TrakHound.VisualStudio
             }
         }
 
-        private async Task PublishAsync(string cliPath, string buildFilePath, List<BuildFileProject> projects, bool all, CancellationToken cancellationToken)
+        private async Task PublishAsync(string cliPath, string buildFilePath, List<BuildFileProject> projects, bool all, string target, CancellationToken cancellationToken)
         {
             var arguments = new List<string> { "packages", "build", buildFilePath };
+            if (!string.IsNullOrEmpty(target)) arguments.AddRange(["--target", target]);
             if (!all)
             {
                 foreach (var project in projects)
@@ -111,7 +123,7 @@ namespace TrakHound.VisualStudio
                 cliPath,
                 Path.GetDirectoryName(buildFilePath),
                 arguments,
-                $"Publish TrakHound Packages : {buildFilePath}",
+                !string.IsNullOrEmpty(target) ? $"Publish TrakHound Packages : {buildFilePath} (Target : {target})" : $"Publish TrakHound Packages : {buildFilePath}",
                 $"Publishing {projects.Count} Project(s)...",
                 line =>
                 {

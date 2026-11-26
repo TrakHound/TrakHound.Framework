@@ -55,10 +55,13 @@ namespace TrakHound.VisualStudio
                     return;
                 }
 
+                var (proceed, target) = await SelectPublishTargetAsync([projectDirectory], cancellationToken);
+                if (!proceed) return;
+
                 var cliPath = await FindCliAsync(cancellationToken);
                 if (cliPath == null) return;
 
-                await PublishAsync(cliPath, projectPath, projectDirectory, cancellationToken);
+                await PublishAsync(cliPath, projectPath, projectDirectory, target, cancellationToken);
             }
             finally
             {
@@ -66,18 +69,21 @@ namespace TrakHound.VisualStudio
             }
         }
 
-        private async Task PublishAsync(string cliPath, string projectPath, string projectDirectory, CancellationToken cancellationToken)
+        private async Task PublishAsync(string cliPath, string projectPath, string projectDirectory, string target, CancellationToken cancellationToken)
         {
             string packageId = null;
             string packageVersion = null;
             var stopwatch = Stopwatch.StartNew();
 
+            var arguments = new List<string> { "packages", "dotnet", "--project-configuration", "Release", "--publish" };
+            if (!string.IsNullOrEmpty(target)) arguments.AddRange(["--target", target]);
+
             // The project is read from the Working Directory (the project directory)
             var exitCode = await RunCliAsync(
                 cliPath,
                 projectDirectory,
-                ["packages", "dotnet", "--project-configuration", "Release", "--publish"],
-                $"Publish TrakHound Package : {projectPath}",
+                arguments,
+                !string.IsNullOrEmpty(target) ? $"Publish TrakHound Package : {projectPath} (Target : {target})" : $"Publish TrakHound Package : {projectPath}",
                 $"Publishing {Path.GetFileNameWithoutExtension(projectPath)}...",
                 line =>
                 {
