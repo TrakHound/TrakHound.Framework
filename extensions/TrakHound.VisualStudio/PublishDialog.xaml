@@ -1,0 +1,136 @@
+<DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:colors="clr-namespace:Microsoft.VisualStudio.PlatformUI;assembly=Microsoft.VisualStudio.Shell.15.0">
+  <Grid Width="560"
+        Background="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
+        TextElement.Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}">
+    <Grid.Resources>
+      <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+    </Grid.Resources>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- What is published -->
+    <TextBlock Grid.Row="0"
+               Margin="10,10,10,2"
+               FontWeight="SemiBold"
+               Text="{Binding Title}" />
+
+    <TextBlock Grid.Row="1"
+               Margin="10,0,10,8"
+               Opacity="0.7"
+               TextTrimming="CharacterEllipsis"
+               ToolTip="{Binding Subtitle}"
+               Text="{Binding Subtitle}" />
+
+    <!-- The Build File's Projects (Publish TrakHound Packages...) -->
+    <Grid Grid.Row="2"
+          Visibility="{Binding ShowProjects, Converter={StaticResource BooleanToVisibility}}">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+
+      <ScrollViewer Grid.Row="0"
+                    Margin="10,0"
+                    MinHeight="120"
+                    MaxHeight="260"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Projects}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <CheckBox Margin="0,3"
+                        IsChecked="{Binding IsSelected}"
+                        Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{Binding Name}" />
+                  <TextBlock Margin="8,0,0,0"
+                             Opacity="0.6"
+                             Text="{Binding Note}" />
+                </StackPanel>
+              </CheckBox>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <StackPanel Grid.Row="1"
+                  Margin="10,8,10,6"
+                  Orientation="Horizontal">
+        <Button MinWidth="80"
+                Padding="8,2"
+                Content="Select All"
+                Command="{Binding SelectAllCommand}" />
+        <Button MinWidth="80"
+                Margin="6,0,0,0"
+                Padding="8,2"
+                Content="Select None"
+                Command="{Binding SelectNoneCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <!-- The Publish Targets (two or more) : a row for each, the whole row selects it -->
+    <StackPanel Grid.Row="3"
+                Margin="10,6,10,0"
+                Visibility="{Binding ShowTargets, Converter={StaticResource BooleanToVisibility}}">
+      <TextBlock FontWeight="SemiBold"
+                 Text="Publish Target" />
+      <TextBlock Margin="0,0,0,6"
+                 Opacity="0.7"
+                 TextTrimming="CharacterEllipsis"
+                 ToolTip="{Binding TargetsSource}"
+                 Text="{Binding TargetsSource}" />
+
+      <ScrollViewer MaxHeight="300"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Targets}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Margin="0,0,0,4"
+                      Padding="6,5"
+                      BorderThickness="1"
+                      BorderBrush="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowBorderBrushKey}}">
+                <RadioButton GroupName="PublishTarget"
+                             IsChecked="{Binding IsSelected}"
+                             HorizontalContentAlignment="Stretch"
+                             VerticalContentAlignment="Top"
+                             Foreground="{DynamicResource {x:Static colors:EnvironmentColors.ToolWindowTextBrushKey}}">
+                  <StackPanel Margin="4,0,0,0">
+                    <TextBlock FontWeight="SemiBold"
+                               Text="{Binding Label}" />
+                    <TextBlock Margin="0,2,0,0"
+                               TextWrapping="Wrap"
+                               Text="{Binding Destinations}" />
+                    <TextBlock Margin="0,2,0,0"
+                               Opacity="0.7"
+                               TextWrapping="Wrap"
+                               Text="{Binding Notes}" />
+                    <TextBlock Margin="0,2,0,0"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding HasWarning, Converter={StaticResource BooleanToVisibility}}"
+                               Text="{Binding Warning}" />
+                  </StackPanel>
+                </RadioButton>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+
+    <!-- Why there is no Target to choose (Publish TrakHound Packages...) -->
+    <TextBlock Grid.Row="4"
+               Margin="10,4,10,10"
+               Opacity="0.7"
+               TextWrapping="Wrap"
+               Text="{Binding TargetsNote}" />
+  </Grid>
+</DataTemplate>

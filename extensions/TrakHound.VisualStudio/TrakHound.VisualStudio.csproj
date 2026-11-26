@@ -22,8 +22,8 @@
     <!-- Remote UI : the XAML is sent to Visual Studio (not compiled) -->
     <EmbeddedResource Include="PublishToolWindowControl.xaml" />
     <Page Remove="PublishToolWindowControl.xaml" />
-    <EmbeddedResource Include="PublishPackagesDialog.xaml" />
-    <Page Remove="PublishPackagesDialog.xaml" />
+    <EmbeddedResource Include="PublishDialog.xaml" />
+    <Page Remove="PublishDialog.xaml" />
   </ItemGroup>
 
 </Project>

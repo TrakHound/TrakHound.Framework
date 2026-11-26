@@ -6,6 +6,37 @@ using System.Text.Json;
 namespace TrakHound.VisualStudio
 {
     /// <summary>
+    /// A Destination of a Publish Target : the Package Server and Organization it uploads to
+    /// </summary>
+    internal class PublishTargetDestination
+    {
+        public string ManagementServer { get; set; }
+
+        public string Organization { get; set; }
+
+        /// <summary>
+        /// The Environment Variable that holds the Api Token for this Destination (the CLI uses TRAKHOUND_API_TOKEN when not set)
+        /// </summary>
+        public string ApiTokenVariable { get; set; }
+    }
+
+    /// <summary>
+    /// A Publish Target ('th packages ... --target') in a Publish Settings file
+    /// </summary>
+    internal class PublishTarget
+    {
+        public string Name { get; set; }
+
+        public List<PublishTargetDestination> Destinations { get; set; } = new();
+
+        public string VersionSuffix { get; set; }
+
+        public bool AllowDirty { get; set; }
+
+        public bool RequireSigning { get; set; }
+    }
+
+    /// <summary>
     /// The Publish Targets in a Publish Settings file (trakhound.package.publish.json)
     /// </summary>
     internal class PublishTargetsFile
@@ -13,15 +44,45 @@ namespace TrakHound.VisualStudio
         public string Path { get; set; }
 
         /// <summary>
-        /// The Target names, in the order they are listed
+        /// The Targets, in the order they are listed
         /// </summary>
-        public List<string> Targets { get; set; } = new();
+        public List<PublishTarget> Targets { get; set; } = new();
 
         public string DefaultTarget { get; set; }
+
+        public PublishTarget GetTarget(string name) => Targets.FirstOrDefault(o => string.Equals(o.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// Finds and reads Publish Settings files, which list the Targets ('th packages ... --target') a Package can be published to
+    /// The Targets that a set of Packages can be published to together
+    /// </summary>
+    internal class PublishTargetChoices
+    {
+        public static readonly PublishTargetChoices None = new();
+
+        /// <summary>
+        /// The Publish Settings files nearest to the Packages
+        /// </summary>
+        public List<PublishTargetsFile> Files { get; set; } = new();
+
+        /// <summary>
+        /// The Targets every file has, in the order the first file lists them. Each one's Destinations are those of every file
+        /// </summary>
+        public List<PublishTarget> Targets { get; set; } = new();
+
+        /// <summary>
+        /// The defaultTarget, when every file has the same one (and it is in Targets)
+        /// </summary>
+        public string DefaultTarget { get; set; }
+
+        /// <summary>
+        /// The file (or how many files) the Targets were read from
+        /// </summary>
+        public string Source => Files.Count == 1 ? Files[0].Path : $"{Files.Count} {PublishTargets.Filename} files";
+    }
+
+    /// <summary>
+    /// Finds and reads Publish Settings files, which list the Targets a Package can be published to
     /// </summary>
     internal static class PublishTargets
     {
@@ -48,6 +109,54 @@ namespace TrakHound.VisualStudio
         }
 
         /// <summary>
+        /// The Targets that the Packages in these directories can all be published to, since the CLI publishes each Package to the Target
+        /// in its own nearest file. None when there is no file, or a file can't be read (the CLI reports it when publishing)
+        /// </summary>
+        public static PublishTargetChoices GetChoices(IEnumerable<string> packageDirectories)
+        {
+            var files = new List<PublishTargetsFile>();
+            foreach (var path in packageDirectories.Select(Find).Where(o => o != null).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    files.Add(Read(path));
+                }
+                catch
+                {
+                    return PublishTargetChoices.None;
+                }
+            }
+            if (files.Count == 0) return PublishTargetChoices.None;
+
+            var choices = new PublishTargetChoices { Files = files };
+            foreach (var target in files[0].Targets)
+            {
+                var targets = files.Select(o => o.GetTarget(target.Name)).ToList();
+                if (targets.Any(o => o == null)) continue;
+
+                choices.Targets.Add(new PublishTarget
+                {
+                    Name = target.Name,
+                    Destinations = targets.SelectMany(o => o.Destinations)
+                        .GroupBy(o => $"{o.ManagementServer}|{o.Organization}|{o.ApiTokenVariable}", StringComparer.OrdinalIgnoreCase)
+                        .Select(o => o.First())
+                        .ToList(),
+                    VersionSuffix = target.VersionSuffix,
+                    AllowDirty = targets.All(o => o.AllowDirty),
+                    RequireSigning = targets.Any(o => o.RequireSigning),
+                });
+            }
+
+            var defaults = files.Select(o => o.DefaultTarget).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (defaults.Count == 1 && choices.Targets.Any(o => string.Equals(o.Name, defaults[0], StringComparison.OrdinalIgnoreCase)))
+            {
+                choices.DefaultTarget = defaults[0];
+            }
+
+            return choices;
+        }
+
+        /// <summary>
         /// Read the Targets from a Publish Settings file. Throws if the file isn't valid
         /// </summary>
         public static PublishTargetsFile Read(string path)
@@ -59,23 +168,75 @@ namespace TrakHound.VisualStudio
             var file = new PublishTargetsFile { Path = path };
             if (document.RootElement.ValueKind != JsonValueKind.Object) return file;
 
-            // The CLI reads property names without regard to case
-            foreach (var property in document.RootElement.EnumerateObject())
+            file.DefaultTarget = GetString(document.RootElement, "defaultTarget");
+
+            if (TryGetProperty(document.RootElement, "targets", out var targets) && targets.ValueKind == JsonValueKind.Object)
             {
-                if (string.Equals(property.Name, "defaultTarget", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.String)
+                foreach (var item in targets.EnumerateObject())
                 {
-                    file.DefaultTarget = property.Value.GetString();
-                }
-                else if (string.Equals(property.Name, "targets", StringComparison.OrdinalIgnoreCase) && property.Value.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var target in property.Value.EnumerateObject())
+                    if (file.GetTarget(item.Name) != null || item.Value.ValueKind != JsonValueKind.Object) continue;
+
+                    var target = new PublishTarget
                     {
-                        if (!file.Targets.Contains(target.Name, StringComparer.OrdinalIgnoreCase)) file.Targets.Add(target.Name);
+                        Name = item.Name,
+                        VersionSuffix = GetString(item.Value, "versionSuffix"),
+                        AllowDirty = GetBoolean(item.Value, "allowDirty"),
+                        RequireSigning = GetBoolean(item.Value, "requireSigning"),
+                    };
+
+                    if (TryGetProperty(item.Value, "destinations", out var destinations) && destinations.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var destination in destinations.EnumerateArray())
+                        {
+                            var managementServer = GetString(destination, "managementServer");
+                            var organization = GetString(destination, "organization");
+
+                            // The CLI ignores Destinations left blank (ex. a template created without --managementServer)
+                            if (string.IsNullOrWhiteSpace(managementServer) && string.IsNullOrWhiteSpace(organization)) continue;
+
+                            target.Destinations.Add(new PublishTargetDestination
+                            {
+                                ManagementServer = managementServer,
+                                Organization = organization,
+                                ApiTokenVariable = GetString(destination, "apiTokenVariable")?.Trim(),
+                            });
+                        }
                     }
+
+                    file.Targets.Add(target);
                 }
             }
 
             return file;
+        }
+
+        // The CLI reads property names without regard to case
+        private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = property.Value;
+                        return true;
+                    }
+                }
+            }
+
+            value = default;
+            return false;
+        }
+
+        private static string GetString(JsonElement element, string name)
+        {
+            return TryGetProperty(element, name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        }
+
+        private static bool GetBoolean(JsonElement element, string name)
+        {
+            return TryGetProperty(element, name, out var value) && value.ValueKind == JsonValueKind.True;
         }
     }
 }

@@ -73,23 +73,16 @@ namespace TrakHound.VisualStudio
                     return;
                 }
 
-                var data = new PublishPackagesDialogData(buildFilePath, projects);
-                var result = await this.Extensibility.Shell().ShowDialogAsync(new PublishPackagesDialog(data), "Publish TrakHound Packages", DialogOption.OKCancel, cancellationToken);
+                // The Projects and the Target they are published to. The dialog only offers the Targets the selected Projects can all use,
+                // and none when the Build File sets a selected Project's server (--target applies to every Project that publishes)
+                var data = new PublishDialogData(buildFilePath, projects);
+                var result = await this.Extensibility.Shell().ShowDialogAsync(new PublishDialog(data), "Publish TrakHound Packages", DialogOption.OKCancel, cancellationToken);
                 if (result != DialogResult.OK) return;
 
-                var selected = data.Projects.Where(o => o.IsSelected).Select(o => o.Project).ToList();
+                var selected = data.SelectedProjects;
                 if (selected.Count == 0) return;
 
-                // --target applies to every Project that publishes, so it isn't passed when the Build File sets a Project's server
-                // (the CLI publishes that one to the server, and refuses a Target for it)
-                var publishing = selected.Where(o => o.Publish).ToList();
-                string target = null;
-                if (publishing.Count > 0 && !publishing.Any(o => o.SetsServer))
-                {
-                    bool proceed;
-                    (proceed, target) = await SelectPublishTargetAsync(publishing.Select(o => o.Directory), cancellationToken);
-                    if (!proceed) return;
-                }
+                var target = data.SelectedTarget;
 
                 var cliPath = await FindCliAsync(cancellationToken);
                 if (cliPath == null) return;

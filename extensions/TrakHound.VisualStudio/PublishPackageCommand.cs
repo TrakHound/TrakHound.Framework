@@ -4,6 +4,7 @@
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Microsoft.VisualStudio.Extensibility.Shell;
+using Microsoft.VisualStudio.RpcContracts.Notifications;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
@@ -55,8 +56,17 @@ namespace TrakHound.VisualStudio
                     return;
                 }
 
-                var (proceed, target) = await SelectPublishTargetAsync([projectDirectory], cancellationToken);
-                if (!proceed) return;
+                // Ask for the Target only when there is a choice : with one, it's passed, and without a Publish Settings file the CLI uses its own settings
+                var choices = PublishTargets.GetChoices([projectDirectory]);
+                var target = choices.Targets.Count == 1 ? choices.Targets[0].Name : null;
+                if (choices.Targets.Count > 1)
+                {
+                    var data = new PublishDialogData(projectPath, choices);
+                    var result = await this.Extensibility.Shell().ShowDialogAsync(new PublishDialog(data), "Publish TrakHound Package", DialogOption.OKCancel, cancellationToken);
+                    if (result != DialogResult.OK || data.SelectedTarget == null) return;
+
+                    target = data.SelectedTarget;
+                }
 
                 var cliPath = await FindCliAsync(cancellationToken);
                 if (cliPath == null) return;

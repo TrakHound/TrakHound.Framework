@@ -171,51 +171,6 @@ namespace TrakHound.VisualStudio
         }
 
         /// <summary>
-        /// Ask which Publish Target to publish to, when the Publish Settings files (trakhound.package.publish.json) nearest to the Package
-        /// directories have more than one Target in common. Returns Continue = false if the prompt is dismissed. Target is null when nothing
-        /// needs to be passed (no file, a file that can't be read, which the CLI reports, or no Target in common, so each one's defaultTarget is used)
-        /// </summary>
-        protected async Task<(bool Continue, string Target)> SelectPublishTargetAsync(IEnumerable<string> packageDirectories, CancellationToken cancellationToken)
-        {
-            var files = new List<PublishTargetsFile>();
-            foreach (var path in packageDirectories.Select(PublishTargets.Find).Where(o => o != null).Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    files.Add(PublishTargets.Read(path));
-                }
-                catch
-                {
-                    return (true, null);
-                }
-            }
-            if (files.Count == 0) return (true, null);
-
-            // Only the Targets every file has, since the CLI publishes each Package to the Target in its own file
-            var targets = files[0].Targets.Where(name => files.All(file => file.Targets.Contains(name, StringComparer.OrdinalIgnoreCase))).ToList();
-            if (targets.Count == 0) return (true, null);
-            if (targets.Count == 1) return (true, targets[0]);
-
-            // The default is preselected when the files agree on it
-            var defaultTarget = files.Select(o => o.DefaultTarget).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1 ? files[0].DefaultTarget : null;
-            var defaultIndex = targets.FindIndex(o => string.Equals(o, defaultTarget, StringComparison.OrdinalIgnoreCase));
-
-            var options = new PromptOptions<int>
-            {
-                DismissedReturns = -1,
-                DefaultChoiceIndex = Math.Max(defaultIndex, 0),
-            };
-            for (var i = 0; i < targets.Count; i++)
-            {
-                options.Choices.Add(i == defaultIndex ? $"{targets[i]} (default)" : targets[i], i);
-            }
-
-            var source = files.Count == 1 ? files[0].Path : $"{files.Count} {PublishTargets.Filename} files";
-            var index = await this.Extensibility.Shell().ShowPromptAsync($"Select the Publish Target ({source})", options, cancellationToken);
-            return index >= 0 && index < targets.Count ? (true, targets[index]) : (false, null);
-        }
-
-        /// <summary>
         /// Get the Project selected in Solution Explorer, or the Active Project (ex. the project of the active document)
         /// </summary>
         protected static async Task<string> GetProjectPathAsync(IClientContext context, CancellationToken cancellationToken)
