@@ -13,6 +13,10 @@ It only stores Packages. Installing one is still done by an Admin, from the Inst
 | Default Route | `packages` |
 
 ## Setup
+**In the Docker image**, start the container with `TRAKHOUND_DEV_UPLOAD_TOKEN` set to a long random value (at least 16 characters). It installs this package (it's included in the image), serves it at `packages` with that value as the `uploadToken` (read from the environment, never written to the volume), and adds the `Dev` Package Source. Starting the container without it removes the configuration again.
+
+**Elsewhere:**
+
 1. Install the package (Admin **Packages > Upload**) and add a configuration for it at the route `packages`.
 2. Give uploads a credential (they're never anonymous, since an uploaded Package is code an Admin may install). Either:
    - set the `uploadToken` Parameter to a long random value, which `th packages push` sends from `TRAKHOUND_API_TOKEN` (or `apiToken` in `cli.config.yaml`), or

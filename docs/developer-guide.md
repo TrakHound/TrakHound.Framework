@@ -169,7 +169,7 @@ Choose one:
 - **CLI, into an Instance folder:** `th packages install --file ./out/Contoso.Hello-0.0.1.thp -p "C:\Program Files\TrakHound\Instance"`. A running Instance watches its `packages` folder and picks up the package within a few seconds.
 - **CLI, to an Instance you can't reach as a folder** (ex. one in a Docker container, or on another machine): push it to the `TrakHound.Packages.Dev.Api` package on that Instance, then install it from Packages > **Browse**.
 
-**Using the Dev Api:** it's a package server for development that the Instance serves itself, keeping each package as a file in its volume, so it needs no other services. It only stores packages; installing one is still done in the Admin interface. Set it up once:
+**Using the Dev Api:** it's a package server for development that the Instance serves itself, keeping each package as a file in its volume, so it needs no other services. It only stores packages; installing one is still done in the Admin interface. In the Docker image, starting the container with `TRAKHOUND_DEV_UPLOAD_TOKEN` set to a long random value does the setup below for you, with that value as the `uploadToken` (see the Instance Installation Guide, section 6.2). Otherwise, set it up once:
 
 1. Install `TrakHound.Packages.Dev.Api` on the Instance and add a configuration for it with the route `packages`.
 2. Set its `uploadToken` parameter to a long random value. Uploads are refused without it (or an Instance API key).
