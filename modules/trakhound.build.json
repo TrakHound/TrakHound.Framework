@@ -16,6 +16,7 @@
     { "path": "TrakHound.Mqtt.Service" },
     { "path": "TrakHound.Packages.Api" },
     { "path": "TrakHound.Packages.App" },
+    { "path": "TrakHound.Packages.Dev.Api" },
     { "path": "TrakHound.Packages.Retention.Function" },
     { "path": "TrakHound.Postgres.Service" },
     { "path": "TrakHound.RabbitMq.Service" },

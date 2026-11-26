@@ -1225,7 +1225,7 @@ namespace TrakHound.CLI.Packages
 
             try
             {
-                var package = await packageClient.Upload(packageBytes);
+                var (statusCode, package, message) = await packageClient.UploadPackage(packageBytes);
                 if (package != null)
                 {
                     Console.WriteLine("DONE");
@@ -1234,7 +1234,15 @@ namespace TrakHound.CLI.Packages
                 }
 
                 Console.WriteLine("ERROR");
-                Console.Error.WriteLine("Error Uploading Package");
+
+                // The server's reason (ex. a missing Api Token, or a Version that's already stored)
+                var status = statusCode > 0 ? $" ({statusCode})" : " (the server couldn't be reached)";
+                Console.Error.WriteLine($"Error Uploading Package{status} : {message}");
+
+                if (statusCode == 401 || statusCode == 403)
+                {
+                    Console.Error.WriteLine("The Api Token is TRAKHOUND_API_TOKEN, apiToken in cli.config.yaml, or a Publish Destination's apiTokenVariable");
+                }
             }
             catch (Exception ex)
             {

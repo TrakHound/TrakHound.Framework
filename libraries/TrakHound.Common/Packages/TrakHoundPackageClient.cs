@@ -442,6 +442,62 @@ namespace TrakHound.Packages
         }
 
         /// <summary>
+        /// Uploads a Package file. Returns the Status Code (0 if the server couldn't be reached), the Package created on the server (null unless
+        /// successful), and the server's error when it isn't successful (ex. why an upload was refused), so it can be shown to the user
+        /// </summary>
+        public async Task<(int StatusCode, TrakHoundPackage Package, string Message)> UploadPackage(byte[] packageBytes, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(Organization)) return (0, null, "No Organization");
+            if (packageBytes.IsNullOrEmpty()) return (0, null, "The Package file is empty");
+
+            var url = Url.Combine(BaseUrl, "packages");
+            url = Url.Combine(url, Organization);
+
+            var response = await TrakHoundHttpRequests.PostResponse(url, packageBytes, "application/octet-stream", ApiTokenHeader, cancellationToken);
+            if (response.StatusCode >= 200 && response.StatusCode < 300)
+            {
+                try
+                {
+                    var packageJson = JsonSerializer.Deserialize<TrakHoundPackageJson>(response.GetContentBytes(), Json.SharedOptions);
+                    if (packageJson != null) return (response.StatusCode, packageJson.ToPackage(), null);
+                }
+                catch { }
+
+                return (response.StatusCode, null, "Invalid Response");
+            }
+
+            return (response.StatusCode, null, GetErrorMessage(response));
+        }
+
+        /// <summary>
+        /// The error a server returned : its plain text body (ex. "The Package is already stored"), else the Reason Phrase or the Status Code
+        /// </summary>
+        private static string GetErrorMessage(TrakHoundHttpResponse response)
+        {
+            const int maxLength = 500;
+
+            if (response.ContentType == null || response.ContentType.StartsWith("text/", System.StringComparison.OrdinalIgnoreCase))
+            {
+                string body = null;
+                try
+                {
+                    body = response.GetContentUtf8String()?.Trim();
+                }
+                catch { }
+
+                // An HTML error page isn't a message
+                if (!string.IsNullOrEmpty(body) && !body.StartsWith("<"))
+                {
+                    return body.Length > maxLength ? body.Substring(0, maxLength) + "..." : body;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(response.Message)) return response.StatusCode > 0 ? $"{response.Message} ({response.StatusCode})" : response.Message;
+
+            return $"Status {response.StatusCode}";
+        }
+
+        /// <summary>
         /// Uploads a Package file from the Stream and returns the Package created on the server
         /// </summary>
         public async Task<TrakHoundPackage> Upload(Stream packageStream)

@@ -167,6 +167,25 @@ Choose one:
 
 - **Admin interface:** Packages > **Upload**, drop the `.thp` file, then **Install**.
 - **CLI, into an Instance folder:** `th packages install --file ./out/Contoso.Hello-0.0.1.thp -p "C:\Program Files\TrakHound\Instance"`. A running Instance watches its `packages` folder and picks up the package within a few seconds.
+- **CLI, to an Instance you can't reach as a folder** (ex. one in a Docker container, or on another machine): push it to the `TrakHound.Packages.Dev.Api` package on that Instance, then install it from Packages > **Browse**.
+
+**Using the Dev Api:** it's a package server for development that the Instance serves itself, keeping each package as a file in its volume, so it needs no other services. It only stores packages; installing one is still done in the Admin interface. Set it up once:
+
+1. Install `TrakHound.Packages.Dev.Api` on the Instance and add a configuration for it with the route `packages`.
+2. Set its `uploadToken` parameter to a long random value. Uploads are refused without it (or an Instance API key).
+3. Add a package source (Packages > **Sources**) with the Base URL `http://localhost:8472` (the Instance's own address, also inside a container) and an Organization, ex. `Dev`.
+
+Then, for each build:
+
+```powershell
+th packages dotnet --output ./out --version-suffix dev.1
+$env:TRAKHOUND_API_TOKEN = "<uploadToken>"
+th packages push ./out/Contoso.Hello-0.0.1-dev.1.thp -s http://localhost:8472 --organization Dev
+```
+
+Use the address you reach the Instance at, ex. the port a container publishes. Give each build a new `--version-suffix` (`dev.2`, `dev.3`): the same version is refused, and the Instance only offers a newer version as an update (Packages > **Updates**). Unsigned packages install under the default Package Verification mode (Warn), but not under Require or RequireApproval. Uninstall the Dev Api from Instances that don't need it. Its [README](../modules/TrakHound.Packages.Dev.Api/README.md) has the parameters and how to move its packages to a package server.
+
+For the fastest loop with an Instance you can reach as a folder, use `th dev run` instead (section 2.8).
 
 ### 2.6 Add a configuration
 
