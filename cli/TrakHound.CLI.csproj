@@ -22,6 +22,11 @@
 	  </None>
 	</ItemGroup>
 
+	<!-- Install script for the Linux archives (only published for a Linux Runtime) -->
+	<ItemGroup Condition="$(RuntimeIdentifier.StartsWith('linux'))">
+	  <None Update="install.sh" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
 	<ItemGroup>
 	  <ProjectReference Include="..\libraries\TrakHound.Common\TrakHound.Common.csproj" />
 	</ItemGroup>

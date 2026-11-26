@@ -32,23 +32,18 @@ Download and run the installer from the link below:
 
 ### Linux Installation
 
-#### Install DotNet CLI (Snap)
-The TrakHound CLI application requires the [DotNet CLI](https://learn.microsoft.com/en-us/dotnet/core/install/linux-snap-sdk) to build the package project files and must be installed using Snap using the command below:
+#### Install TrakHound-CLI
+Download the archive for your machine from the [latest release](https://github.com/TrakHound/TrakHound.Framework/releases/latest): `trakhound-cli-[version]-linux-x64.tar.gz` for x86_64, or `trakhound-cli-[version]-linux-arm64.tar.gz` for aarch64 (ex. a Raspberry Pi with a 64-bit OS). Extract it and run `install.sh`:
 ```
-sudo snap install dotnet-sdk --classic
+tar -xzf trakhound-cli-[version]-linux-x64.tar.gz
+sudo bash trakhound-cli/install.sh
 ```
+This installs the CLI to `/opt/trakhound/cli` and links `/usr/local/bin/th` to it. Run the same commands with a newer archive to upgrade, or `sudo bash /opt/trakhound/cli/install.sh --uninstall` to remove it.
 
-#### Install trakhound-cli (Snap)
-Install the latest revision of the **[trakhound-cli](https://snapcraft.io/trakhound-cli)** Snap package using the command below:
-```
-sudo snap install trakhound-cli --devmode
-```
-> Note: Install using **devmode** as the trakhound-cli application requires access to the /usr/lib/dotnet-sdk/current directory. This may be changed in a later version to remove the devmode requirement.
+The archive includes the .NET Runtime, so `th` runs on a server without .NET (ex. next to a Linux Instance). .NET needs ICU, so install your distribution's `libicu` package if `install.sh` asks for it.
 
-Set the 'th' alias to point to trakhound-cli using the command below:
-```
-sudo snap alias trakhound-cli th
-```
+#### Install DotNet CLI
+The commands that build projects (ex. `th packages build` and `th dev run`) also need the [DotNet SDK](https://learn.microsoft.com/en-us/dotnet/core/install/linux). Install it from your distribution's packages or Microsoft's, so `dotnet` is on the PATH (or set `dotnetSdkLocation`, see [Configuration](#configuration)).
 
 ## Usage
 ```
