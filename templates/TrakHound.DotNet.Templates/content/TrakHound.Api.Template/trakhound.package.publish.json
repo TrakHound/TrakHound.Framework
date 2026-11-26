@@ -1,6 +1,34 @@
 {
+  // Publish Targets for this package : 'th packages publish' (and 'th packages dotnet --publish') uses the defaultTarget, or the
+  // one named with --target, and the Visual Studio Publish dialog lists them. The CLI uses the nearest trakhound.package.publish.json,
+  // so in a repository that has a shared one in a parent directory, delete this file to use that one instead
+//#if (managementServer != "" || organization != "")
   "defaultTarget": "default",
+//#else
+  "defaultTarget": "local",
+//#endif
   "targets": {
+//#if (localTarget)
+    // The Dev Package Server of the development Instance at the debug host's instanceUrl (ex. a container from the
+    // trakhound/instance-dev image : 'docker run -d -p 127.0.0.1:8472:8472 trakhound/instance-dev'). Install what's published
+    // from Packages > Browse. Every build is a prerelease (ex. 0.1.4-dev.20261126153000), so it can be published again with
+    // uncommitted changes
+    "local": {
+      "destinations": [
+        {
+          "managementServer": "{instanceUrl}",
+          "organization": "Dev"
+        }
+      ],
+      "versionSuffix": "dev{branch}.{timestamp}",
+      "allowDirty": true
+//#if (managementServer != "" || organization != "")
+    },
+//#else
+    }
+//#endif
+//#endif
+//#if (managementServer != "" || organization != "")
     "default": {
       "destinations": [
         {
@@ -9,5 +37,6 @@
         }
       ]
     }
+//#endif
   }
 }

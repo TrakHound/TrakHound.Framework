@@ -115,6 +115,55 @@ namespace TrakHound.CLI.Tests
             Assert.Null(PackagesCommands.ReadPublishSettings(Package(repo), "release", log: false));
         }
 
+        [Fact]
+        public void ANearerFile_ReportsTheOneItHides()
+        {
+            using var repo = CreateRepository();
+            Assert.Null(PackagesCommands.GetHiddenPublishSettings(repo.PathOf("trakhound.package.publish.json")));
+
+            repo.Write("pkg/trakhound.package.publish.json", """{ "defaultTarget": "own", "targets": { "own": { "destinations": [ { "managementServer": "http://own.test" } ] } } }""");
+            Assert.Equal(repo.PathOf("trakhound.package.publish.json"), PackagesCommands.GetHiddenPublishSettings(repo.PathOf("pkg/trakhound.package.publish.json")));
+        }
+
+        [Fact]
+        public void TheTemplatesLocalTarget_IsValid()
+        {
+            // trakhound.package.publish.json as the TrakHound templates create it (without --managementServer or --organization)
+            using var repo = CreateRepository(targets: null);
+            repo.Write("pkg/trakhound.package.publish.json", """
+                {
+                  // Publish Targets for this package
+                  "defaultTarget": "local",
+                  "targets": {
+                    // The Dev Package Server of the development Instance
+                    "local": {
+                      "destinations": [
+                        {
+                          "managementServer": "http://localhost:8472",
+                          "organization": "Dev"
+                        }
+                      ],
+                      "versionSuffix": "dev{branch}.{timestamp}",
+                      "allowDirty": true
+                    }
+                  }
+                }
+                """);
+            repo.Write("pkg/changed.txt", "uncommitted");
+
+            var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
+            Assert.Equal("local", settings.TargetName);
+            var destination = Assert.Single(settings.Destinations);
+            Assert.Equal("http://localhost:8472", destination.ManagementServer);
+            Assert.Equal("Dev", destination.Organization);
+
+            // Published again with uncommitted changes, as a prerelease
+            var allowDirty = false;
+            Assert.True(PackagesCommands.CheckPublishTarget(settings, Package(repo), false, ref allowDirty));
+            Assert.StartsWith("0.3.", PackagesCommands.GetPackageVersion(Package(repo), repo.PathOf("pkg/trakhound.package.json"), null, null, settings, log: false));
+            Assert.Contains("-dev.", PackagesCommands.GetPackageVersion(Package(repo), repo.PathOf("pkg/trakhound.package.json"), null, null, settings, log: false));
+        }
+
         [Theory]
         [InlineData("""{ "version": "1.0.0", "defaultTarget": "a", "targets": { "a": { "destinations": [ { "organization": "A" } ] } } }""")]
         [InlineData("""{ "destinations": [ { "managementServer": "http://old.test" } ] }""")]

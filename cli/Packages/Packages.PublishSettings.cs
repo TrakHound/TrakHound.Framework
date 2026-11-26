@@ -105,7 +105,14 @@ namespace TrakHound.CLI.Packages
             // The Target's name as written in the file
             targetName = targets.Keys.First(o => string.Equals(o, targetName, StringComparison.OrdinalIgnoreCase));
 
-            if (log) Console.WriteLine($"Package Publish Target : {targetName} : ({path})");
+            if (log)
+            {
+                Console.WriteLine($"Package Publish Target : {targetName} : ({path})");
+
+                // Only the nearest file is used (ex. a project created from a template has its own, with the 'local' Target), so say when it hides one in a parent directory
+                var hiddenPath = GetHiddenPublishSettings(path);
+                if (hiddenPath != null) Console.WriteLine($"Note : ({hiddenPath}) in a parent directory isn't used, since ({path}) is nearer. Delete the nearer one to use it");
+            }
 
             return new PublishSettings
             {
@@ -114,6 +121,15 @@ namespace TrakHound.CLI.Packages
                 Target = publishTarget,
                 Destinations = GetPublishDestinations(publishTarget.Destinations)
             };
+        }
+
+        /// <summary>
+        /// The Publish Settings file in a parent directory of this one's directory, which this one hides (null if there isn't one)
+        /// </summary>
+        internal static string GetHiddenPublishSettings(string path)
+        {
+            var parent = Directory.GetParent(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)));
+            return parent != null ? FindPublishSettings(parent.FullName) : null;
         }
 
         /// <summary>

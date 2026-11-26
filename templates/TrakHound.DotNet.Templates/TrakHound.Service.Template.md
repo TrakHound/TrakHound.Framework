@@ -24,10 +24,12 @@ The project name is used as the package `id` in **trakhound.package.json**.
 | Name | Default Value | Description |
 | --- | --- | --- |
 | `--trakhoundVersion` | The TrakHound version the templates were released with | Version of the TrakHound NuGet packages to reference. Set it to the TrakHound version of the Instance you deploy to (or older) |
+| `--instanceUrl` | `http://localhost:8472` | The Instance the debug host connects to (and the server of the `local` Publish Target) |
 | `--publisher` | | Sets the `publisher` metadata in **trakhound.package.json** |
 | `--description` | | Sets the `description` metadata in **trakhound.package.json** |
-| `--managementServer` | | Sets the Package Server of the `default` Publish Target in **trakhound.package.publish.json** (the file is only created if this or `--organization` is set) |
-| `--organization` | | Sets the Organization of the `default` Publish Target in **trakhound.package.publish.json** |
+| `--managementServer` | | Sets the Package Server of the `default` Publish Target in **trakhound.package.publish.json**, which is then its `defaultTarget` |
+| `--organization` | | Sets the Organization of the `default` Publish Target in **trakhound.package.publish.json**, which is then its `defaultTarget` |
+| `--localTarget` | `true` | Adds the `local` Publish Target to **trakhound.package.publish.json** : the Dev Package Server of the development Instance at `instanceUrl` (ex. a `trakhound/instance-dev` container), with a prerelease version so it can be published again with uncommitted changes. Set it to `false` in a repository that has a shared **trakhound.package.publish.json** (without `--managementServer` or `--organization`, the file is then left out) |
 
 ## Project Structure
 | File | Description |
@@ -74,4 +76,4 @@ publish-package.bat
 The version is the `version` prefix in **trakhound.package.json** (ex. `0.1`) plus the git height, so `0.1` four commits later publishes `0.1.4`. Change the prefix to start a new version line.
 
 > [!NOTE]
-> A Publish Target must be set in **trakhound.package.publish.json** before publishing : in the project (created when **managementServer** or **organization** is passed when creating it), or once in a parent directory for every project below it.
+> **trakhound.package.publish.json** has the `local` Publish Target (unless `--localTarget false`), so a new project publishes to the Dev Package Server of a `trakhound/instance-dev` container (`docker run -d -p 127.0.0.1:8472:8472 trakhound/instance-dev`) without any setup. The CLI only uses the nearest **trakhound.package.publish.json**, so in a repository that has a shared one in a parent directory, delete the project's file (or create the project with `--localTarget false`) to use it.

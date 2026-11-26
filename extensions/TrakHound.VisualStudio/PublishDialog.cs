@@ -25,6 +25,7 @@ namespace TrakHound.VisualStudio
         private bool _showTargets;
         private string _targetsSource;
         private string _targetsNote;
+        private string _targetsHiddenNote;
 
 
         /// <summary>
@@ -101,6 +102,22 @@ namespace TrakHound.VisualStudio
         }
 
         /// <summary>
+        /// Shown under the file the Targets are from when it hides one in a parent directory
+        /// </summary>
+        [DataMember]
+        public string TargetsHiddenNote
+        {
+            get => _targetsHiddenNote;
+            private set
+            {
+                if (SetProperty(ref _targetsHiddenNote, value)) RaiseNotifyPropertyChangedEvent(nameof(HasTargetsHiddenNote));
+            }
+        }
+
+        [DataMember]
+        public bool HasTargetsHiddenNote => !string.IsNullOrEmpty(_targetsHiddenNote);
+
+        /// <summary>
         /// Shown instead of the Targets when the selected Projects are published without one
         /// </summary>
         [DataMember]
@@ -173,6 +190,7 @@ namespace TrakHound.VisualStudio
 
             ShowTargets = Targets.Count > 1;
             TargetsSource = choices.Files.Count > 0 ? choices.Source : null;
+            TargetsHiddenNote = choices.HiddenNote;
             TargetsNote = note;
 
             var selected = Targets.FirstOrDefault(o => string.Equals(o.Name, previous, StringComparison.OrdinalIgnoreCase))

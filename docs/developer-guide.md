@@ -96,8 +96,9 @@ The project name becomes the package ID, so use a unique dotted name. The templa
 | `--instanceUrl` | `http://localhost:8472` | `instanceUrl` in `trakhound.debug.json`: the Instance the debug host connects to |
 | `--publisher` | (empty) | `publisher` in `trakhound.package.json` |
 | `--description` | (empty) | `description` in `trakhound.package.json` |
-| `--managementServer` | (empty) | The package server of the `default` Publish Target in `trakhound.package.publish.json`. The file is only created if this or `--organization` is set |
-| `--organization` | (empty) | The organization of the `default` Publish Target in `trakhound.package.publish.json` |
+| `--managementServer` | (empty) | The package server of the `default` Publish Target in `trakhound.package.publish.json`, which is then its `defaultTarget` |
+| `--organization` | (empty) | The organization of the `default` Publish Target in `trakhound.package.publish.json`, which is then its `defaultTarget` |
+| `--localTarget` | `true` | Adds the `local` Publish Target to `trakhound.package.publish.json`: the Dev Package Server of the development Instance at `instanceUrl` (section 2.5). Set it to `false` in a repository with a shared `trakhound.package.publish.json` (section 8); without `--managementServer` or `--organization` the file is then left out |
 | `--skipRestore` | `false` | Skip the NuGet restore after the project is created |
 
 By default the project references the TrakHound version the templates were released with. If your Instance runs an older TrakHound version, set `--trakhoundVersion` to the Instance's version: a package can't use a newer TrakHound than its Instance (section 3.1).
@@ -111,7 +112,7 @@ The API project contains:
 | `trakhound.debug.json` | The debug host's settings: the Instance, credentials and configuration parameters. Not included in the package |
 | `Properties/launchSettings.json` | How `dotnet run`, Visual Studio and VS Code start the debug host (port 5091, Development environment, opens the Api Debugger) |
 | `trakhound.package.json` | The package manifest (section 8) |
-| `trakhound.package.publish.json` | Where to publish : the Publish Targets (section 8). Only created if `--managementServer` or `--organization` is set |
+| `trakhound.package.publish.json` | Where to publish : the Publish Targets (section 8). `local` publishes to the Dev Package Server of a `trakhound/instance-dev` container (section 2.5) |
 | `publish-package.bat` / `.sh` | Builds and publishes the package with the CLI |
 | `.gitignore` | Leaves `bin`, `obj`, the debug `volume` folder and `.thp` files out of source control |
 | `AGENTS.md` / `CLAUDE.md` | Instructions for AI coding tools (ex. Claude Code): the commands, conventions and rules for the package type. `CLAUDE.md` imports `AGENTS.md`. Edit them as your package grows |
@@ -169,13 +170,20 @@ Choose one:
 - **CLI, into an Instance folder:** `th packages install --file ./out/Contoso.Hello-0.0.1.thp -p "C:\Program Files\TrakHound\Instance"`. A running Instance watches its `packages` folder and picks up the package within a few seconds.
 - **CLI, to an Instance you can't reach as a folder** (ex. one in a Docker container, or on another machine): push it to the `TrakHound.Packages.Dev.Api` package on that Instance, then install it from Packages > **Browse**.
 
-**Using the Dev Api:** it's a package server for development that the Instance serves itself, keeping each package as a file in its volume, so it needs no other services. It only stores packages; installing one is still done in the Admin interface. In the Docker image, starting the container with `TRAKHOUND_DEV_PACKAGES=true` does the setup below for you, without a token: publish its port on `127.0.0.1` (`-p 127.0.0.1:8472:8472`) so only your machine can upload (see the Instance Installation Guide, section 6.2). Otherwise, set it up once:
+**Using the Dev Api:** it's a package server for development that the Instance serves itself, keeping each package as a file in its volume, so it needs no other services. It only stores packages; installing one is still done in the Admin interface. In Docker, the `trakhound/instance-dev` image does the setup below for you, without a token (it's the Instance image with `TRAKHOUND_DEV_PACKAGES=true`, which the `trakhound/instance` image also accepts): publish its port on `127.0.0.1` (`-p 127.0.0.1:8472:8472`) so only your machine can upload (see the Instance Installation Guide, section 6.2). Otherwise, set it up once:
 
 1. Install `TrakHound.Packages.Dev.Api` on the Instance and add a configuration for it with the route `packages`.
 2. Set its `uploadToken` parameter to a long random value. Uploads are refused without it (or an Instance API key), unless its `allowAnonymousUploads` parameter is `true`, which is only for an Instance that nothing else can reach.
 3. Add a package source (Packages > **Sources**) with the Base URL `http://localhost:8472` (the Instance's own address, also inside a container) and an Organization, ex. `Dev`.
 
-Then, for each build:
+A project created from the templates already has a `local` Publish Target for it (`http://localhost:8472`, organization `Dev`, its `instanceUrl`), so each build is one command, or **Publish TrakHound Package** in Visual Studio. Every build gets its own prerelease version (ex. `0.0.1-dev.20261126153000`), even with uncommitted changes:
+
+```powershell
+docker run -d -p 127.0.0.1:8472:8472 trakhound/instance-dev   # once
+th packages dotnet --project-configuration Release --publish  # or publish-package.bat
+```
+
+Without the `local` Target (ex. a project in a repository with a shared `trakhound.package.publish.json`), push each build yourself:
 
 ```powershell
 th packages dotnet --output ./out --version-suffix dev.1

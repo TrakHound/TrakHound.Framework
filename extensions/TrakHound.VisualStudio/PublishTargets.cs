@@ -50,6 +50,11 @@ namespace TrakHound.VisualStudio
 
         public string DefaultTarget { get; set; }
 
+        /// <summary>
+        /// The Publish Settings file in a parent directory that this one hides (the CLI only uses the nearest file)
+        /// </summary>
+        public string HiddenPath { get; set; }
+
         public PublishTarget GetTarget(string name) => Targets.FirstOrDefault(o => string.Equals(o.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -79,6 +84,22 @@ namespace TrakHound.VisualStudio
         /// The file (or how many files) the Targets were read from
         /// </summary>
         public string Source => Files.Count == 1 ? Files[0].Path : $"{Files.Count} {PublishTargets.Filename} files";
+
+        /// <summary>
+        /// Shown when the files hide one in a parent directory (ex. a project created from a template, in a repository with a shared file)
+        /// </summary>
+        public string HiddenNote
+        {
+            get
+            {
+                var hidden = Files.Select(o => o.HiddenPath).Where(o => o != null).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (hidden.Count == 0) return null;
+
+                return hidden.Count == 1
+                    ? $"{hidden[0]} isn't used, since this one is nearer. Delete the nearer one to use it"
+                    : $"{hidden.Count} {PublishTargets.Filename} files in parent directories aren't used, since these are nearer";
+            }
+        }
     }
 
     /// <summary>
@@ -165,7 +186,8 @@ namespace TrakHound.VisualStudio
             var options = new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
             using var document = JsonDocument.Parse(File.ReadAllText(path), options);
 
-            var file = new PublishTargetsFile { Path = path };
+            var parent = Directory.GetParent(Path.GetDirectoryName(Path.GetFullPath(path)));
+            var file = new PublishTargetsFile { Path = path, HiddenPath = parent != null ? Find(parent.FullName) : null };
             if (document.RootElement.ValueKind != JsonValueKind.Object) return file;
 
             file.DefaultTarget = GetString(document.RootElement, "defaultTarget");

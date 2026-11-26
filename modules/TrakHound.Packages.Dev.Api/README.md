@@ -13,14 +13,16 @@ It only stores Packages. Installing one is still done by an Admin, from the Inst
 | Default Route | `packages` |
 
 ## Setup
-**In the Docker image**, start the container with `TRAKHOUND_DEV_PACKAGES=true`, and publish its port on the loopback address only:
+**In Docker**, run the `trakhound/instance-dev` image (the Instance image with `TRAKHOUND_DEV_PACKAGES=true`, which `trakhound/instance` also accepts), and publish its port on the loopback address only:
 
 ```powershell
-docker run -d -p 127.0.0.1:8472:8472 -e TRAKHOUND_DEV_PACKAGES=true trakhound/instance:latest
+docker run -d -p 127.0.0.1:8472:8472 trakhound/instance-dev
 th packages push .\out\Contoso.Hello-1.0.0-dev.1.thp -s http://localhost:8472 --organization Dev
 ```
 
-It installs this package (it's included in the image), serves it at `packages` with `allowAnonymousUploads`, and adds the `Dev` Package Source. Starting the container without it removes the configuration and the `Dev` Package Source again. To require a token instead, also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters): it's used as the `uploadToken`, read from the environment and never written to the volume, and `th packages push` sends it from `TRAKHOUND_API_TOKEN`.
+A project created from the TrakHound templates publishes there with its `local` Publish Target instead (`th packages publish`, or **Publish TrakHound Package** in Visual Studio).
+
+It installs this package (it's included in the image), serves it at `packages` with `allowAnonymousUploads`, and adds the `Dev` Package Source. Starting the container without the variable (or with `TRAKHOUND_DEV_PACKAGES=false`) removes the configuration and the `Dev` Package Source again. To require a token instead, also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters): it's used as the `uploadToken`, read from the environment and never written to the volume, and `th packages push` sends it from `TRAKHOUND_API_TOKEN`.
 
 **Elsewhere:**
 
