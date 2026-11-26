@@ -20,7 +20,7 @@ docker run -d -p 127.0.0.1:8472:8472 -e TRAKHOUND_DEV_PACKAGES=true trakhound/in
 th packages push .\out\Contoso.Hello-1.0.0-dev.1.thp -s http://localhost:8472 --organization Dev
 ```
 
-It installs this package (it's included in the image), serves it at `packages` with `allowAnonymousUploads`, and adds the `Dev` Package Source. Starting the container without it removes the configuration again. To require a token instead, also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters): it's used as the `uploadToken`, read from the environment and never written to the volume, and `th packages push` sends it from `TRAKHOUND_API_TOKEN`.
+It installs this package (it's included in the image), serves it at `packages` with `allowAnonymousUploads`, and adds the `Dev` Package Source. Starting the container without it removes the configuration and the `Dev` Package Source again. To require a token instead, also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters): it's used as the `uploadToken`, read from the environment and never written to the volume, and `th packages push` sends it from `TRAKHOUND_API_TOKEN`.
 
 **Elsewhere:**
 

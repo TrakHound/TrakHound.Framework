@@ -349,7 +349,7 @@ th packages push ./out/Contoso.Hello-0.0.1-dev.1.thp -s http://localhost:8472 --
 
 Anyone who can reach the port can upload packages to it without signing in. They can't install them, but a package with a higher version than an installed one is offered as an update, so publish the port on `127.0.0.1` as above, so only this machine can reach it. To require a token for uploads instead (ex. on a shared network), also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters, ex. from `openssl rand -hex 24`), and set `TRAKHOUND_API_TOKEN` to the same value where you run `th packages push`. The token is read from the environment each time the Instance starts, and isn't written to the volume.
 
-Both are checked on each start: without them (or with a token that's too short), the Dev Package Server's configuration is removed, so it's only served while they're set. The package and the packages pushed to it stay on the volume. Don't set them in production. The developer guide (section 2.5) covers the workflow.
+Both are checked on each start: without them (or with a token that's too short), the Dev Package Server's configuration and the `Dev` package source are removed, so it's only served (and listed) while they're set. The package and the packages pushed to it stay on the volume. Don't set them in production. The developer guide (section 2.5) covers the workflow.
 
 Next, install packages and add configurations: see the TrakHound Instance User Guide. To script them, use the TrakHound CLI: `th packages install` installs packages, `th config` adds and changes configurations and variables, `th instance set` changes the Instance settings (ex. the HTTP port), and `th config validate` checks the result (see the CLI README).
 
