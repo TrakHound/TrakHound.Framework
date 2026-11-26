@@ -1,0 +1,13 @@
+{
+  "id": "TrakHound.Packages.Dev.Api",
+  "category": "api",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "A Package Server for development that keeps Packages as files in its Volume, with no Tables, Blobs or Key Values service",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "modules/TrakHound.Packages.Dev.Api",
+    ".defaultRoute": "packages",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg"
+  }
+}
