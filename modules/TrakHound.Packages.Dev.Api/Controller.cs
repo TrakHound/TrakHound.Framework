@@ -26,6 +26,7 @@ namespace TrakHound.Packages.Dev.Api
         public const string TokenHeader = "X-TrakHound-Api";
 
         public const string UploadTokenParameter = "uploadToken";
+        public const string AllowAnonymousUploadsParameter = "allowAnonymousUploads";
         public const string AllowOverwriteParameter = "allowOverwrite";
         public const string KeepVersionsParameter = "keepVersions";
         public const string MaxUploadSizeParameter = "maxUploadSize";
@@ -47,7 +48,15 @@ namespace TrakHound.Packages.Dev.Api
         {
             _store = new DevPackageStore(Volume);
 
-            if (string.IsNullOrEmpty(GetParameter(UploadTokenParameter)))
+            if (!string.IsNullOrEmpty(GetParameter(UploadTokenParameter)))
+            {
+                Log(TrakHoundLogLevel.Information, $"Uploads need the '{UploadTokenParameter}' (or an Instance API Key)");
+            }
+            else if (GetBool(AllowAnonymousUploadsParameter))
+            {
+                Log(TrakHoundLogLevel.Warning, $"Anyone who can reach the Instance can upload and delete Packages ('{AllowAnonymousUploadsParameter}'). Only use this on a development Instance that nothing else can reach");
+            }
+            else
             {
                 Log(TrakHoundLogLevel.Information, $"Uploads need an Instance API Key (X-API-Key), since the '{UploadTokenParameter}' Parameter isn't set");
             }
@@ -287,7 +296,7 @@ namespace TrakHound.Packages.Dev.Api
         /// <summary>
         /// Upload a Package file (.thp). It's kept in the Volume as packages/{organization}/{id}/{version}.thp, from the information in the file
         /// </summary>
-        [ApiPost("{organization}", Description = "Uploads a package file (.thp) to an organization. The package's information is read from the file, and the file is kept in the Api's Volume. Returns the package's information. Needs the Api's uploadToken (in X-TrakHound-Api, which th packages push sends) or an Instance API Key.")]
+        [ApiPost("{organization}", Description = "Uploads a package file (.thp) to an organization. The package's information is read from the file, and the file is kept in the Api's Volume. Returns the package's information. Needs the Api's uploadToken (in X-TrakHound-Api, which th packages push sends) or an Instance API Key, unless allowAnonymousUploads is set.")]
         [TrakHoundPermission("write")]
         public async Task<TrakHoundApiResponse> Upload(
             [FromRoute(Description = "The organization to upload the package to")] string organization,
@@ -295,7 +304,7 @@ namespace TrakHound.Packages.Dev.Api
             [FromHeader(TokenHeader, Description = "The Api's uploadToken (th packages push sends TRAKHOUND_API_TOKEN, or apiToken in cli.config.yaml)")] string apiToken = null
             )
         {
-            var denied = AuthorizeWrite(apiToken);
+            var denied = AuthorizeWrite(apiToken, out var caller);
             if (denied.HasValue) return denied.Value;
 
             if (string.IsNullOrEmpty(organization)) return BadRequest();
@@ -320,7 +329,7 @@ namespace TrakHound.Packages.Dev.Api
                 case DevPackageAddStatus.Added:
                 case DevPackageAddStatus.Replaced:
                     var replaced = result.Status == DevPackageAddStatus.Replaced ? " (replaced)" : "";
-                    Log(TrakHoundLogLevel.Information, $"Package Uploaded : {result.Entry.Organization} : {result.Entry.Id} v{result.Entry.Version}{replaced} by {GetCaller()}");
+                    Log(TrakHoundLogLevel.Information, $"Package Uploaded : {result.Entry.Organization} : {result.Entry.Id} v{result.Entry.Version}{replaced} by {caller}");
                     foreach (var removed in result.Removed)
                     {
                         Log(TrakHoundLogLevel.Information, $"Package Removed : {removed.Organization} : {removed.Id} v{removed.Version} (only the newest {GetInt(KeepVersionsParameter)} Versions are kept)");
@@ -342,7 +351,7 @@ namespace TrakHound.Packages.Dev.Api
         /// <summary>
         /// Delete all Versions of a Package
         /// </summary>
-        [ApiDelete("{organization}/{packageId}", Description = "Deletes every version of a package. Needs the Api's uploadToken or an Instance API Key.")]
+        [ApiDelete("{organization}/{packageId}", Description = "Deletes every version of a package. Needs the Api's uploadToken or an Instance API Key, unless allowAnonymousUploads is set.")]
         [TrakHoundPermission("write")]
         public async Task<TrakHoundApiResponse> DeletePackage(
             [FromRoute(Description = "The organization the packages belong to")] string organization,
@@ -350,7 +359,7 @@ namespace TrakHound.Packages.Dev.Api
             [FromHeader(TokenHeader, Description = "The Api's uploadToken")] string apiToken = null
             )
         {
-            var denied = AuthorizeWrite(apiToken);
+            var denied = AuthorizeWrite(apiToken, out var caller);
             if (denied.HasValue) return denied.Value;
 
             if (string.IsNullOrEmpty(organization) || string.IsNullOrEmpty(packageId)) return BadRequest();
@@ -358,14 +367,14 @@ namespace TrakHound.Packages.Dev.Api
             var deleted = await Store.DeleteAll(organization, packageId);
             if (deleted < 1) return NotFound("Package Not Found");
 
-            Log(TrakHoundLogLevel.Information, $"Package Deleted : {organization} : {packageId} ({deleted} files) by {GetCaller()}");
+            Log(TrakHoundLogLevel.Information, $"Package Deleted : {organization} : {packageId} ({deleted} files) by {caller}");
             return Ok();
         }
 
         /// <summary>
         /// Delete a single Package Version
         /// </summary>
-        [ApiDelete("{organization}", Description = "Deletes a version of a package. Needs the Api's uploadToken or an Instance API Key.")]
+        [ApiDelete("{organization}", Description = "Deletes a version of a package. Needs the Api's uploadToken or an Instance API Key, unless allowAnonymousUploads is set.")]
         [TrakHoundPermission("write")]
         public async Task<TrakHoundApiResponse> DeletePackageVersion(
             [FromRoute(Description = "The organization the packages belong to")] string organization,
@@ -373,7 +382,7 @@ namespace TrakHound.Packages.Dev.Api
             [FromHeader(TokenHeader, Description = "The Api's uploadToken")] string apiToken = null
             )
         {
-            var denied = AuthorizeWrite(apiToken);
+            var denied = AuthorizeWrite(apiToken, out var caller);
             if (denied.HasValue) return denied.Value;
 
             if (string.IsNullOrEmpty(organization) || string.IsNullOrEmpty(packageUuid)) return BadRequest();
@@ -383,7 +392,7 @@ namespace TrakHound.Packages.Dev.Api
 
             await Store.Delete(organization, packageUuid);
 
-            Log(TrakHoundLogLevel.Information, $"Package Deleted : {entry.Organization} : {entry.Id} v{entry.Version} by {GetCaller()}");
+            Log(TrakHoundLogLevel.Information, $"Package Deleted : {entry.Organization} : {entry.Id} v{entry.Version} by {caller}");
             return Ok();
         }
 
@@ -397,36 +406,52 @@ namespace TrakHound.Packages.Dev.Api
         /// <item>The uploadToken Parameter, in the X-TrakHound-Api Header (what th packages push sends)</item>
         /// <item>An Instance Identity (ex. an API Key in X-API-Key). The Instance checks it before the request reaches the Api, and a Security Profile
         /// can limit which Identities can upload with the 'write' Permission</item>
+        /// <item>Nothing, when the allowAnonymousUploads Parameter is true and uploadToken isn't set (ex. the Docker image's TRAKHOUND_DEV_PACKAGES).
+        /// Installing an uploaded Package still needs an Admin, but an Admin may install one that looks like an update, so it's only for
+        /// development Instances that nothing else can reach</item>
         /// </list>
-        /// Never anonymous, since an uploaded Package is code that an Admin may install. Returns null when allowed
+        /// Returns null when allowed, with who made the Request (for the Log)
         /// </summary>
-        private TrakHoundApiResponse? AuthorizeWrite(string apiToken)
+        private TrakHoundApiResponse? AuthorizeWrite(string apiToken, out string caller)
         {
+            caller = null;
             var context = TrakHoundSecurityContext.Current;
 
             // Not called for a Request (ex. the Api's own code or a test), so trusted like any other code in the Instance
-            if (context == null) return null;
+            if (context == null)
+            {
+                caller = "the Instance";
+                return null;
+            }
 
-            if (context.Identity != null) return null;
+            if (context.Identity != null)
+            {
+                caller = !string.IsNullOrEmpty(context.Identity.Name) ? context.Identity.Name : context.Identity.UserId;
+                return null;
+            }
 
             var uploadToken = GetParameter(UploadTokenParameter);
-            if (!string.IsNullOrEmpty(uploadToken) && !string.IsNullOrEmpty(apiToken) && FixedTimeEquals(uploadToken, apiToken)) return null;
+            if (!string.IsNullOrEmpty(uploadToken))
+            {
+                // A token is always required when it's set, whatever allowAnonymousUploads says
+                if (!string.IsNullOrEmpty(apiToken) && FixedTimeEquals(uploadToken, apiToken))
+                {
+                    caller = "uploadToken";
+                    return null;
+                }
 
-            var message = !string.IsNullOrEmpty(apiToken)
-                ? "The Api Token isn't this Api's uploadToken"
-                : !string.IsNullOrEmpty(uploadToken)
-                    ? $"Send the Api's uploadToken in the {TokenHeader} Header (th packages push sends TRAKHOUND_API_TOKEN), or an Instance API Key in X-API-Key"
-                    : $"Send an Instance API Key in X-API-Key, or set the Api's '{UploadTokenParameter}' Parameter and send it in the {TokenHeader} Header (th packages push sends TRAKHOUND_API_TOKEN)";
+                return NotAuthorized(!string.IsNullOrEmpty(apiToken)
+                    ? "The Api Token isn't this Api's uploadToken"
+                    : $"Send the Api's uploadToken in the {TokenHeader} Header (th packages push sends TRAKHOUND_API_TOKEN), or an Instance API Key in X-API-Key");
+            }
 
-            return NotAuthorized(message);
-        }
+            if (GetBool(AllowAnonymousUploadsParameter))
+            {
+                caller = "anonymous";
+                return null;
+            }
 
-        private static string GetCaller()
-        {
-            var identity = TrakHoundSecurityContext.Current?.Identity;
-            if (identity != null) return !string.IsNullOrEmpty(identity.Name) ? identity.Name : identity.UserId;
-
-            return TrakHoundSecurityContext.Current != null ? "uploadToken" : "the Instance";
+            return NotAuthorized($"Uploads need a credential : send an Instance API Key in X-API-Key, or set the Api's '{UploadTokenParameter}' Parameter and send it in the {TokenHeader} Header (th packages push sends TRAKHOUND_API_TOKEN). For a development Instance that nothing else can reach, set '{AllowAnonymousUploadsParameter}' to true instead");
         }
 
         private static bool FixedTimeEquals(string a, string b)

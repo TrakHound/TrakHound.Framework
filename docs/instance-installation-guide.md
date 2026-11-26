@@ -340,15 +340,16 @@ In a container, also set `TRAKHOUND_DEVICE_ID` to a stable value (ex. the deploy
 
 The Docker image installs its default packages when it starts with no packages (a new volume), as the Windows installer does on a new install: the Welcome App at `/` and the API Explorer it uses at `/api-explorer`, each with a configuration. To start without them (ex. in production), set `TRAKHOUND_DEFAULT_PACKAGES=false`, the equivalent of the installer's `/DEFAULTPACKAGES=no`. It's only read while the package folder is empty, so it doesn't remove packages from an existing volume. Remove those from Packages and Config.
 
-For developing packages, set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters, ex. from `openssl rand -hex 24`). The container then serves the Dev Package Server (`TrakHound.Packages.Dev.Api`, included in the image) at `/packages`, and adds a `Dev` package source for the Instance itself, so packages pushed to it are listed in Packages > **Browse**:
+For developing packages, set `TRAKHOUND_DEV_PACKAGES=true`. The container then serves the Dev Package Server (`TrakHound.Packages.Dev.Api`, included in the image) at `/packages`, and adds a `Dev` package source for the Instance itself, so packages pushed to it are listed in Packages > **Browse**:
 
 ```powershell
-docker run -d -p 8472:8472 -e TRAKHOUND_DEV_UPLOAD_TOKEN=<token> trakhound/instance:latest
-$env:TRAKHOUND_API_TOKEN = "<token>"
+docker run -d -p 127.0.0.1:8472:8472 -e TRAKHOUND_DEV_PACKAGES=true trakhound/instance:latest
 th packages push ./out/Contoso.Hello-0.0.1-dev.1.thp -s http://localhost:8472 --organization Dev
 ```
 
-The token is read from the environment each time the Instance starts, and isn't written to the volume. It's checked on each start: without it (or with one that's too short), the Dev Package Server's configuration is removed, so it's only served while the variable is set. The package and the packages pushed to it stay on the volume. Don't set it in production. The developer guide (section 2.5) covers the workflow.
+Anyone who can reach the port can upload packages to it without signing in. They can't install them, but a package with a higher version than an installed one is offered as an update, so publish the port on `127.0.0.1` as above, so only this machine can reach it. To require a token for uploads instead (ex. on a shared network), also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters, ex. from `openssl rand -hex 24`), and set `TRAKHOUND_API_TOKEN` to the same value where you run `th packages push`. The token is read from the environment each time the Instance starts, and isn't written to the volume.
+
+Both are checked on each start: without them (or with a token that's too short), the Dev Package Server's configuration is removed, so it's only served while they're set. The package and the packages pushed to it stay on the volume. Don't set them in production. The developer guide (section 2.5) covers the workflow.
 
 Next, install packages and add configurations: see the TrakHound Instance User Guide. To script them, use the TrakHound CLI: `th packages install` installs packages, `th config` adds and changes configurations and variables, `th instance set` changes the Instance settings (ex. the HTTP port), and `th config validate` checks the result (see the CLI README).
 

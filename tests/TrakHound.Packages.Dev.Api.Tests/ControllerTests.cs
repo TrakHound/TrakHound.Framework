@@ -395,6 +395,49 @@ namespace TrakHound.Packages.Dev.Api.Tests
         }
 
         [Fact]
+        public async Task AllowAnonymousUploads_AnonymousRequestCanUploadAndDelete()
+        {
+            var controller = await CreateController((Controller.AllowAnonymousUploadsParameter, "true"));
+
+            using (TrakHoundSecurityContext.Begin(new AllowAll(), null))
+            {
+                Assert.Equal(200, (await Upload(controller, Pack())).StatusCode);
+                Assert.Equal(200, (await controller.DeletePackage(Organization, PackageId)).StatusCode);
+            }
+
+            Assert.Contains(_context.Logs, o => o.Message.Contains("by anonymous"));
+            Assert.Contains(_context.Logs, o => o.Message.Contains("Anyone who can reach the Instance"));
+        }
+
+        [Fact]
+        public async Task AllowAnonymousUploads_WithAnUploadToken_StillNeedsTheToken()
+        {
+            var controller = await CreateController((Controller.AllowAnonymousUploadsParameter, "true"), (Controller.UploadTokenParameter, "secret-token"));
+
+            using (TrakHoundSecurityContext.Begin(new AllowAll(), null))
+            {
+                Assert.Equal(401, (await Upload(controller, Pack())).StatusCode);
+                Assert.Equal(200, (await Upload(controller, Pack(), token: "secret-token")).StatusCode);
+            }
+        }
+
+        [Theory]
+        [InlineData("false")]
+        [InlineData("")]
+        [InlineData("anything")]
+        public async Task AllowAnonymousUploads_NotTrue_RefusesAnonymousRequests(string value)
+        {
+            var controller = await CreateController((Controller.AllowAnonymousUploadsParameter, value));
+
+            using (TrakHoundSecurityContext.Begin(new AllowAll(), null))
+            {
+                var response = await Upload(controller, Pack());
+                Assert.Equal(401, response.StatusCode);
+                Assert.Contains(Controller.AllowAnonymousUploadsParameter, Text(response));
+            }
+        }
+
+        [Fact]
         public async Task Reads_DoNotNeedAToken()
         {
             var controller = await CreateController((Controller.UploadTokenParameter, "secret-token"));
