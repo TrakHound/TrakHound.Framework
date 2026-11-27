@@ -65,6 +65,23 @@
                         <tr><td class="label">Process ID</td><td class="value">@Environment.ProcessId</td></tr>
                         <tr><td class="label">Process Started</td><td class="value">@FormatTimestamp(processMonitor.StartTime) (@((DateTime.UtcNow - processMonitor.StartTime).ToSimpleFormattedString()) ago)</td></tr>
                         <tr><td class="label">.NET Runtime</td><td class="value">@RuntimeInformation.FrameworkDescription (@RuntimeInformation.ProcessArchitecture)</td></tr>
+                        @if (IsContainer)
+                        {
+                            var image = Environment.GetEnvironmentVariable("TRAKHOUND_DOCKER_IMAGE");
+                            <tr>
+                                <td class="label">Container</td>
+                                <td class="value">
+                                    @if (!string.IsNullOrEmpty(image))
+                                    {
+                                        <span>@image</span><CopyButton Value="@image" Title="Copy Container Image" />
+                                    }
+                                    else
+                                    {
+                                        <span>Yes</span><span class="secondary"> · Image not recorded</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
                         <tr>
                             <td class="label">Last Shutdown</td>
                             <td class="value">
@@ -177,6 +194,9 @@
 
     // Runtime, Directories and Security are only known for this Instance
     private bool IsLocal => localInstance != null && explorerService.SelectedInstanceId == localInstance.Id;
+
+    // The Image name is set by the TrakHound Docker Images (TRAKHOUND_DOCKER_IMAGE), since a container can't look it up
+    private static bool IsContainer => Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
 
 
     private RenderFragment Value(string value, bool settingsLink = false) => __builder =>
