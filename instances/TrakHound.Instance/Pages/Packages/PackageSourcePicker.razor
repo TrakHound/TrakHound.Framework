@@ -1,25 +1,42 @@
-@* The selected Package Source, its status, and a Reload button (shared by the Packages and Configuration pages) *@
+@* The Package Sources, each with what it last answered, and a Reload button (shared by the Packages and Configuration pages).
+   The one selected is remembered in the browser and set in the URL (?source=), so a link can open a Source *@
+@inject TrakHound.Apps.ITrakHoundAppLocalStorageService localStorage
+@inject NavigationManager navigationManager
+@using TrakHound.Instance.Configurations
 
 <div class="source-panel">
     @if (Context != null && Context.Sources.Any())
     {
         <span class="source-label">Source</span>
-        <RadzenDropDown TValue="string" Data="@Context.Sources" TextProperty="Name" ValueProperty="Id" Value="@Context.SelectedSource?.Id" ValueChanged="@((string id) => Context.SelectSource(id))" class="source-dropdown" />
-        <span class="source-status @Context.SourceStatus.ToString().ToLower()" title="@GetStatusTitle()">
-            @switch (Context.SourceStatus)
+        <div class="source-list" role="radiogroup" aria-label="Package Source">
+            @foreach (var source in Context.Sources)
             {
-                case PackageSourceStatus.Checking:
-                    <span class="icon fa-solid fa-sharp fa-loader spin"></span><span>Connecting..</span>
-                    break;
-                case PackageSourceStatus.Online:
-                    <span class="status-dot"></span><span>@Context.SourcePackageCount.ToString("N0") packages</span>
-                    break;
-                case PackageSourceStatus.Offline:
-                    <span class="status-dot"></span><span>Unreachable</span>
-                    break;
+                var selected = string.Equals(source.Id, Context.SelectedSource?.Id, StringComparison.OrdinalIgnoreCase);
+                var state = selected ? new PackageSourceState { Status = Context.SourceStatus, PackageCount = Context.SourcePackageCount, Error = Context.SourceError } : Context.GetSourceState(source.Id);
+
+                <button type="button" role="radio" aria-checked="@(selected ? "true" : "false")" class="source-option @(selected ? "selected" : "") @state.Status.ToString().ToLower()" title="@GetTitle(source, state)" @onclick="() => Select(source.Id)">
+                    @if (state.Status == PackageSourceStatus.Checking)
+                    {
+                        <span class="icon fa-solid fa-sharp fa-loader spin"></span>
+                    }
+                    else
+                    {
+                        <span class="status-dot"></span>
+                    }
+                    <span class="source-name">@source.Name</span>
+                    @switch (state.Status)
+                    {
+                        case PackageSourceStatus.Online:
+                            <span class="source-count">@state.PackageCount.ToString("N0")</span>
+                            break;
+                        case PackageSourceStatus.Offline:
+                            <span class="source-count">Unreachable</span>
+                            break;
+                    }
+                </button>
             }
-        </span>
-        <button class="btn btn-light btn-icon" title="Reload Packages from the Source" @onclick="() => Context.RefreshSource()" disabled="@(Context.SourceStatus == PackageSourceStatus.Checking)"><span class="icon fa-solid fa-sharp fa-rotate-right"></span></button>
+        </div>
+        <button class="btn btn-light btn-icon" title="Reload Packages from the Sources" @onclick="Reload" disabled="@(Context.SourceStatus == PackageSourceStatus.Checking)"><span class="icon fa-solid fa-sharp fa-rotate-right"></span></button>
     }
     else
     {
@@ -33,13 +50,37 @@
     public PackagesContext Context { get; set; }
 
 
-    private string GetStatusTitle()
+    private async Task Select(string sourceId)
     {
-        switch (Context.SourceStatus)
+        if (string.IsNullOrEmpty(sourceId)) return;
+
+        var select = Context.SelectSource(sourceId);
+
+        try { await localStorage.SetItem(PackagesContext.SelectedSourceStorageKey, sourceId); } catch { }
+
+        // Replaced, so Back doesn't step through each Source
+        var uri = navigationManager.GetUriWithQueryParameter("source", sourceId);
+        if (uri != navigationManager.Uri) navigationManager.NavigateTo(uri, replace: true);
+
+        await select;
+    }
+
+    private async Task Reload()
+    {
+        var check = Context.CheckSources();
+        await Context.RefreshSource();
+        await check;
+    }
+
+    private static string GetTitle(RemoteConfiguration source, PackageSourceState state)
+    {
+        var title = $"{source.Name} : {source.BaseUrl} ({source.Organization})";
+        switch (state.Status)
         {
-            case PackageSourceStatus.Online: return $"{Context.SelectedSource?.BaseUrl} : {Context.SourcePackageCount:N0} packages ({Context.SelectedSource?.Organization})";
-            case PackageSourceStatus.Offline: return $"{Context.SelectedSource?.BaseUrl} : {Context.SourceError}";
-            default: return Context.SelectedSource?.BaseUrl;
+            case PackageSourceStatus.Online: return $"{title}\n{state.PackageCount:N0} packages";
+            case PackageSourceStatus.Offline: return $"{title}\n{state.Error}";
+            case PackageSourceStatus.Checking: return $"{title}\nConnecting..";
+            default: return title;
         }
     }
 

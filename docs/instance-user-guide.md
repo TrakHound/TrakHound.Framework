@@ -222,7 +222,7 @@ Use Modules first when an App, API or Worker shows as not loaded: it shows the l
 
 ### 2.4 Packages
 
-Packages (`/_admin/packages`) installs, updates and removes packages. Choose the package source in the area header.
+Packages (`/_admin/packages`) installs, updates and removes packages. Choose the package source in the area header: each source shows whether it answered and how many packages it has (hover for its server and organization). The one you choose is remembered in your browser, and a link can open a source with `?source=<id>` (ex. `/_admin/packages/browse?source=dev`). Without either, the first source that answers is used.
 
 | Section | What you can do |
 | --- | --- |

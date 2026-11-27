@@ -138,11 +138,11 @@ namespace TrakHound.Instance.Pages.Configuration
 
 
         /// <summary>
-        /// Select the first Package Source (once per session)
+        /// Select the Package Source (once per session) : the requested one (ex. ?source=dev), else the one last browsed, else the first that answers
         /// </summary>
-        public Task InitializeSource()
+        public Task InitializeSource(string requestedSourceId = null, string rememberedSourceId = null)
         {
-            return _sourceTask ??= _packages.SelectSource(null);
+            return _sourceTask ??= _packages.SelectInitialSource(requestedSourceId, rememberedSourceId);
         }
 
 

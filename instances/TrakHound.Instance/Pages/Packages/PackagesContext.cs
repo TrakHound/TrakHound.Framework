@@ -23,6 +23,18 @@ namespace TrakHound.Instance.Pages.Packages
         Error
     }
 
+    /// <summary>
+    /// What a Package Source last answered : shown for every Source, so the one to browse can be chosen without selecting each
+    /// </summary>
+    public class PackageSourceState
+    {
+        public PackageSourceStatus Status { get; set; }
+
+        public int PackageCount { get; set; }
+
+        public string Error { get; set; }
+    }
+
     public class PackageNotification
     {
         public string Id { get; } = Guid.NewGuid().ToString();
@@ -98,15 +110,101 @@ namespace TrakHound.Instance.Pages.Packages
         }
 
         /// <summary>
-        /// Select a Source (by ID) and load its latest Packages. The first Source is used if the ID isn't found.
+        /// The Local Storage key of the Source the Admin last browsed (so the Packages and Configuration pages open on it)
+        /// </summary>
+        public const string SelectedSourceStorageKey = "trakhound.packages.source";
+
+        // How long choosing the first reachable Source waits for the Sources to answer, so an unreachable one doesn't hold up the page
+        private static readonly TimeSpan SourceCheckWait = TimeSpan.FromSeconds(5);
+
+        private readonly Dictionary<string, PackageSourceState> _sourceStates = new Dictionary<string, PackageSourceState>(StringComparer.OrdinalIgnoreCase);
+        private Task _sourceCheck;
+
+        /// <summary>
+        /// What a Source last answered (Status None if it hasn't been checked)
+        /// </summary>
+        public PackageSourceState GetSourceState(string sourceId)
+        {
+            lock (_lock) return sourceId != null && _sourceStates.TryGetValue(sourceId, out var state) ? state : new PackageSourceState();
+        }
+
+        /// <summary>
+        /// Select a Source (by ID) and load its latest Packages. Without an ID (or one that isn't found), the first Source that answers
+        /// is used, in the order they're listed (the first Source if none answers). Every Source is checked, so each one's status is shown
         /// </summary>
         public async Task SelectSource(string sourceId)
         {
-            var source = Sources.FirstOrDefault(o => o.Id == sourceId) ?? Sources.FirstOrDefault();
+            var source = Sources.FirstOrDefault(o => string.Equals(o.Id, sourceId, StringComparison.OrdinalIgnoreCase));
+
+            var check = CheckSources();
+            if (source == null)
+            {
+                await Task.WhenAny(check, Task.Delay(SourceCheckWait));
+
+                lock (_lock)
+                {
+                    source = Sources.FirstOrDefault(o => _sourceStates.TryGetValue(o.Id ?? "", out var state) && state.Status == PackageSourceStatus.Online) ?? Sources.FirstOrDefault();
+                }
+            }
 
             SelectedSource = source;
             PackageClient = CreateClient(source);
             await RefreshSource();
+        }
+
+        /// <summary>
+        /// Select the Source a link asked for (ex. ?source=dev), else the one the Admin last browsed, else the first Source that answers
+        /// </summary>
+        public Task SelectInitialSource(string requestedSourceId, string rememberedSourceId)
+        {
+            bool Exists(string id) => !string.IsNullOrEmpty(id) && Sources.Any(o => string.Equals(o.Id, id, StringComparison.OrdinalIgnoreCase));
+
+            return SelectSource(Exists(requestedSourceId) ? requestedSourceId : Exists(rememberedSourceId) ? rememberedSourceId : null);
+        }
+
+        /// <summary>
+        /// Check every Source at the same time (the latest Packages of each), for the status and Package count shown for each one.
+        /// Only one check runs at a time
+        /// </summary>
+        public Task CheckSources()
+        {
+            lock (_lock)
+            {
+                if (_sourceCheck == null || _sourceCheck.IsCompleted) _sourceCheck = CheckAllSources();
+                return _sourceCheck;
+            }
+        }
+
+        private async Task CheckAllSources()
+        {
+            var sources = Sources.Where(o => !string.IsNullOrEmpty(o.Id)).ToList();
+
+            lock (_lock)
+            {
+                foreach (var source in sources) _sourceStates[source.Id] = new PackageSourceState { Status = PackageSourceStatus.Checking };
+            }
+            NotifyChanged();
+
+            await Task.WhenAll(sources.Select(async source =>
+            {
+                var (packages, error) = await QueryLatest(CreateClient(source));
+                lock (_lock)
+                {
+                    _sourceStates[source.Id] = new PackageSourceState
+                    {
+                        Status = packages != null ? PackageSourceStatus.Online : PackageSourceStatus.Offline,
+                        PackageCount = packages?.Select(o => o.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() ?? 0,
+                        Error = error
+                    };
+                }
+                NotifyChanged();
+            }));
+        }
+
+        private void SetSourceState(RemoteConfiguration source, PackageSourceStatus status, int packageCount, string error)
+        {
+            if (string.IsNullOrEmpty(source?.Id)) return;
+            lock (_lock) _sourceStates[source.Id] = new PackageSourceState { Status = status, PackageCount = packageCount, Error = error };
         }
 
         /// <summary>
@@ -144,6 +242,7 @@ namespace TrakHound.Instance.Pages.Packages
 
             SourceStatus = packages != null ? PackageSourceStatus.Online : PackageSourceStatus.Offline;
             SourceError = error;
+            SetSourceState(SelectedSource, SourceStatus, SourcePackageCount, error);
             NotifyChanged();
         }
 

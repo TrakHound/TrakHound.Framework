@@ -117,4 +117,11 @@ a.crumb {
     .area-subtitle {
         display: none;
     }
+
+    /* Within the window, so tools wider than it (ex. many Package Sources) scroll inside it instead of past its edge */
+    .area-header-tools {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 100%;
+    }
 }

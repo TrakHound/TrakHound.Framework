@@ -1,46 +1,79 @@
 .source-panel {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
     font-size: var(--fontSizeSm);
 }
 
 .source-label {
+    flex: none;
     color: var(--textMild);
 }
 
-.source-panel ::deep .source-dropdown {
-    width: 240px;
+/* Scrolls sideways when the Sources don't fit (ex. on a phone), so each one stays one click away */
+.source-list {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
 }
 
-.source-status {
+.source-option,
+.btn-icon {
+    flex: none;
+}
+
+.source-option {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    min-width: 110px;
-    color: var(--textMild);
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.35));
+    border-radius: 16px;
+    background: transparent;
+    color: var(--textDark);
+    font-size: var(--fontSizeSm);
     white-space: nowrap;
+    cursor: pointer;
 }
 
-    .source-status .status-dot {
+    .source-option:hover {
+        border-color: var(--bs-primary, #0d6efd);
+    }
+
+    .source-option.selected {
+        border-color: var(--bs-primary, #0d6efd);
+        background: rgba(13, 110, 253, 0.15);
+        font-weight: 500;
+    }
+
+    .source-option.offline:not(.selected) {
+        opacity: 0.6;
+    }
+
+    .source-option .status-dot {
         width: 8px;
         height: 8px;
         border-radius: 50%;
         background: var(--textMild);
     }
 
-    .source-status.online .status-dot {
+    .source-option.online .status-dot {
         background: var(--bs-success, #198754);
     }
 
-    .source-status.offline {
-        color: var(--textDark);
+    .source-option.offline .status-dot {
+        background: var(--bs-danger, #dc3545);
     }
 
-        .source-status.offline .status-dot {
-            background: var(--bs-danger, #dc3545);
-        }
+    .source-option .source-count {
+        color: var(--textMild);
+        font-weight: normal;
+    }
 
 .spin {
     animation: fa-spin 1s linear infinite;
@@ -62,9 +95,3 @@
     .no-source .icon {
         color: var(--bs-warning, #ffc107);
     }
-
-@media (max-width: 900px) {
-    .source-panel ::deep .source-dropdown {
-        width: 180px;
-    }
-}

@@ -2,6 +2,8 @@
 @implements IDisposable
 @inject ConfigurationsService configurationsService
 @inject TrakHound.Instance.Security.AdminAccess adminAccess
+@inject TrakHound.Apps.ITrakHoundAppLocalStorageService localStorage
+@inject NavigationManager navigationManager
 @using TrakHound.Instance.Pages.Packages
 @using TrakHound.Instance.Security
 @using TrakHound.Configurations
@@ -117,8 +119,17 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Load the Package Source after the first render (so a slow Source doesn't hold up the page)
-        if (firstRender) await configurationsService.InitializeSource();
+        // Load the Package Source after the first render (so a slow Source doesn't hold up the page) : the one a link asked for
+        // (?source=), else the one last browsed, else the first that answers
+        if (firstRender)
+        {
+            string remembered = null;
+            try { remembered = await localStorage.GetItem<string>(PackagesContext.SelectedSourceStorageKey); } catch { }
+
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(navigationManager.Uri).Query);
+            var requested = query.TryGetValue("source", out var values) ? values.ToString() : null;
+            await configurationsService.InitializeSource(requested, remembered);
+        }
     }
 
     public void Dispose()

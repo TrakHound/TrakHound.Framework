@@ -1,5 +1,7 @@
 .area-layout {
     display: grid;
+    /* As wide as the window, so a header wider than it (ex. many Package Sources) scrolls inside it instead of widening the page */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: max-content 1fr;
     height: 100%;
     overflow: hidden;

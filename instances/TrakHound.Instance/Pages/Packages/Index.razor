@@ -4,6 +4,7 @@
 @implements IDisposable
 @inject ITrakHoundInstance instance
 @inject RemotesConfiguration remotesConfiguration
+@inject TrakHound.Apps.ITrakHoundAppLocalStorageService localStorage
 @using TrakHound.Instance.Configurations
 @using TrakHound.Instances
 
@@ -79,6 +80,10 @@
     [Parameter]
     public string Tab { get; set; }
 
+    // The Package Source to open (ex. _admin/packages/browse?source=dev)
+    [SupplyParameterFromQuery(Name = "source")]
+    public string SourceId { get; set; }
+
     private string SelectedTab => _tabs.Any(o => o.Id == Tab?.ToLower()) ? Tab.ToLower() : _tabs[0].Id;
 
     private static string GetLink(PackagesTab tab) => tab == _tabs[0] ? "_admin/packages" : $"_admin/packages/{tab.Id}";
@@ -98,8 +103,15 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Load the Source after the first render so the page isn't held up by a slow or unreachable Source
-        if (firstRender) await context.SelectSource(null);
+        // Load the Source after the first render so the page isn't held up by a slow or unreachable Source : the one a link asked for
+        // (?source=), else the one last browsed, else the first that answers
+        if (firstRender)
+        {
+            string remembered = null;
+            try { remembered = await localStorage.GetItem<string>(PackagesContext.SelectedSourceStorageKey); } catch { }
+
+            await context.SelectInitialSource(SourceId, remembered);
+        }
     }
 
     public void Dispose()
