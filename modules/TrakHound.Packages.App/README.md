@@ -23,7 +23,7 @@ A Package Server is a server that serves the Packages Api (`TrakHound.Packages.A
 |---|---|---|
 | Name | Yes | The name shown in the App (ex. `TrakHound Public`) |
 | Base URL | Yes | A full `http://` or `https://` URL (ex. `https://packages.trakhound.com` or `http://localhost:8472`) |
-| Organization | Yes | The Organization that packages are read from and uploaded to (ex. `Public`) |
+| Organization | Yes | The Organization that packages are read from and uploaded to (ex. `TrakHound`) |
 | Access Token | No | Sent in the `X-TrakHound-Api` header, for servers or Organizations that require one |
 
 **Test Connection** (and **Test** or **Test All** in the list) reads the latest packages of the Organization and shows how many there are, or that the server is unreachable. **Edit** changes a server and **Remove** removes it from the list. Removing a server doesn't change the packages on it.
