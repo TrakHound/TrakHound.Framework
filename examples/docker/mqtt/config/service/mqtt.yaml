@@ -1,0 +1,13 @@
+# The MQTT Message Service (TrakHound.Mqtt.Service), added to the Instance's Configuration Profile by docker-compose.yml.
+# The Broker's address comes from the container's environment, so the same file works with another Broker
+id: mqtt
+name: MQTT
+description: The Mosquitto Broker from the Docker Compose example
+volumeId:
+packageId: TrakHound.Mqtt.Service
+packageVersion: '*'
+parameters:
+  hostname: ${env:MQTT_HOSTNAME}
+  port: ${env:MQTT_BROKER_PORT}
+  username: ${env:MQTT_USERNAME}
+  password: ${env:MQTT_PASSWORD}

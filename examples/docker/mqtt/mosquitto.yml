@@ -1,0 +1,24 @@
+# The Mosquitto MQTT Broker, included by this folder's docker-compose.yml and by the other examples that use MQTT (ex. ../plant).
+# Its paths are relative to this folder, wherever it's included from
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      # On this machine only, so MQTT clients here (ex. MQTT Explorer, mosquitto_pub) can reach it. The Instance reaches it on the
+      # Compose network as 'mosquitto:1883'
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      # Retained Messages and Persistent Sessions
+      - mosquitto-data:/mosquitto/data
+    healthcheck:
+      # Ready once it answers a subscription to its own status topics
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/version", "-C", "1", "-W", "3", "-i", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mosquitto-data:

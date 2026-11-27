@@ -50,6 +50,8 @@ The Amazon Root CA is publicly trusted, so `caCertificate` isn't needed. Port `4
 
 See [Services](https://www.trakhound.com/docs/trakhound-framework/services) for adding a Service configuration, and [Routing](https://www.trakhound.com/docs/trakhound-framework/routing) for sending Message requests to it.
 
+To try it with a Broker, [examples/docker/mqtt](../../examples/docker/mqtt) runs an Instance and Mosquitto with Docker Compose, with this Service already configured.
+
 ## Connections
 - The Service has one connection for Publishing. It is opened on the first `Publish()` (or availability check) and kept open, and it reconnects on the next `Publish()` after a disconnection.
 - Each Subscription has its own connection. Once its stream is started, it connects, subscribes to its Topics and stays connected until it is stopped or disposed. After a disconnection, or when the Broker rejects any of its Topics, it disconnects, waits `reconnectInterval` and tries again.

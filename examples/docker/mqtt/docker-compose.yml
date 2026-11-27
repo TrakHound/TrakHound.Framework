@@ -1,0 +1,62 @@
+# TrakHound Instance with an MQTT Broker (Mosquitto)
+#
+#   docker compose up -d
+#   docker compose logs instance     (the admin password, generated on the first start)
+#
+# Then install TrakHound.Mqtt.Service from Packages, and open Explorer > Services > Messages > MQTT (see README.md)
+
+name: ${INSTANCE_NAME:-trakhound-mqtt}
+
+include:
+  - mosquitto.yml
+
+services:
+  # Adds the configurations in ./config (ex. config/service/mqtt.yaml) to the Instance's Configuration Profile before it starts,
+  # then exits. A file that's already there is kept, so a change made in the Admin interface stays (run 'docker compose down -v'
+  # to start over with these files). It runs as the Instance's user, so the Instance can still change its Configuration Profile
+  configuration:
+    image: trakhound/instance:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        cd /configuration
+        find . -type f | while IFS= read -r file; do
+          target="/var/lib/trakhound/instance/config/default/$${file#./}"
+          if [ ! -e "$$target" ]; then
+            mkdir -p "$$(dirname "$$target")"
+            cp "$$file" "$$target"
+            chmod 644 "$$target"
+            echo "Added $${file#./}"
+          fi
+        done
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+      - ./config:/configuration:ro
+    restart: "no"
+
+  instance:
+    image: trakhound/instance:latest
+    container_name: ${INSTANCE_NAME:-trakhound-mqtt}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${INSTANCE_PORT:-8472}:8472"
+    environment:
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-mqtt}
+      TRAKHOUND_INSTANCE_DESCRIPTION: ${INSTANCE_DESCRIPTION:-MQTT example}
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-mqtt}
+      # Read by the MQTT Service's configuration (config/service/mqtt.yaml)
+      MQTT_HOSTNAME: mosquitto
+      MQTT_BROKER_PORT: "1883"
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_healthy
+    stop_grace_period: 90s
+
+volumes:
+  trakhound-data:

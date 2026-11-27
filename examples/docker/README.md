@@ -7,6 +7,12 @@ Docker Compose files for running a TrakHound Instance from the `trakhound/instan
 | [docker-compose.yml](docker-compose.yml) | `trakhound/instance` | Running an Instance (ex. in production) : the admin account from a secret, a stable Device ID for Licenses |
 | [docker-compose.dev.yml](docker-compose.dev.yml) | `trakhound/instance-dev` | Developing packages : the Dev Package Server, on this machine only, with a name and port you choose |
 
+Each folder runs an Instance with the server a Service package uses, and that Service already configured. Install the package from Packages, and it works:
+
+| Folder | Server | Package |
+| --- | --- | --- |
+| [mqtt](mqtt) | Mosquitto (MQTT Broker) | `TrakHound.Mqtt.Service` (Messages) |
+
 ## Run one
 
 From the folder with the file:
