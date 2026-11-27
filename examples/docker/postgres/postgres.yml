@@ -1,0 +1,32 @@
+# The database server, included by this folder's docker-compose.yml and by the other examples that use PostgreSQL or TimescaleDB
+# (ex. ../plant). Its paths are relative to this folder, wherever it's included from.
+#
+# TimescaleDB is PostgreSQL with the timescaledb extension, so this one server backs both the PostgreSQL Table Service and the
+# TimescaleDB Time Series Service. Set POSTGRES_IMAGE to postgres:17 for PostgreSQL alone (Tables only)
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-timescale/timescaledb:latest-pg17}
+    restart: unless-stopped
+    ports:
+      # On this machine only, so database tools here (ex. psql, pgAdmin) can connect. The Instance reaches it on the Compose
+      # network as 'postgres:5432'
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE:-trakhound}
+      POSTGRES_USER: ${POSTGRES_USER:-trakhound}
+      # Required, so the database never starts with a known password. Set it in .env (see .env.example)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # The Instance can take a while to stop, and the database should stop after it
+    stop_grace_period: 30s
+
+volumes:
+  postgres-data:

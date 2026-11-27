@@ -1,0 +1,65 @@
+# TrakHound Instance with PostgreSQL and TimescaleDB
+#
+#   copy .env.example .env           (then set POSTGRES_PASSWORD in .env)
+#   docker compose up -d
+#   docker compose logs instance     (the admin password, generated on the first start)
+#
+# Then install TrakHound.Postgres.Service (Tables) and/or TrakHound.Timescale.Service (Time Series) from Packages (see README.md)
+
+name: ${INSTANCE_NAME:-trakhound-postgres}
+
+include:
+  - postgres.yml
+
+services:
+  # Adds the configurations in ./config (ex. config/service/postgres.yaml) to the Instance's Configuration Profile before it
+  # starts, then exits. A file that's already there is kept, so a change made in the Admin interface stays (run
+  # 'docker compose down -v' to start over with these files). It runs as the Instance's user, so the Instance can still change
+  # its Configuration Profile
+  configuration:
+    image: trakhound/instance:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        cd /configuration
+        find . -type f | while IFS= read -r file; do
+          target="/var/lib/trakhound/instance/config/default/$${file#./}"
+          if [ ! -e "$$target" ]; then
+            mkdir -p "$$(dirname "$$target")"
+            cp "$$file" "$$target"
+            chmod 644 "$$target"
+            echo "Added $${file#./}"
+          fi
+        done
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+      - ./config:/configuration:ro
+    restart: "no"
+
+  instance:
+    image: trakhound/instance:latest
+    container_name: ${INSTANCE_NAME:-trakhound-postgres}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${INSTANCE_PORT:-8472}:8472"
+    environment:
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-postgres}
+      TRAKHOUND_INSTANCE_DESCRIPTION: ${INSTANCE_DESCRIPTION:-PostgreSQL and TimescaleDB example}
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-postgres}
+      # Read by the Services' configurations (config/service/postgres.yaml and timescale.yaml)
+      POSTGRES_SERVER: postgres
+      POSTGRES_SERVER_PORT: "5432"
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-trakhound}
+      POSTGRES_USER: ${POSTGRES_USER:-trakhound}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    stop_grace_period: 90s
+
+volumes:
+  trakhound-data:

@@ -13,6 +13,7 @@ Each folder runs an Instance with the server a Service package uses, and that Se
 | --- | --- | --- |
 | [mqtt](mqtt) | Mosquitto (MQTT Broker) | `TrakHound.Mqtt.Service` (Messages) |
 | [https](https) | Caddy (reverse proxy) | none : serves the Instance over HTTPS, with Caddy as a Trusted Proxy |
+| [postgres](postgres) | TimescaleDB (PostgreSQL) | `TrakHound.Postgres.Service` (Tables) and `TrakHound.Timescale.Service` (Time Series) |
 
 ## Run one
 

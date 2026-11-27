@@ -1,0 +1,14 @@
+# The PostgreSQL Table Service (TrakHound.Postgres.Service), added to the Instance's Configuration Profile by docker-compose.yml.
+# The connection comes from the container's environment, so the same file works with another server
+id: postgres
+name: PostgreSQL
+description: The PostgreSQL database from the Docker Compose example
+volumeId:
+packageId: TrakHound.Postgres.Service
+packageVersion: '*'
+parameters:
+  server: ${env:POSTGRES_SERVER}
+  port: ${env:POSTGRES_SERVER_PORT}
+  database: ${env:POSTGRES_DATABASE}
+  user: ${env:POSTGRES_USER}
+  password: ${env:POSTGRES_PASSWORD}
