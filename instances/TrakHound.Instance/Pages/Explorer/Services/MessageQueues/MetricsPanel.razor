@@ -242,8 +242,8 @@
     private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
     private const string _totalKey = "\0total";
 
-    private readonly Dictionary<string, Queue<QueueMetricsSample>> _history = new Dictionary<string, Queue<QueueMetricsSample>>();
-    private readonly object _lock = new object();
+    // Kept for the Instance (not for the Page), so the charts are already drawn when the Page is opened again
+    private static readonly MetricsHistory<QueueMetricsSample> _history = new MetricsHistory<QueueMetricsSample>(_window);
 
     private List<TrakHoundMessageQueueMetrics> current;
     private System.Threading.Timer updateTimer;
@@ -303,7 +303,6 @@
     private async Task Load()
     {
         updateTimer?.Dispose();
-        lock (_lock) _history.Clear();
         current = null;
         errorMessage = null;
         notSupported = false;
@@ -341,22 +340,11 @@
                 var metrics = response.Result?.Where(o => !string.IsNullOrEmpty(o?.Queue)).ToList() ?? new List<TrakHoundMessageQueueMetrics>();
                 var now = DateTime.UtcNow;
 
-                lock (_lock)
+                // A Queue that no longer exists isn't listed, and its Samples leave the history after the Window
+                _history.Add(GetHistoryKey(null), QueueMetricsSample.Total(metrics, now));
+                foreach (var queueMetrics in metrics)
                 {
-                    AddSample(_totalKey, QueueMetricsSample.Total(metrics, now), now);
-
-                    var queueNames = new HashSet<string>();
-                    foreach (var queueMetrics in metrics)
-                    {
-                        queueNames.Add(queueMetrics.Queue);
-                        AddSample(queueMetrics.Queue, QueueMetricsSample.Create(queueMetrics, now), now);
-                    }
-
-                    // Drop history for Queues that no longer exist
-                    foreach (var queueName in _history.Keys.Where(o => o != _totalKey && !queueNames.Contains(o)).ToList())
-                    {
-                        _history.Remove(queueName);
-                    }
+                    _history.Add(GetHistoryKey(queueMetrics.Queue), QueueMetricsSample.Create(queueMetrics, now));
                 }
 
                 current = metrics;
@@ -379,17 +367,8 @@
         }
     }
 
-    private void AddSample(string key, QueueMetricsSample sample, DateTime now)
-    {
-        if (!_history.TryGetValue(key, out var samples))
-        {
-            samples = new Queue<QueueMetricsSample>();
-            _history.Add(key, samples);
-        }
-
-        samples.Enqueue(sample);
-        while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
-    }
+    // The Samples of a Queue (or of all Queues, when queue is null) on this Service
+    private string GetHistoryKey(string queue) => MetricsHistory<QueueMetricsSample>.GetKey(InstanceId, ConfigurationId, queue ?? _totalKey);
 
     private async void UpdateTimerElapsed(object state)
     {
@@ -415,20 +394,13 @@
 
     private QueueMetricsSample GetSelectedSample()
     {
-        lock (_lock)
-        {
-            var key = selectedQueue ?? _totalKey;
-            return _history.TryGetValue(key, out var samples) && samples.Count > 0 ? samples.Last() : null;
-        }
+        // A Queue that is gone still has Samples for a while, so it's only shown while it's listed
+        if (selectedQueue != null && current?.Any(o => o.Queue == selectedQueue) != true) return null;
+
+        return _history.GetLatest(GetHistoryKey(selectedQueue));
     }
 
-    private IEnumerable<QueueMetricsSample> GetSamples(string queue)
-    {
-        lock (_lock)
-        {
-            return _history.TryGetValue(queue ?? _totalKey, out var samples) ? samples.ToArray() : Array.Empty<QueueMetricsSample>();
-        }
-    }
+    private IEnumerable<QueueMetricsSample> GetSamples(string queue) => _history.Get(GetHistoryKey(queue));
 
     private List<TrakHoundMessageQueueMetrics> GetItems()
     {

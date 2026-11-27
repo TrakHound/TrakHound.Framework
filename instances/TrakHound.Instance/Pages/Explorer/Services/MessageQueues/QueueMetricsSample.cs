@@ -1,3 +1,4 @@
+using TrakHound.Instance.Pages.Explorer.Diagnostics;
 using TrakHound.Services.MessageQueues;
 
 namespace TrakHound.Instance.Pages.Explorer.Services.MessageQueues
@@ -5,7 +6,7 @@ namespace TrakHound.Instance.Pages.Explorer.Services.MessageQueues
     /// <summary>
     /// A point-in-time copy of the values charted for a Queue (or the total of all Queues)
     /// </summary>
-    public class QueueMetricsSample
+    public class QueueMetricsSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

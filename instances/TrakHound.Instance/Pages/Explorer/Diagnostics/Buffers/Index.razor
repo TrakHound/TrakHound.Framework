@@ -199,8 +199,8 @@
 
     // Each Series keeps its color across charts (Queue = slot 1, File Write = slot 2, File Read = slot 3)
 
-    private readonly Dictionary<string, Queue<BufferSample>> _history = new Dictionary<string, Queue<BufferSample>>();
-    private readonly object _lock = new object();
+    // Kept for the Instance (not for the Page), so the charts are already drawn when the Page is opened again
+    private static readonly MetricsHistory<BufferSample> _history = new MetricsHistory<BufferSample>(_window);
     private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>();
 
     private IEnumerable<TableItem> tableItems;
@@ -307,7 +307,6 @@
             await InvokeAsync(StateHasChanged);
 
             updateTimer?.Dispose();
-            lock (_lock) _history.Clear();
             tableItems = null;
             _tableItemsById.Clear();
 
@@ -343,32 +342,14 @@
         var now = DateTime.UtcNow;
         var items = new List<TableItem>();
 
-        lock (_lock)
+        // A Buffer that no longer exists isn't listed, and its Samples leave the history after the Window
+        if (!metrics.IsNullOrEmpty())
         {
-            var bufferIds = new HashSet<string>();
-
-            if (!metrics.IsNullOrEmpty())
+            foreach (var bufferMetrics in metrics.Where(o => !string.IsNullOrEmpty(o?.BufferId)))
             {
-                foreach (var bufferMetrics in metrics.Where(o => !string.IsNullOrEmpty(o?.BufferId)))
-                {
-                    bufferIds.Add(bufferMetrics.BufferId);
-                    items.Add(GetTableItem(bufferMetrics));
+                items.Add(GetTableItem(bufferMetrics));
 
-                    if (!_history.TryGetValue(bufferMetrics.BufferId, out var samples))
-                    {
-                        samples = new Queue<BufferSample>();
-                        _history.Add(bufferMetrics.BufferId, samples);
-                    }
-
-                    samples.Enqueue(BufferSample.Create(bufferMetrics, now));
-                    while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
-                }
-            }
-
-            // Drop history for Buffers that no longer exist
-            foreach (var bufferId in _history.Keys.Where(o => !bufferIds.Contains(o)).ToList())
-            {
-                _history.Remove(bufferId);
+                _history.Add(MetricsHistory<BufferSample>.GetKey(previousInstanceId, bufferMetrics.BufferId), BufferSample.Create(bufferMetrics, now));
             }
         }
 
@@ -428,10 +409,7 @@
 
     private IEnumerable<BufferSample> GetSamples(string bufferId)
     {
-        lock (_lock)
-        {
-            return _history.TryGetValue(bufferId, out var samples) ? samples.ToArray() : Array.Empty<BufferSample>();
-        }
+        return _history.Get(MetricsHistory<BufferSample>.GetKey(previousInstanceId, bufferId));
     }
 
     private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)

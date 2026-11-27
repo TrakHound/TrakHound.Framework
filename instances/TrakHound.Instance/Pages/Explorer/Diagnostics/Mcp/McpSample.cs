@@ -8,7 +8,7 @@ namespace TrakHound.Instance.Pages.Explorer.Diagnostics.Mcp
     /// <summary>
     /// A point-in-time copy of the values charted for the MCP Server
     /// </summary>
-    public class McpSample
+    public class McpSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

@@ -206,8 +206,8 @@
     private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
     private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
 
-    private readonly Queue<McpSample> _history = new Queue<McpSample>();
-    private readonly object _lock = new object();
+    // Kept for the Instance (not for the Page), so the charts are already drawn when the Page is opened again
+    private static readonly MetricsHistory<McpSample> _history = new MetricsHistory<McpSample>(_window);
 
     private TrakHoundMcpMetrics metrics;
     private System.Threading.Timer updateTimer;
@@ -271,7 +271,6 @@
             await InvokeAsync(StateHasChanged);
 
             updateTimer?.Dispose();
-            lock (_lock) _history.Clear();
             metrics = null;
 
             previousInstanceId = explorerService.SelectedInstanceId;
@@ -305,11 +304,7 @@
         var updatedMetrics = await client.Mcp.GetMetrics();
         var now = DateTime.UtcNow;
 
-        lock (_lock)
-        {
-            _history.Enqueue(McpSample.Create(updatedMetrics, now));
-            while (_history.Count > 0 && now - _history.Peek().Timestamp > _window) _history.Dequeue();
-        }
+        _history.Add(previousInstanceId, McpSample.Create(updatedMetrics, now));
 
         metrics = updatedMetrics;
     }
@@ -336,7 +331,7 @@
 
     private IEnumerable<McpSample> GetSamples()
     {
-        lock (_lock) return _history.ToArray();
+        return _history.Get(previousInstanceId);
     }
 
     private async void RefreshClicked()

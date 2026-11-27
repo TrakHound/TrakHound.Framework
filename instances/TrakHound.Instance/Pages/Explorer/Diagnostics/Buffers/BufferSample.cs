@@ -8,7 +8,7 @@ namespace TrakHound.Instance.Pages.Explorer.Diagnostics.Buffers
     /// <summary>
     /// A point-in-time copy of the values charted for a Buffer
     /// </summary>
-    public class BufferSample
+    public class BufferSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

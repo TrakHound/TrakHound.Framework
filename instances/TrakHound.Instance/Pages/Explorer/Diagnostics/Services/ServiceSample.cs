@@ -8,7 +8,7 @@ namespace TrakHound.Instance.Pages.Explorer.Diagnostics.Services
     /// <summary>
     /// A point-in-time copy of the values charted for a Service
     /// </summary>
-    public class ServiceSample
+    public class ServiceSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

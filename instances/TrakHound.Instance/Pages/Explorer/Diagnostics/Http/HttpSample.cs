@@ -8,7 +8,7 @@ namespace TrakHound.Instance.Pages.Explorer.Diagnostics.Http
     /// <summary>
     /// A point-in-time copy of the values charted for the HTTP Requests
     /// </summary>
-    public class HttpSample
+    public class HttpSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

@@ -329,8 +329,8 @@
     private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
     private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
 
-    private readonly Dictionary<string, Queue<ApiSample>> _history = new Dictionary<string, Queue<ApiSample>>();
-    private readonly object _lock = new object();
+    // Kept for the Instance (not for the Page), so the charts are already drawn when the Page is opened again
+    private static readonly MetricsHistory<ApiSample> _history = new MetricsHistory<ApiSample>(_window);
     private readonly Dictionary<string, TableItem> _tableItemsById = new Dictionary<string, TableItem>();
 
     private IEnumerable<TrakHoundApiInformation> apis;
@@ -457,7 +457,6 @@
             await InvokeAsync(StateHasChanged);
 
             updateTimer?.Dispose();
-            lock (_lock) _history.Clear();
             tableItems = null;
             _tableItemsById.Clear();
 
@@ -502,24 +501,14 @@
         var now = DateTime.UtcNow;
         var items = new List<TableItem>();
 
-        lock (_lock)
+        if (!apis.IsNullOrEmpty())
         {
-            if (!apis.IsNullOrEmpty())
+            foreach (var api in apis.Where(o => !string.IsNullOrEmpty(o?.Id)).OrderBy(o => o.Route))
             {
-                foreach (var api in apis.Where(o => !string.IsNullOrEmpty(o?.Id)).OrderBy(o => o.Route))
-                {
-                    metricsByApi.TryGetValue(api.Id, out var apiMetrics);
-                    items.Add(GetTableItem(api, apiMetrics));
+                metricsByApi.TryGetValue(api.Id, out var apiMetrics);
+                items.Add(GetTableItem(api, apiMetrics));
 
-                    if (!_history.TryGetValue(api.Id, out var samples))
-                    {
-                        samples = new Queue<ApiSample>();
-                        _history.Add(api.Id, samples);
-                    }
-
-                    samples.Enqueue(ApiSample.Create(apiMetrics, now));
-                    while (samples.Count > 0 && now - samples.Peek().Timestamp > _window) samples.Dequeue();
-                }
+                _history.Add(MetricsHistory<ApiSample>.GetKey(previousInstanceId, api.Id), ApiSample.Create(apiMetrics, now));
             }
         }
 
@@ -579,10 +568,7 @@
 
     private IEnumerable<ApiSample> GetSamples(string apiId)
     {
-        lock (_lock)
-        {
-            return _history.TryGetValue(apiId, out var samples) ? samples.ToArray() : Array.Empty<ApiSample>();
-        }
+        return _history.Get(MetricsHistory<ApiSample>.GetKey(previousInstanceId, apiId));
     }
 
     private void RowClicked(DataGridRowMouseEventArgs<TableItem> args)

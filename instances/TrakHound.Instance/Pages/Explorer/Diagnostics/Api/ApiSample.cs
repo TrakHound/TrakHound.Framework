@@ -8,7 +8,7 @@ namespace TrakHound.Instance.Pages.Explorer.Diagnostics.Api
     /// <summary>
     /// A point-in-time copy of the values charted for an API
     /// </summary>
-    public class ApiSample
+    public class ApiSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

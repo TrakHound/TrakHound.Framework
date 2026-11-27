@@ -8,7 +8,7 @@ namespace TrakHound.Instance.Pages.Explorer.Diagnostics.Streams
     /// <summary>
     /// A point-in-time copy of the values charted for the Stream connections
     /// </summary>
-    public class StreamSample
+    public class StreamSample : IMetricsSample
     {
         public DateTime Timestamp { get; set; }
 

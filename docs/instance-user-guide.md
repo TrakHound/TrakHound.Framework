@@ -194,6 +194,8 @@ Each service type lists its configurations (Name, Description, Package, Version,
 
 Use Modules first when an App, API or Worker shows as not loaded: it shows the load error.
 
+The Metrics charts read the metrics every second and scroll continuously, a little behind the latest reading. Their samples are kept by the Instance for the chart's window (ex. the last 5 minutes) and shared by everyone viewing the page, so a chart is already drawn when you open its page again. Samples are only read while someone has the page open, so a chart shows a gap for the time nobody did. The same applies to a Message Queue Service's Metrics tab.
+
 **Logs** lists the loggers (grouped by package, ex. `api/TrakHound.Functions.Api`, or by system logger) with the most Errors and Warnings first. Click **Errors** or **Warnings** to show only the loggers with them, and click a logger to open its History. The line at the top says what Log History keeps (levels, days and size) and links to Settings > Logs. A logger's page names it in the header and breadcrumbs (click a breadcrumb to see its parent), selects it in the tree, starts Live by itself, and links to its Instance, API or Worker (**Open Api**, **Open Worker**). The Log tabs of the Instance, an API, an Endpoint and a Worker link back with **Open in Diagnostics**.
 
 **HTTP Requests** lists the most recent HTTP Requests the selected Instance received (100 by default; change it in Settings > Metrics > Recent Requests). It updates every second.

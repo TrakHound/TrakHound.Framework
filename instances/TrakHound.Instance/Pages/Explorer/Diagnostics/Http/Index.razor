@@ -168,8 +168,8 @@
     private static readonly TimeSpan _window = TimeSpan.FromMinutes(5);
     private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
 
-    private readonly Queue<HttpSample> _history = new Queue<HttpSample>();
-    private readonly object _lock = new object();
+    // Kept for the Instance (not for the Page), so the charts are already drawn when the Page is opened again
+    private static readonly MetricsHistory<HttpSample> _history = new MetricsHistory<HttpSample>(_window);
 
     private TrakHoundHttpMetrics metrics;
     private string _metricsWindowText = "10 sec";
@@ -312,7 +312,6 @@
             await InvokeAsync(StateHasChanged);
 
             updateTimer?.Dispose();
-            lock (_lock) _history.Clear();
             metrics = null;
 
             previousInstanceId = explorerService.SelectedInstanceId;
@@ -348,11 +347,7 @@
 
         if (updatedMetrics?.Window > 0) _metricsWindowText = $"{updatedMetrics.Window} sec";
 
-        lock (_lock)
-        {
-            _history.Enqueue(HttpSample.Create(updatedMetrics, now));
-            while (_history.Count > 0 && now - _history.Peek().Timestamp > _window) _history.Dequeue();
-        }
+        _history.Add(previousInstanceId, HttpSample.Create(updatedMetrics, now));
 
         metrics = updatedMetrics;
     }
@@ -379,7 +374,7 @@
 
     private IEnumerable<HttpSample> GetSamples()
     {
-        lock (_lock) return _history.ToArray();
+        return _history.Get(previousInstanceId);
     }
 
     private async void RefreshClicked()
