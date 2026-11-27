@@ -22,7 +22,7 @@ th packages push .\out\Contoso.Hello-1.0.0-dev.1.thp -s http://localhost:8472 --
 
 A project created from the TrakHound templates publishes there with its `local` Publish Target instead (`th packages publish`, or **Publish TrakHound Package** in Visual Studio).
 
-It installs this package (it's included in the image), serves it at `packages` with `allowAnonymousUploads`, and adds the `Dev` Package Source. Starting the container without the variable (or with `TRAKHOUND_DEV_PACKAGES=false`) removes the configuration and the `Dev` Package Source again. To require a token instead, also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters): it's used as the `uploadToken`, read from the environment and never written to the volume, and `th packages push` sends it from `TRAKHOUND_API_TOKEN`.
+It installs this package (it's included in the image), serves it at `packages` with `allowAnonymousUploads`, and adds the `Dev` Package Source. It also adds the `dev-system-information` Security Profile, which makes the read-only System Information the Welcome page shows public (`system:api-catalog`, `system:instance`, `system:api-information`, `system:modules`), since the host's browser reaches the container as another machine. Starting the container without the variable (or with `TRAKHOUND_DEV_PACKAGES=false`) removes the configuration, the `Dev` Package Source and the Security Profile again. To require a token instead, also set `TRAKHOUND_DEV_UPLOAD_TOKEN` to a long random value (at least 16 characters): it's used as the `uploadToken`, read from the environment and never written to the volume, and `th packages push` sends it from `TRAKHOUND_API_TOKEN`.
 
 **Elsewhere:**
 
