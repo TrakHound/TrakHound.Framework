@@ -70,7 +70,7 @@ The packages each package depends on (the `dependencies` in its `package.json`).
 
 **`[trakhound].[package_latest_view]`**
 
-A view (created from `Scripts/package_latest_view.sql`) that returns the most recently **built** version (max `build_date`) of each package `id` per organization. It is used by the `latest` and `category` query endpoints.
+A view (created from `Scripts/package_latest_view.sql`) that returns the most recently **built** version (max `build_date`) of each package `id` per organization. It is used by the `latest`, `category` and `search` query endpoints.
 
 ### Blobs
 Package contents are stored in the `trakhound.packages` blob collection using the key `SHA256("{organization}:{packageUuid}")`.
@@ -89,6 +89,24 @@ The `{organization}` in a route is matched case-insensitively: it is resolved to
 | Method | Route | Description |
 |---|---|---|
 | GET | `organizations` | List all organizations that have packages |
+
+### Search Packages
+| Method | Route | Description |
+|---|---|---|
+| GET | `search?q={query}&category={category}&skip={skip}&take={take}` | Search the latest version of each package in every organization, ordered by package ID and then organization. `q` matches text anywhere in a package ID or its `description`, ignoring case. `category` limits the results to one category. `take` defaults to 100 and is limited to 1,000. |
+
+Each result has the organization the package belongs to:
+
+```json
+[
+  {
+    "organization": "TrakHound",
+    "package": { "uuid": "...", "id": "TrakHound.Packages.Api", "version": "0.2.13", "category": "api", "...": "..." }
+  }
+]
+```
+
+The search covers every organization on the server, like `organizations`. A Security Profile that covers the Api applies to each endpoint, so protect `search` (and `organizations`) if some organizations' packages shouldn't be listed to everyone.
 
 ### Read Packages
 | Method | Route | Description |

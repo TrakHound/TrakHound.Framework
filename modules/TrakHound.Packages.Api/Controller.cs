@@ -15,6 +15,7 @@ namespace TrakHound.Packages.Api
     {
         private const string _blobCollection = "trakhound.packages";
         private const int _maxManifestRequest = 200;
+        private const int _maxSearchResults = 1000;
 
         // Organization names as stored (refreshed when a requested Organization isn't found)
         private volatile string[] _organizations;
@@ -114,6 +115,75 @@ namespace TrakHound.Packages.Api
             {
                 return InternalError(tableResponse.Message);
             }
+        }
+
+        /// <summary>
+        /// Search the Latest Version of each Package in every Organization (see package_latest_view), ordered by Package ID and then Organization
+        /// </summary>
+        /// <param name="q">Optional text matched anywhere in a Package ID or description, ignoring case</param>
+        /// <param name="category">Optional Category of the Packages (ex. api, app, function, service)</param>
+        /// <param name="skip">The number of Packages to skip, for paging</param>
+        /// <param name="take">The most Packages to return</param>
+        /// <returns>A list of Packages with their Organizations</returns>
+        [ApiGet("search", Description = "Searches the latest version of each package in every organization (the most recently built version of each), ordered by package ID and then organization.")]
+        [ApiMcpTool]
+        public async Task<TrakHoundApiResponse> Search(
+            [FromQuery(Description = "Text matched anywhere in a package ID or description, ignoring case")] string q = null,
+            [FromQuery(Description = "The package category, ex. api, app, function, service or worker")] string category = null,
+            [FromQuery(Description = "The number of packages to skip, for paging")] int skip = 0,
+            [FromQuery(Description = "The most packages to return (up to 1,000)")] int take = 100
+            )
+        {
+            if (skip < 0 || take < 1) return BadRequest("skip can't be negative and take must be at least 1");
+            take = Math.Min(take, _maxSearchResults);
+
+            var parameters = new TrakHoundTableParameterCollection();
+            var conditions = new List<string>();
+
+            if (!string.IsNullOrEmpty(category))
+            {
+                conditions.Add("\"latest\".\"category\" = @category");
+                parameters.Add("category", category);
+            }
+
+            if (!string.IsNullOrEmpty(q))
+            {
+                // lower() on both sides, since PostgreSQL compares case-sensitively
+                var metadataTable = $"\"{PackageMetadataModel.SchemaName}\".\"{PackageMetadataModel.TableName}\"";
+                conditions.Add($"(lower(\"latest\".\"id\") like @q escape '\\' or exists (select 1 from {metadataTable} as \"metadata\" where \"metadata\".\"organization\" = \"latest\".\"organization\" and \"metadata\".\"package_uuid\" = \"latest\".\"uuid\" and \"metadata\".\"name\" = 'description' and lower(\"metadata\".\"value\") like @q escape '\\'))");
+                parameters.Add("q", $"%{EscapeLike(q.ToLowerInvariant())}%");
+            }
+
+            var query = $"select \"latest\".\"organization\", \"latest\".\"uuid\", \"latest\".\"id\" from \"{PackageModel.SchemaName}\".\"{PackageModel.TableName}_latest_view\" as \"latest\"";
+            if (conditions.Count > 0) query += $" where {string.Join(" and ", conditions)}";
+            query += " order by \"latest\".\"id\", \"latest\".\"organization\";";
+
+            var matchResponse = await Client.Services.Tables.ReadMultiple<PackageModel>(TrakHoundTableRequest.Ansi(query, parameters, skip, take));
+            if (!matchResponse.Success) return InternalError(matchResponse.Message);
+
+            var matches = matchResponse.Result?.ToList() ?? new List<PackageModel>();
+            if (matches.Count == 0) return Ok(Array.Empty<PackageSearchResult>());
+
+            // Packages are read (and cached) per Organization, then put back in the order of the matches
+            var packages = new Dictionary<(string Organization, string Uuid), TrakHoundPackageJson>();
+            foreach (var organization in matches.GroupBy(o => o.Organization))
+            {
+                var organizationPackages = await ReadPackages(organization.Key, organization.Select(o => o.Uuid).ToList());
+                if (organizationPackages == null) continue;
+
+                foreach (var package in organizationPackages) packages[(organization.Key, package.Uuid)] = package;
+            }
+
+            var results = new List<PackageSearchResult>();
+            foreach (var match in matches)
+            {
+                if (packages.TryGetValue((match.Organization, match.Uuid), out var package))
+                {
+                    results.Add(new PackageSearchResult { Organization = match.Organization, Package = package });
+                }
+            }
+
+            return Ok(results);
         }
 
 

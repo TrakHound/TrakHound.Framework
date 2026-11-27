@@ -265,10 +265,47 @@ namespace TrakHound.Tables.Conformance.Tests
             return builder.Build().Package(source, null);
         }
 
-        private static async Task<TrakHoundPackageJson> Upload(TrakHound.Packages.Api.Controller controller, byte[] package)
+        private static async Task<TrakHoundPackageJson> Upload(TrakHound.Packages.Api.Controller controller, byte[] package, string organization = Organization)
         {
             using var stream = new MemoryStream(package);
-            return Read<TrakHoundPackageJson>(await controller.Upload(Organization, stream));
+            return Read<TrakHoundPackageJson>(await controller.Upload(organization, stream));
+        }
+
+        private static List<TrakHound.Packages.Api.Models.PackageSearchResult> Search(TrakHoundApiResponse response)
+        {
+            return Read<List<TrakHound.Packages.Api.Models.PackageSearchResult>>(response);
+        }
+
+        [SkippableFact]
+        public async Task Packages_SearchAcrossOrganizations()
+        {
+            var controller = await CreatePackagesController();
+
+            await Upload(controller, Pack("1.0.0"));
+            var latest = await Upload(controller, Pack("1.2.0"));
+            var other = await Upload(controller, Pack("2.0.0"), "Other");
+
+            // The latest version in each Organization, ordered by ID and then Organization
+            var all = Search(await controller.Search());
+            Assert.Equal(new[] { "Other", Organization }, all.Select(o => o.Organization));
+            Assert.Equal(new[] { other.Uuid, latest.Uuid }, all.Select(o => o.Package.Uuid));
+            Assert.Equal("Test", all[0].Package.Metadata["description"].ToString());
+
+            // Anywhere in the ID or the description, ignoring case, and the _ isn't a wildcard
+            Assert.Equal(2, Search(await controller.Search("_PACK")).Count);
+            Assert.Equal(2, Search(await controller.Search("tes")).Count);
+            Assert.Equal(2, Search(await controller.Search("t_p")).Count);
+            Assert.Empty(Search(await controller.Search("tes__")));
+            Assert.Empty(Search(await controller.Search("t%p")));
+            Assert.Empty(Search(await controller.Search("Missing")));
+
+            Assert.Equal(2, Search(await controller.Search(category: "function")).Count);
+            Assert.Empty(Search(await controller.Search(category: "app")));
+
+            var page = Search(await controller.Search(skip: 1, take: 1));
+            Assert.Equal(Organization, Assert.Single(page).Organization);
+
+            Assert.Equal(400, (await controller.Search(take: 0)).StatusCode);
         }
 
         [SkippableFact]
@@ -299,8 +336,8 @@ namespace TrakHound.Tables.Conformance.Tests
 
             // Matches the literal start of an ID: the _ isn't a wildcard
             AssertOk(await controller.QueryLatest(Organization, "Test_"));
-            Assert.Equal(404, (await controller.QueryLatest(Organization, "TestX")).StatusCode);
-            Assert.Equal(404, (await controller.QueryLatest(Organization, "Test%")).StatusCode);
+            Assert.Empty(Read<List<TrakHoundPackageJson>>(await controller.QueryLatest(Organization, "TestX")));
+            Assert.Empty(Read<List<TrakHoundPackageJson>>(await controller.QueryLatest(Organization, "Test%")));
 
             AssertOk(await controller.DeletePackageVersion(Organization, latest.Uuid));
             Assert.Equal(404, (await controller.Get(Organization, latest.Uuid)).StatusCode);
