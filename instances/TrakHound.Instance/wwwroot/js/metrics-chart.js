@@ -74,6 +74,7 @@
         if (!state) return;
 
         if (state.raf) cancelAnimationFrame(state.raf);
+        state.raf = 0;
         if (state.resize) state.resize.disconnect();
         if (state.intersection) state.intersection.disconnect();
         el.removeEventListener('mousemove', state.mousemove);
