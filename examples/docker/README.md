@@ -12,6 +12,7 @@ Each folder runs an Instance with the server a Service package uses, and that Se
 | Folder | Server | Package |
 | --- | --- | --- |
 | [mqtt](mqtt) | Mosquitto (MQTT Broker) | `TrakHound.Mqtt.Service` (Messages) |
+| [https](https) | Caddy (reverse proxy) | none : serves the Instance over HTTPS, with Caddy as a Trusted Proxy |
 
 ## Run one
 

@@ -1,0 +1,5 @@
+# Instance Settings, added to the Instance's Configuration Profile by docker-compose.yml. Requests from Caddy (its fixed address
+# in caddy.yml) give the client's address and scheme in X-Forwarded-For and X-Forwarded-Proto, so the Instance uses those
+# (Settings > Interfaces > Trusted Proxies)
+trustedProxies:
+- 172.30.84.10

@@ -1,0 +1,7 @@
+# Serves the Instance over HTTPS at SITE_ADDRESS (see caddy.yml). HTTP requests are redirected to HTTPS.
+# Caddy adds the X-Forwarded-For and X-Forwarded-Proto headers that the Instance reads from its Trusted Proxies.
+# See https://caddyserver.com/docs/caddyfile
+
+{$SITE_ADDRESS} {
+	reverse_proxy instance:8472
+}

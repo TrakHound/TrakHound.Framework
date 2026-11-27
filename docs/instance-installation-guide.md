@@ -258,6 +258,8 @@ Behind a proxy, every request reaches the Instance from the proxy's address. **T
 - Changes apply when saved. Entries that aren't an address or network are ignored, with a warning on the Settings page and in the log.
 - With the Admin interface limited to **Allowed Addresses** (User Guide, section 3.2), set Trusted Proxies first. Without them, the proxy's address is checked, and a proxy on the same computer counts as loopback, which is always allowed.
 
+For Docker, the repository's `examples/docker/https` folder runs the Instance behind Caddy with Docker Compose, with Caddy's address already in Trusted Proxies.
+
 ### 5.4 Upgrading and uninstalling on Linux
 
 To upgrade, extract the new version's archive and run its `install.sh`, the same way as a new install. It stops the service, replaces the program files and the service file, and starts it again. The configuration, packages, volumes, port and admin account are kept.

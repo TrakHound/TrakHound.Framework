@@ -1,0 +1,61 @@
+# TrakHound Instance served over HTTPS by Caddy
+#
+#   docker compose up -d
+#   docker compose logs instance     (the admin password, generated on the first start)
+#
+# Then open https://localhost (see README.md). The Instance's own port isn't published: every request goes through Caddy
+
+name: ${INSTANCE_NAME:-trakhound-https}
+
+include:
+  - caddy.yml
+
+services:
+  # Adds the configurations in ./config (ex. config/instance.config.yaml) to the Instance's Configuration Profile before it starts,
+  # then exits. A file that's already there is kept, so a change made in the Admin interface stays (run 'docker compose down -v'
+  # to start over with these files). It runs as the Instance's user, so the Instance can still change its Configuration Profile
+  configuration:
+    image: trakhound/instance:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        cd /configuration
+        find . -type f | while IFS= read -r file; do
+          target="/var/lib/trakhound/instance/config/default/$${file#./}"
+          if [ ! -e "$$target" ]; then
+            mkdir -p "$$(dirname "$$target")"
+            cp "$$file" "$$target"
+            chmod 644 "$$target"
+            echo "Added $${file#./}"
+          fi
+        done
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+      - ./config:/configuration:ro
+    restart: "no"
+
+  instance:
+    image: trakhound/instance:latest
+    container_name: ${INSTANCE_NAME:-trakhound-https}
+    restart: unless-stopped
+    environment:
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-https}
+      TRAKHOUND_INSTANCE_DESCRIPTION: ${INSTANCE_DESCRIPTION:-HTTPS example}
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-https}
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration:
+        condition: service_completed_successfully
+    stop_grace_period: 90s
+
+networks:
+  # A fixed subnet, so Caddy has a fixed address the Instance can trust (caddy.yml and config/instance.config.yaml). If it's
+  # already used on this machine, change it in all three files
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.84.0/24
+
+volumes:
+  trakhound-data:

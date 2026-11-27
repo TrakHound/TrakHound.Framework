@@ -1,0 +1,33 @@
+# Caddy, a reverse proxy that serves the Instance over HTTPS, included by this folder's docker-compose.yml and by the other
+# examples that use HTTPS (ex. ../plant). Its paths are relative to this folder, wherever it's included from.
+#
+# It has a fixed address (172.30.84.10) on the Compose network, so the Instance can trust it as its reverse proxy
+# (trustedProxies in config/instance.config.yaml). The file that includes it defines that network (see docker-compose.yml)
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      # The site's address: 'localhost' (a certificate from Caddy's own local Certificate Authority), or a domain name that points
+      # to this machine, with ports 80 and 443 open to the internet (a certificate from Let's Encrypt)
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates and Caddy's local Certificate Authority, kept so they aren't issued again on each start
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      default:
+        ipv4_address: 172.30.84.10
+    depends_on:
+      instance:
+        condition: service_healthy
+
+volumes:
+  caddy-data:
+  caddy-config:
