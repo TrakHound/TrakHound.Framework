@@ -1,36 +1,19 @@
-@* Displays a history of CPU Usage (percent of total machine capacity, 0 - 100) as an Area Chart *@
+@* Displays a history of a Worker's CPU Usage (percent of total machine capacity, 0 - 100) *@
+@implements IDisposable
+@inject TrakHound.Blazor.Services.TrakHoundThemeService themeService
+@using TrakHound.Blazor.Services
+@using TrakHound.Instance.Pages.Explorer.Diagnostics
 @using TrakHound.Workers
 
-<div class="cpu-usage-chart">
-    <div class="cpu-usage-chart-header">
-        <span class="cpu-usage-chart-subtitle">% of total machine capacity · last @GetWindowText()</span>
-    </div>
-
-    @if (Samples != null && Samples.Count() > 1)
-    {
-        <RadzenChart Style="height: 200px; width: 100%;">
-            <RadzenAreaSeries Data="@Samples" CategoryProperty="Timestamp" ValueProperty="Usage" Title="CPU Usage" Stroke="var(--accent)" StrokeWidth="2" Fill="var(--accent)" Smooth="false">
-                <TooltipTemplate Context="sample">
-                    <div class="cpu-usage-chart-tooltip">
-                        <span class="tooltip-time">@sample.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
-                        <span class="tooltip-value">@sample.Usage.ToString("0.00")%</span>
-                    </div>
-                </TooltipTemplate>
-            </RadzenAreaSeries>
-            <RadzenCategoryAxis Formatter="@FormatTimestamp" Padding="0">
-                <RadzenGridLines Visible="false" />
-            </RadzenCategoryAxis>
-            <RadzenValueAxis Min="0" Max="100" Step="25" Formatter="@FormatUsage">
-                <RadzenGridLines Visible="true" LineType="LineType.Dashed" />
-            </RadzenValueAxis>
-            <RadzenLegend Visible="false" />
-        </RadzenChart>
-    }
-    else
-    {
-        <div class="cpu-usage-chart-empty">Collecting CPU usage..</div>
-    }
-</div>
+<MetricsChart TItem="TrakHoundWorkerCpuSample" GetValue="@GetSampleValue" GetTimestamp="@GetSampleTimestamp"
+              Title="@Title"
+              Subtitle="@($"% of total machine capacity · last {GetWindowText()}")"
+              Samples="@Samples"
+              Series="@series"
+              ValueFormatter="@FormatPercent"
+              Max="100"
+              Area="true"
+              Borderless="@Borderless" />
 
 @code {
 
@@ -40,19 +23,49 @@
     [Parameter]
     public TimeSpan Window { get; set; } = TimeSpan.FromMinutes(5);
 
+    [Parameter]
+    public string Title { get; set; }
+
+    /// <summary>
+    /// Leave out the panel's border and padding (for a chart inside another panel or a table row)
+    /// </summary>
+    [Parameter]
+    public bool Borderless { get; set; }
+
+
+    private MetricsChartSeries[] series;
+
+
+    protected override void OnInitialized()
+    {
+        UpdateSeries();
+        themeService.ThemeChanged += ThemeChanged;
+    }
+
+    void IDisposable.Dispose()
+    {
+        themeService.ThemeChanged -= ThemeChanged;
+    }
+
+    private void ThemeChanged(object sender, TrakHoundThemes theme)
+    {
+        UpdateSeries();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // A new Series when the Theme changes, so the chart is drawn again in its colors
+    private void UpdateSeries()
+    {
+        var colors = MetricsChartColors.Get(themeService.Theme == TrakHoundThemes.Dark);
+        series = new[] { new MetricsChartSeries("CPU", nameof(TrakHoundWorkerCpuSample.Usage), colors[0]) };
+    }
+
+    private static double GetSampleValue(TrakHoundWorkerCpuSample sample, string property) => sample.Usage;
+
+    private static DateTime GetSampleTimestamp(TrakHoundWorkerCpuSample sample) => sample.Timestamp;
 
     private string GetWindowText() => Window.TotalMinutes >= 1 ? $"{Window.TotalMinutes:0} min" : $"{Window.TotalSeconds:0} sec";
 
-    private string FormatTimestamp(object value)
-    {
-        if (value is DateTime timestamp) return timestamp.ToLocalTime().ToString("HH:mm:ss");
-        return value?.ToString();
-    }
-
-    private string FormatUsage(object value)
-    {
-        if (value is double usage) return $"{usage:0.##}%";
-        return value?.ToString();
-    }
+    private static string FormatPercent(double value) => value >= 10 ? $"{value:0}%" : $"{value:0.#}%";
 
 }

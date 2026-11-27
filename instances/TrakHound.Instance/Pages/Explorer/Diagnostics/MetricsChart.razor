@@ -4,11 +4,17 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-<div class="metrics-chart">
-    <div class="metrics-chart-header">
-        <span class="metrics-chart-title">@Title</span>
-        <span class="metrics-chart-subtitle">@Subtitle</span>
-    </div>
+<div class="metrics-chart @(Borderless ? "borderless" : null)">
+    @if (!string.IsNullOrEmpty(Title) || !string.IsNullOrEmpty(Subtitle))
+    {
+        <div class="metrics-chart-header">
+            @if (!string.IsNullOrEmpty(Title))
+            {
+                <span class="metrics-chart-title">@Title</span>
+            }
+            <span class="metrics-chart-subtitle">@Subtitle</span>
+        </div>
+    }
 
     @if (HasData)
     {
@@ -79,6 +85,12 @@
 
     [Parameter]
     public Func<double, string> ValueFormatter { get; set; }
+
+    /// <summary>
+    /// Leave out the panel's border and padding (for a chart inside another panel or a table row)
+    /// </summary>
+    [Parameter]
+    public bool Borderless { get; set; }
 
     /// <summary>
     /// Format of the (local) Timestamps in the Tooltip
