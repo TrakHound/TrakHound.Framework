@@ -91,13 +91,91 @@ namespace TrakHound.Instance.Pages.Explorer
             // The Admin interface is served while the Instance is still loading its Modules,
             // so reload once it has finished (otherwise the tree only shows what had loaded when it opened)
             var instance = instanceManager.Instance;
-            if (instance != null) instance.StatusUpdated += InstanceStatusChanged;
+            if (instance != null)
+            {
+                instance.StatusUpdated += InstanceStatusChanged;
+                SubscribeToModuleChanges(instance, true);
+            }
         }
 
         public void Dispose()
         {
             var instance = _instanceManager?.Instance;
-            if (instance != null) instance.StatusUpdated -= InstanceStatusChanged;
+            if (instance != null)
+            {
+                instance.StatusUpdated -= InstanceStatusChanged;
+                SubscribeToModuleChanges(instance, false);
+            }
+
+            lock (_moduleChangeLock)
+            {
+                _moduleChangeTimer?.Dispose();
+                _moduleChangeTimer = null;
+            }
+        }
+
+
+        // A Package install (or uninstall, or a Configuration edit) adds or removes Modules while the Instance keeps running, so its Status
+        // doesn't change : reload when Modules are loaded or removed, and when Configurations change (Functions and Services are listed
+        // from them). One install raises several of these, so they're combined into one reload after the last one
+        private static readonly TimeSpan ModuleChangeDelay = TimeSpan.FromSeconds(1);
+        private readonly object _moduleChangeLock = new object();
+        private Timer _moduleChangeTimer;
+
+        private void SubscribeToModuleChanges(ITrakHoundInstance instance, bool subscribe)
+        {
+            var apiProvider = instance.ApiProvider;
+            var appProvider = instance.AppProvider as TrakHound.Blazor.Apps.TrakHoundAppProvider;
+            var workerManager = instance.WorkerManager;
+            var configurationProfile = instance.ConfigurationProfile;
+
+            if (subscribe)
+            {
+                if (apiProvider != null) { apiProvider.ApiAdded += ModuleChanged; apiProvider.ApiRemoved += ModuleChanged; }
+                if (appProvider != null) { appProvider.AppAdded += ModuleChanged; appProvider.AppRemoved += ModuleChanged; }
+                if (workerManager != null) { workerManager.EngineAdded += ModuleChanged; workerManager.EngineRemoved += ModuleChanged; }
+                if (configurationProfile != null)
+                {
+                    configurationProfile.ConfigurationAdded += ModuleChanged;
+                    configurationProfile.ConfigurationRemoved += ModuleChanged;
+                    configurationProfile.ConfigurationChanged += ModuleChanged;
+                }
+            }
+            else
+            {
+                if (apiProvider != null) { apiProvider.ApiAdded -= ModuleChanged; apiProvider.ApiRemoved -= ModuleChanged; }
+                if (appProvider != null) { appProvider.AppAdded -= ModuleChanged; appProvider.AppRemoved -= ModuleChanged; }
+                if (workerManager != null) { workerManager.EngineAdded -= ModuleChanged; workerManager.EngineRemoved -= ModuleChanged; }
+                if (configurationProfile != null)
+                {
+                    configurationProfile.ConfigurationAdded -= ModuleChanged;
+                    configurationProfile.ConfigurationRemoved -= ModuleChanged;
+                    configurationProfile.ConfigurationChanged -= ModuleChanged;
+                }
+            }
+        }
+
+        private void ModuleChanged<T>(object sender, T args)
+        {
+            // Only if the Explorer has been opened (otherwise it loads when it opens), and not while the Instance is starting
+            // (the Status reload covers that)
+            if (!_isLoaded || IsInstanceStarting) return;
+
+            lock (_moduleChangeLock)
+            {
+                _moduleChangeTimer ??= new Timer(ReloadAfterModuleChange);
+                _moduleChangeTimer.Change(ModuleChangeDelay, Timeout.InfiniteTimeSpan);
+            }
+        }
+
+        private async void ReloadAfterModuleChange(object state)
+        {
+            try
+            {
+                var instanceId = _instanceManager?.Instance?.Id;
+                if (!string.IsNullOrEmpty(instanceId)) await LoadInstance(instanceId, true);
+            }
+            catch { } // Runs on a Timer thread, so never let a reload failure reach it
         }
 
         private async void InstanceStatusChanged(string instanceId, TrakHoundInstanceStatus status)
