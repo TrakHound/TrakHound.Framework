@@ -1,0 +1,99 @@
+# Two TrakHound Instances that share Key-Values through Redis
+#
+#   docker compose up -d
+#   docker compose logs instance1 instance2     (each Instance's admin password, generated on its first start)
+#
+# Instance 1 is at http://localhost:8481 and Instance 2 at http://localhost:8482
+#
+# Then install TrakHound.Redis.Service on both Instances, and set a Key-Value on one and read it on the other (see README.md)
+
+name: ${INSTANCE_NAME:-trakhound-redis}
+
+include:
+  - redis.yml
+
+# The settings both Instances have (each adds its own name, port, volume and configuration step)
+x-instance: &instance
+  image: trakhound/instance:latest
+  restart: unless-stopped
+  stop_grace_period: 90s
+
+x-redis-environment: &redis-environment
+  # Read by the Redis Service's configuration (config/service/redis.yaml)
+  REDIS_SERVER: redis
+  REDIS_SERVER_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+# Adds the configurations in ./config (ex. config/service/redis.yaml) to an Instance's Configuration Profile before it starts,
+# then exits. A file that's already there is kept, so a change made in the Admin interface stays (run 'docker compose down -v'
+# to start over with these files). It runs as the Instance's user, and mounts the volume where the Instance does, so a new volume
+# belongs to that user and the Instance can still change its Configuration Profile
+x-configuration: &configuration
+  image: trakhound/instance:latest
+  entrypoint: ["sh", "-c"]
+  command:
+    - |
+      cd /configuration
+      find . -type f | while IFS= read -r file; do
+        target="/var/lib/trakhound/instance/config/default/$${file#./}"
+        if [ ! -e "$$target" ]; then
+          mkdir -p "$$(dirname "$$target")"
+          cp "$$file" "$$target"
+          chmod 644 "$$target"
+          echo "Added $${file#./}"
+        fi
+      done
+  restart: "no"
+
+services:
+  configuration1:
+    <<: *configuration
+    volumes:
+      - instance1-data:/var/lib/trakhound/instance
+      - ./config:/configuration:ro
+
+  configuration2:
+    <<: *configuration
+    volumes:
+      - instance2-data:/var/lib/trakhound/instance
+      - ./config:/configuration:ro
+
+  instance1:
+    <<: *instance
+    container_name: ${INSTANCE_NAME:-trakhound-redis}-1
+    ports:
+      - "127.0.0.1:${INSTANCE1_PORT:-8481}:8472"
+    environment:
+      <<: *redis-environment
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-redis}-1
+      TRAKHOUND_INSTANCE_DESCRIPTION: Redis example, Instance 1
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-redis}-1
+    volumes:
+      - instance1-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration1:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  instance2:
+    <<: *instance
+    container_name: ${INSTANCE_NAME:-trakhound-redis}-2
+    ports:
+      - "127.0.0.1:${INSTANCE2_PORT:-8482}:8472"
+    environment:
+      <<: *redis-environment
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-redis}-2
+      TRAKHOUND_INSTANCE_DESCRIPTION: Redis example, Instance 2
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-redis}-2
+    volumes:
+      - instance2-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration2:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  instance1-data:
+  instance2-data:

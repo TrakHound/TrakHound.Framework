@@ -15,6 +15,7 @@ Each folder runs an Instance with the server a Service package uses, and that Se
 | [https](https) | Caddy (reverse proxy) | none : serves the Instance over HTTPS, with Caddy as a Trusted Proxy |
 | [postgres](postgres) | TimescaleDB (PostgreSQL) | `TrakHound.Postgres.Service` (Tables) and `TrakHound.Timescale.Service` (Time Series) |
 | [sqlserver](sqlserver) | SQL Server 2022 (amd64 only) | `TrakHound.SqlServer.Service` (Tables) |
+| [redis](redis) | Redis, shared by two Instances | `TrakHound.Redis.Service` (Key Values) |
 
 ## Run one
 

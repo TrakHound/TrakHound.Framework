@@ -1,0 +1,23 @@
+# The Redis server, included by this folder's docker-compose.yml and by other examples that use Redis. Its paths are relative to
+# this folder, wherever it's included from
+
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    # Append-only persistence, so the Key-Values are kept when Redis restarts
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      # On this machine only, so tools here (ex. redis-cli, Redis Insight) can connect. The Instances reach it on the Compose
+      # network as 'redis:6379'. It has no password, so don't publish it where other machines can reach it (see README.md)
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:

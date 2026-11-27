@@ -1,0 +1,12 @@
+# The Redis Key-Value Service (TrakHound.Redis.Service), added to both Instances' Configuration Profiles by docker-compose.yml.
+# The connection comes from the containers' environment, so the same file works with another server
+id: redis
+name: Redis
+description: The Redis server shared by the Instances in the Docker Compose example
+volumeId:
+packageId: TrakHound.Redis.Service
+packageVersion: '*'
+parameters:
+  server: ${env:REDIS_SERVER}
+  port: ${env:REDIS_SERVER_PORT}
+  password: ${env:REDIS_PASSWORD}
