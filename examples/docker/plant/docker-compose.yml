@@ -1,0 +1,107 @@
+# A small plant : simulated machines publish their readings to MQTT, and a Worker on the Instance writes them to TimescaleDB,
+# with the Instance served over HTTPS by Caddy
+#
+#   copy .env.example .env           (then set POSTGRES_PASSWORD in .env)
+#   docker compose up -d
+#   docker compose logs instance     (the admin password, generated on the first start)
+#
+# Then open https://localhost/_admin and install TrakHound.Mqtt.Service, TrakHound.Timescale.Service and
+# TrakHound.Example.MqttToTimeSeries from Packages (see README.md)
+#
+# The servers come from the other examples, so a change to one applies here too
+
+name: ${INSTANCE_NAME:-trakhound-plant}
+
+include:
+  - ../mqtt/mosquitto.yml
+  - ../postgres/postgres.yml
+  - ../https/caddy.yml
+
+services:
+  # Adds the configurations to the Instance's Configuration Profile before it starts, then exits. Each folder mounted under
+  # /configuration is copied in turn, to the same place in the Profile :
+  #   ../mqtt/config                The MQTT Service (service/mqtt.yaml)
+  #   ../postgres/config (part)     The TimescaleDB Service (service/timescale.yaml)
+  #   ../https/config               Caddy as a Trusted Proxy (instance.config.yaml)
+  #   ./config                      The Router (router/default.yaml) and the Worker (worker/mqtt-to-timeseries.yaml)
+  # A file that's already there is kept, so a change made in the Admin interface stays (run 'docker compose down -v' to start
+  # over with these files). It runs as the Instance's user, so the Instance can still change its Configuration Profile
+  configuration:
+    image: trakhound/instance:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        for source in /configuration/*/; do
+          cd "$$source"
+          find . -type f | while IFS= read -r file; do
+            target="/var/lib/trakhound/instance/config/default/$${file#./}"
+            if [ ! -e "$$target" ]; then
+              mkdir -p "$$(dirname "$$target")"
+              cp "$$file" "$$target"
+              chmod 644 "$$target"
+              echo "Added $${file#./}"
+            fi
+          done
+        done
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+      - ../mqtt/config:/configuration/1-mqtt:ro
+      - ../postgres/config/service/timescale.yaml:/configuration/2-timescale/service/timescale.yaml:ro
+      - ../https/config:/configuration/3-https:ro
+      - ./config:/configuration/4-plant:ro
+    restart: "no"
+
+  instance:
+    image: trakhound/instance:latest
+    container_name: ${INSTANCE_NAME:-trakhound-plant}
+    restart: unless-stopped
+    environment:
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-plant}
+      TRAKHOUND_INSTANCE_DESCRIPTION: ${INSTANCE_DESCRIPTION:-Plant example}
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-plant}
+      # Read by the MQTT Service's configuration (../mqtt/config/service/mqtt.yaml)
+      MQTT_HOSTNAME: mosquitto
+      MQTT_BROKER_PORT: "1883"
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      # Read by the TimescaleDB Service's configuration (../postgres/config/service/timescale.yaml)
+      POSTGRES_SERVER: postgres
+      POSTGRES_SERVER_PORT: "5432"
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:-trakhound}
+      POSTGRES_USER: ${POSTGRES_USER:-trakhound}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (see .env.example)}
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    stop_grace_period: 90s
+
+  # Simulated machines, publishing their readings to the Broker (see simulator/simulate.sh). Remove it to use real machines
+  simulator:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    entrypoint: ["sh", "/simulator/simulate.sh"]
+    environment:
+      MQTT_HOSTNAME: mosquitto
+      INTERVAL: ${SIMULATOR_INTERVAL:-1}
+    volumes:
+      - ./simulator:/simulator:ro
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+networks:
+  # A fixed subnet, so Caddy has a fixed address the Instance can trust (../https/caddy.yml and ../https/config). The HTTPS
+  # example uses the same subnet, so only one of the two can run at a time
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.84.0/24
+
+volumes:
+  trakhound-data:

@@ -10,6 +10,8 @@
     { "path": "TrakHound.Example.Worker" },
     { "path": "TrakHound.Example.Function" },
     { "path": "TrakHound.Example.Api" },
-    { "path": "TrakHound.Example.App" }
+    { "path": "TrakHound.Example.App" },
+    // Used by the plant stack in docker/plant
+    { "path": "TrakHound.Example.MqttToTimeSeries" }
   ]
 }

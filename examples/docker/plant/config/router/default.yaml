@@ -1,0 +1,21 @@
+# The Router that packages use (the one named 'default', when a Configuration doesn't name another), added to the Instance's
+# Configuration Profile by docker-compose.yml. It sends Message requests to the MQTT Service and Time Series requests to the
+# TimescaleDB Service. Edit it in Config > Routers
+id: default
+name: default
+description: Messages to MQTT, and Time Series to TimescaleDB (from the Docker Compose example)
+routes:
+- id: messages
+  patterns:
+  - Messages
+  targets:
+  - id: messages-mqtt
+    source: mqtt
+    type: Service
+- id: timeseries
+  patterns:
+  - TimeSeries
+  targets:
+  - id: timeseries-timescale
+    source: timescale
+    type: Service

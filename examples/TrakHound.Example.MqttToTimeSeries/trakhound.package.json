@@ -1,0 +1,12 @@
+{
+  "id": "TrakHound.Example.MqttToTimeSeries",
+  "category": "worker",
+  "version": "0.1",
+  "metadata": {
+    "publisher": "TrakHound Inc.",
+    "description": "Example Worker that subscribes to MQTT Messages and writes their values to a Time Series Service, with Tags from the Topic",
+    "repository": "https://github.com/TrakHound/TrakHound.Framework",
+    "repositoryDirectory": "examples/TrakHound.Example.MqttToTimeSeries",
+    ".image": "https://static.trakhound.com/brand/icon/trakhound-icon-background.svg"
+  }
+}

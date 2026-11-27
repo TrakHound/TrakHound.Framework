@@ -17,6 +17,8 @@ Each folder runs an Instance with the server a Service package uses, and that Se
 | [sqlserver](sqlserver) | SQL Server 2022 (amd64 only) | `TrakHound.SqlServer.Service` (Tables) |
 | [redis](redis) | Redis, shared by two Instances | `TrakHound.Redis.Service` (Key Values) |
 
+[plant](plant) puts them together: simulated machines publish to Mosquitto, and a Worker (`TrakHound.Example.MqttToTimeSeries`) writes their readings to TimescaleDB, with the Instance served over HTTPS by Caddy. It includes the servers from the folders above.
+
 ## Run one
 
 From the folder with the file:

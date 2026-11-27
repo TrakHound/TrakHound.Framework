@@ -1,0 +1,16 @@
+# The Worker that writes the machines' MQTT readings to TimescaleDB (TrakHound.Example.MqttToTimeSeries), added to the Instance's
+# Configuration Profile by docker-compose.yml. It reaches both Services through the 'default' Router (config/router/default.yaml)
+id: mqtt-to-timeseries
+name: MQTT to Time Series
+description: Writes the machines' readings from MQTT to TimescaleDB (from the Docker Compose example)
+volumeId:
+routerId: default
+groupId:
+packageId: TrakHound.Example.MqttToTimeSeries
+packageVersion: '*'
+parameters:
+  # plant/<line>/<machine>/<field> : the line and machine become Tags, and the last level the Field
+  topicPattern: plant/{line}/{machine}/{field}
+  measurement: machine
+  # The simulator publishes {"value": ...}
+  valuePath: value
