@@ -1,0 +1,50 @@
+# SQL Server, included by this folder's docker-compose.yml and by other examples that use SQL Server. Its paths are relative to
+# this folder, wherever it's included from.
+#
+# The SQL Server image runs on amd64 (x86-64) only, needs about 2 GB of memory, and is free to use as the Developer edition
+# (not for production : see https://www.microsoft.com/sql-server/sql-server-2022-pricing). ACCEPT_EULA accepts its license
+# (https://go.microsoft.com/fwlink/?linkid=857698)
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      # On this machine only, so database tools here (ex. SQL Server Management Studio, sqlcmd) can connect. The Instance
+      # reaches it on the Compose network as 'sqlserver,1433'
+      - "127.0.0.1:${SQLSERVER_PORT:-1433}:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: ${SQLSERVER_EDITION:-Developer}
+      # Required, so the server never starts with a known password. It must be at least 8 characters and have three of:
+      # upper case, lower case, digits and symbols, or SQL Server doesn't start. Set it in .env (see .env.example)
+      MSSQL_SA_PASSWORD: ${SQLSERVER_PASSWORD:?Set SQLSERVER_PASSWORD in .env (see .env.example)}
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -b -Q 'SELECT 1' -o /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  # Creates the database (SQLSERVER_DATABASE) if it doesn't exist, then exits. SQL Server has no setting for that
+  sqlserver-setup:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P "$$MSSQL_SA_PASSWORD" -C -b \
+          -Q "IF DB_ID('$$DATABASE') IS NULL BEGIN CREATE DATABASE [$$DATABASE]; PRINT 'Created database $$DATABASE'; END"
+    environment:
+      MSSQL_SA_PASSWORD: ${SQLSERVER_PASSWORD:?Set SQLSERVER_PASSWORD in .env (see .env.example)}
+      DATABASE: ${SQLSERVER_DATABASE:-trakhound}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  sqlserver-data:

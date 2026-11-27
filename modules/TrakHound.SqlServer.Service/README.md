@@ -23,6 +23,8 @@ SQL Server Services for the TrakHound Framework.
 | `connectionTimeout` | No | `10000` | How long to wait for a connection, in milliseconds (rounded up to whole seconds) |
 | `trustServerCertificate` | No | `true` | Accept the server's certificate without validating it. Set to `false` when the server has a trusted certificate |
 
+To try it with a server, [examples/docker/sqlserver](../../examples/docker/sqlserver) runs an Instance and SQL Server with Docker Compose, with this Service already configured.
+
 ## Queries
 - The Service runs the `sqlserver` version of a Query Variant, then the `ansi` version.
 - A Query is split into batches on `GO` lines (not inside strings or comments), and each batch runs as its own command on one connection. The `timeout` (in seconds, default 60) applies to each batch.

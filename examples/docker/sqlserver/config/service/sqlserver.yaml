@@ -1,0 +1,16 @@
+# The SQL Server Table Service (TrakHound.SqlServer.Service), added to the Instance's Configuration Profile by docker-compose.yml.
+# The connection comes from the container's environment, so the same file works with another server
+id: sqlserver
+name: SQL Server
+description: The SQL Server database from the Docker Compose example
+volumeId:
+packageId: TrakHound.SqlServer.Service
+packageVersion: '*'
+parameters:
+  server: ${env:SQLSERVER_SERVER}
+  port: ${env:SQLSERVER_SERVER_PORT}
+  database: ${env:SQLSERVER_DATABASE}
+  user: ${env:SQLSERVER_USER}
+  password: ${env:SQLSERVER_PASSWORD}
+  # The container's certificate is self-signed
+  trustServerCertificate: true

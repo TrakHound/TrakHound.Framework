@@ -1,0 +1,66 @@
+# TrakHound Instance with SQL Server
+#
+#   copy .env.example .env           (then set SQLSERVER_PASSWORD in .env)
+#   docker compose up -d
+#   docker compose logs instance     (the admin password, generated on the first start)
+#
+# Then install TrakHound.SqlServer.Service from Packages (see README.md). SQL Server runs on amd64 (x86-64) only
+
+name: ${INSTANCE_NAME:-trakhound-sqlserver}
+
+include:
+  - sqlserver.yml
+
+services:
+  # Adds the configurations in ./config (ex. config/service/sqlserver.yaml) to the Instance's Configuration Profile before it
+  # starts, then exits. A file that's already there is kept, so a change made in the Admin interface stays (run
+  # 'docker compose down -v' to start over with these files). It runs as the Instance's user, so the Instance can still change
+  # its Configuration Profile
+  configuration:
+    image: trakhound/instance:latest
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        cd /configuration
+        find . -type f | while IFS= read -r file; do
+          target="/var/lib/trakhound/instance/config/default/$${file#./}"
+          if [ ! -e "$$target" ]; then
+            mkdir -p "$$(dirname "$$target")"
+            cp "$$file" "$$target"
+            chmod 644 "$$target"
+            echo "Added $${file#./}"
+          fi
+        done
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+      - ./config:/configuration:ro
+    restart: "no"
+
+  instance:
+    image: trakhound/instance:latest
+    container_name: ${INSTANCE_NAME:-trakhound-sqlserver}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${INSTANCE_PORT:-8472}:8472"
+    environment:
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-sqlserver}
+      TRAKHOUND_INSTANCE_DESCRIPTION: ${INSTANCE_DESCRIPTION:-SQL Server example}
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-sqlserver}
+      # Read by the Service's configuration (config/service/sqlserver.yaml). The example uses the 'sa' login : give the Instance
+      # a login of its own for anything but trying it out
+      SQLSERVER_SERVER: sqlserver
+      SQLSERVER_SERVER_PORT: "1433"
+      SQLSERVER_DATABASE: ${SQLSERVER_DATABASE:-trakhound}
+      SQLSERVER_USER: sa
+      SQLSERVER_PASSWORD: ${SQLSERVER_PASSWORD:?Set SQLSERVER_PASSWORD in .env (see .env.example)}
+    volumes:
+      - trakhound-data:/var/lib/trakhound/instance
+    depends_on:
+      configuration:
+        condition: service_completed_successfully
+      sqlserver-setup:
+        condition: service_completed_successfully
+    stop_grace_period: 90s
+
+volumes:
+  trakhound-data:
