@@ -38,6 +38,7 @@ The project name is used as the package `id` in **trakhound.package.json**.
 | `Program.cs` | Debug host that runs the Function once and prints the response |
 | `trakhound.package.json` | Package manifest |
 | `trakhound.package.publish.json` | Publish Targets (where to publish) |
+| `.vscode/` | Launch configurations, tasks and the recommended extension for VS Code (not created by Visual Studio). See the [Developer Guide](https://github.com/TrakHound/TrakHound.Framework/blob/main/docs/developer-guide.md), section 2.11 |
 | `.gitignore` | Leaves build output, the debug `volume` folder and `.thp` files out of source control |
 | `AGENTS.md` / `CLAUDE.md` | Instructions for AI coding tools (ex. Claude Code): the commands, conventions and rules for this package type. `CLAUDE.md` imports `AGENTS.md` |
 

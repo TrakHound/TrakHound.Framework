@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://www.trakhound.com/schemas/trakhound.package.schema.json",
+  "title": "TrakHound Package Information",
+  "description": "Describes a TrakHound Package (trakhound.package.json): its ID, category, version prefix, metadata and dependencies. See the Developer Guide, section 8.",
+  "type": "object",
+  "required": [ "id", "category" ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The JSON Schema of this file (for editors). Ignored by the CLI and the Instance."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The Package ID (ex. Contoso.Hello). The project's assembly must be named <id>.dll."
+    },
+    "category": {
+      "type": "string",
+      "enum": [ "api", "app", "function", "worker", "service", "identity" ],
+      "description": "The kind of Package."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "A two part version prefix (ex. \"0.3\"). The CLI adds the git height when it builds the Package (ex. 0.3.4). Required to build."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Information about the Package. Keys starting with '.' are read by the Instance. Your own keys are allowed.",
+      "properties": {
+        "publisher": {
+          "type": "string",
+          "description": "Who publishes the Package (ex. Contoso)."
+        },
+        "description": {
+          "type": "string",
+          "description": "What the Package does, shown with it on the Instance and Package Servers."
+        },
+        "project": {
+          "type": "string",
+          "description": "The project the Package belongs to."
+        },
+        "repository": {
+          "type": "string",
+          "description": "The source repository URL, so the Package can be traced to the commit it was built from."
+        },
+        "repositoryDirectory": {
+          "type": "string",
+          "description": "The Package's folder within its source repository (ex. modules/Contoso.Hello)."
+        },
+        ".defaultName": {
+          "type": "string",
+          "description": "The name of a new Configuration."
+        },
+        ".defaultRoute": {
+          "type": "string",
+          "description": "Apis and Apps: the route of a new Configuration (ex. contoso/hello)."
+        },
+        ".defaultVolumeId": {
+          "type": "string",
+          "description": "The Volume ID of a new Configuration (and of an existing one with an empty Volume ID when a version it runs is installed)."
+        },
+        ".configurationParameters": {
+          "type": "string",
+          "description": "The Configuration Parameters the Package reads, comma separated (ex. \"host,port,useSsl\"), listed in the Admin interface's Configuration form."
+        },
+        ".image": {
+          "type": "string",
+          "description": "The Package image (icon)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Packages installed with this one.",
+      "items": {
+        "type": "object",
+        "required": [ "id", "version" ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The ID of the Package depended on."
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "An exact version (ex. \"1.0.0\") or a wildcard (ex. \"1.*\" matches any 1.x version)."
+          },
+          "minimumVersion": {
+            "type": "string",
+            "description": "The lowest version that satisfies the dependency, used with a wildcard version (ex. \"1.2.0\" with \"1.*\")."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

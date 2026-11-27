@@ -53,5 +53,6 @@ Each generated project contains:
 | `README.md` | What the package does and how to configure it. It's copied to the package as `Readme.md` and shown with the package on the Instance and on the package server (ex. packages.trakhound.com), so fill in its placeholder text and use absolute links |
 | `Program.cs` | Debug host that runs the package without an Instance (left out of the package) |
 | `publish-package.bat` / `publish-package.sh` | Packs and publishes the package using the [TrakHound CLI](https://github.com/TrakHound/TrakHound.Framework/tree/main/cli) |
+| `.vscode/` | Launch configurations, tasks and the recommended extension for VS Code (not created by Visual Studio). See the [Developer Guide](https://github.com/TrakHound/TrakHound.Framework/blob/main/docs/developer-guide.md), section 2.11 |
 | `.gitignore` | Leaves build output, the debug `volume` folder and `.thp` files out of source control |
 | `AGENTS.md` / `CLAUDE.md` | Instructions for AI coding tools (ex. Claude Code): the commands, conventions and rules for this package type. `CLAUDE.md` imports `AGENTS.md` |

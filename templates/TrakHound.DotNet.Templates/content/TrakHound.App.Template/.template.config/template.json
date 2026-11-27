@@ -22,6 +22,10 @@
         {
           "condition": "(!localTarget && packageServer == \"\" && organization == \"\")",
           "exclude": [ "trakhound.package.publish.json" ]
+        },
+        {
+          "condition": "(HostIdentifier == \"vs\")",
+          "exclude": [ ".vscode/**" ]
         }
       ]
     }

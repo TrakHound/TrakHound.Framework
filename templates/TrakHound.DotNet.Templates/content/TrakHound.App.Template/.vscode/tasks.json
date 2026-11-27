@@ -1,0 +1,84 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "detail": "Build the project (Debug). Runs before the Debug host launch configurations",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/UserPackageId.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "TrakHound: Build package",
+      "detail": "Build the package file (.thp) with th packages dotnet",
+      "type": "process",
+      "command": "th",
+      "args": [
+        "packages",
+        "dotnet",
+        "--project-configuration",
+        "Release"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "TrakHound: Publish package",
+      "detail": "Build the package and publish it to the defaultTarget in trakhound.package.publish.json",
+      "type": "process",
+      "command": "th",
+      "args": [
+        "packages",
+        "dotnet",
+        "--project-configuration",
+        "Release",
+        "--publish"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "TrakHound: Dev run in Instance",
+      "detail": "Install the package in the local Instance (TRAKHOUND_DEV_INSTANCE) and reinstall it on each save. Stop it with Ctrl+C in its terminal",
+      "type": "process",
+      "command": "th",
+      "args": [
+        "dev",
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "isBackground": true
+    },
+    {
+      "label": "TrakHound: Dev clean",
+      "detail": "Remove what Dev run left in the local Instance (TRAKHOUND_DEV_INSTANCE)",
+      "type": "process",
+      "command": "th",
+      "args": [
+        "dev",
+        "clean"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

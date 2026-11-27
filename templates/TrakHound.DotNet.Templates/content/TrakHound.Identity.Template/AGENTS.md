@@ -25,6 +25,7 @@ Developer guide: https://github.com/TrakHound/TrakHound.Framework/blob/main/docs
 | `Program.cs` | Local debug host that runs the provider without an Instance (left out of the package) |
 | `trakhound.debug.json` | The debug host's settings: `instanceUrl`, `apiKey` and the configuration `parameters` (left out of the package). Keep real credentials out of source control |
 | `Properties/launchSettings.json` | Launch profiles for `dotnet run`, Visual Studio and VS Code (with and without a token) |
+| `.vscode/` | VS Code: the launch configurations (the debug host, and Attach to Instance for `th dev run`), tasks (build, Build package, Publish package, Dev run, Dev clean), the recommended extension (C# Dev Kit) and the Instance's MCP Server (`mcp.json`) |
 | `trakhound.package.json` | The package manifest: `id`, `category`, `metadata` (publisher, description, ...) and `dependencies` |
 | `trakhound.package.publish.json` | Where to publish : the Publish Targets (only created when a package server was given; otherwise the nearest one in a parent folder is used) |
 | `README.md` | What the package does and how to configure it, shown with the package on the Instance and the package server |

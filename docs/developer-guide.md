@@ -20,6 +20,7 @@ Oct 20, 2026 · Patrick Ritchie
     - 2.8 Debug it inside an Instance
     - 2.9 Unit test it
     - 2.10 Run it standalone
+    - 2.11 Using VS Code
 3. How packages run
     - 3.1 Loading
     - 3.2 Configurations
@@ -69,6 +70,7 @@ The example packages (`TrakHound.Example.Api`, `.App`, `.Function` and `.Worker`
 | TrakHound CLI (`th`) | Builds, publishes and installs packages. Installed with the TrakHound CLI installer |
 | A TrakHound Instance | To test the package end to end. A local Instance on the default port 8472 works with the templates as they are (set `--instanceUrl` for another one) |
 | Visual Studio 2022 17.14 or later (optional) | The TrakHound extension adds the **Publish TrakHound Package** and **Publish TrakHound Packages...** commands. It is an option in the CLI installer |
+| VS Code with C# Dev Kit (optional) | The templates add launch configurations and tasks for it (section 2.11) |
 
 ## 2. Getting started
 
@@ -114,6 +116,7 @@ The API project contains:
 | `trakhound.package.json` | The package manifest (section 8) |
 | `trakhound.package.publish.json` | Where to publish : the Publish Targets (section 8). `local` publishes to the Dev Package Server of a `trakhound/instance-dev` container (section 2.5) |
 | `publish-package.bat` / `.sh` | Builds and publishes the package with the CLI |
+| `.vscode/` | Launch configurations, tasks, the recommended extension and the Instance's MCP Server for VS Code (section 2.11). Not created by Visual Studio |
 | `.gitignore` | Leaves `bin`, `obj`, the debug `volume` folder and `.thp` files out of source control |
 | `AGENTS.md` / `CLAUDE.md` | Instructions for AI coding tools (ex. Claude Code): the commands, conventions and rules for the package type. `CLAUDE.md` imports `AGENTS.md`. Edit them as your package grows |
 
@@ -335,6 +338,27 @@ The settings are the `"TrakHound"` section of `appsettings.json`, environment va
 The host connects to the Instance when it starts. An Instance that can't be reached is logged as a warning and the module still starts; the health check reports it as Degraded. What the module logs goes to `ILogger`, so the host's log providers (the console, the Windows Event Log, Application Insights) receive it. The OpenAPI document is named and versioned from the package's `trakhound.package.json` (and `trakhound.package.publish.json`), which the template copies to the host's output.
 
 Not supported yet: Apps, Identity providers, and signing in with an Instance's users (an Api host uses its own API keys, or any ASP.NET Core authentication you add).
+
+### 2.11 Using VS Code
+
+Open the package's folder (the one with the `.csproj`) in VS Code. The package templates add a `.vscode` folder, and VS Code offers to install C# Dev Kit, the extension it recommends.
+
+- **Run and debug:** press F5. **Debug host** builds the project and starts the debug host with the profile in `Properties/launchSettings.json`. For an Api it opens the Api Debugger; for an App it opens the App. The Function and Identity templates have a launch configuration for each profile (ex. **Debug host (name = Alice)**). Pick one in the Run and Debug view.
+- **Tasks:** run them with **Terminal > Run Task...**:
+
+| Task | Runs |
+| --- | --- |
+| `build` | `dotnet build` (Ctrl+Shift+B) |
+| TrakHound: Build package | `th packages dotnet --project-configuration Release`: the `.thp` file (section 2.4) |
+| TrakHound: Publish package | The same with `--publish`, to the `defaultTarget` in `trakhound.package.publish.json` (section 2.7). For another Target, run `th packages dotnet --publish --target <name>` in the terminal |
+| TrakHound: Dev run in Instance | `th dev run` (section 2.8) |
+| TrakHound: Dev clean | `th dev clean` |
+
+- **Debug it inside an Instance:** set the `TRAKHOUND_DEV_INSTANCE` environment variable to the Instance's folder (section 2.8) and restart VS Code so the tasks see it. Run **TrakHound: Dev run in Instance**, then start **Attach to Instance** (it attaches to the `TrakHound.Instance` process). Breakpoints bind to each new version as Dev run reinstalls it. Stop Dev run with Ctrl+C in its terminal: that removes the configuration and the package. Closing the terminal or **Terminate Task** stops it without removing them, so run **TrakHound: Dev clean** afterwards.
+- **Package files:** `trakhound.package.json`, `trakhound.package.publish.json` and `trakhound.debug.json` set `$schema`, so VS Code (and Visual Studio) complete their properties, describe them, and mark misspelled ones. The schemas are at `https://www.trakhound.com/schemas/`. To add them to a project made with an older template, add the same `"$schema"` line to the top of each file.
+- **AI agents:** `.vscode/mcp.json` connects VS Code's agents (ex. Copilot agent mode) to the MCP Server of the Instance at `instanceUrl` (Instance User Guide, section 2.10). Turn the MCP Server on in the Instance first. From the same machine it needs no API key; the file's comments show how to send one.
+
+VS Code only reads `.vscode` in the folder it opened. In a repository with several packages, open a package's folder to use its launch configurations and tasks, or copy them to the repository's `.vscode` folder and change `${workspaceFolder}` to the package's folder. The schemas work either way.
 
 ## 3. How packages run
 
@@ -914,6 +938,7 @@ The Device ID is the SHA-256 of the machine name, as 52 characters of lower case
 | `version` | Yes, to build | A two part prefix (ex. `"0.3"`). The CLI adds the git height when it builds the package (ex. `0.3.4`, see below) |
 | `metadata` | No | `publisher`, `description`, `project`, `repository`, `.defaultRoute`, `.defaultVolumeId`, `.configurationParameters`, `.image` and your own keys. `.defaultVolumeId` sets the Volume ID of a new configuration, and of an existing configuration with an empty Volume ID when a version it runs is installed. That module then uses the new Volume instead of the one named after its configuration ID, and its files aren't moved |
 | `dependencies` | No | Packages installed with this one: `id`, `version` and optional `minimumVersion` (see below) |
+| `$schema` | No | The file's JSON Schema, for editors (section 2.11). The CLI and the Instance ignore it |
 
 A dependency's `version` is an exact version (`1.0.0`) or a wildcard (`1.*` matches any 1.x version). Add `minimumVersion` when your package needs a feature added in a later version: `"version": "1.*", "minimumVersion": "1.2.0"` accepts 1.2.0 or newer, but not 2.x. An installed dependency that matches is kept. Otherwise the latest matching version is downloaded, and the install fails if that version is still below the minimum. Packing fails if `minimumVersion` isn't a valid version, or if it's higher than an exact `version`. Older Instances ignore `minimumVersion` and only match `version`.
 

@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://www.trakhound.com/schemas/trakhound.package.publish.schema.json",
+  "title": "TrakHound Package Publish Targets",
+  "description": "Where Packages are published (trakhound.package.publish.json), as named Publish Targets. The CLI uses the nearest file, in the Package folder or a parent folder. See the Developer Guide, section 8.",
+  "type": "object",
+  "allowComments": true,
+  "allowTrailingCommas": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The JSON Schema of this file (for editors). Ignored by the CLI."
+    },
+    "defaultTarget": {
+      "type": "string",
+      "description": "The Target used when --target isn't set (ex. \"development\")."
+    },
+    "targets": {
+      "type": "object",
+      "description": "The Publish Targets, by name (ex. \"development\" and \"release\").",
+      "additionalProperties": {
+        "$ref": "#/definitions/target"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "target": {
+      "type": "object",
+      "properties": {
+        "destinations": {
+          "type": "array",
+          "description": "The Package Servers and Organizations to upload to.",
+          "items": {
+            "$ref": "#/definitions/destination"
+          }
+        },
+        "versionSuffix": {
+          "type": "string",
+          "description": "A prerelease label added to every version published to this Target. {timestamp} is the UTC time of the run, {branch} is empty on main and -[branch] on other branches (ex. \"dev{branch}.{timestamp}\" builds 0.3.4-dev.20261114153000). No suffix publishes stable versions."
+        },
+        "allowDirty": {
+          "type": "boolean",
+          "description": "Build uncommitted changes. Needs {timestamp} in versionSuffix, so each build has its own version."
+        },
+        "requireSigning": {
+          "type": "boolean",
+          "description": "Packages must be signed (and the working tree clean) to be published to this Target."
+        }
+      },
+      "additionalProperties": false
+    },
+    "destination": {
+      "type": "object",
+      "required": [ "packageServer" ],
+      "properties": {
+        "packageServer": {
+          "type": "string",
+          "description": "The URL of the Package Server (ex. https://packages.contoso.com)."
+        },
+        "organization": {
+          "type": "string",
+          "description": "The Organization to publish the Package to."
+        },
+        "apiTokenVariable": {
+          "type": "string",
+          "description": "The environment variable that holds the Api Token for this Package Server (ex. CONTOSO_RELEASE_TOKEN). Without it, the CLI's Api Token is used."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://www.trakhound.com/schemas/trakhound.debug.schema.json",
+  "title": "TrakHound Debug Host Settings",
+  "description": "Settings for a Package's local debug host (trakhound.debug.json): the Instance it connects to, its credentials and the Configuration Parameters. Left out of the Package. See the Developer Guide, section 2.3.",
+  "type": "object",
+  "allowComments": true,
+  "allowTrailingCommas": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The JSON Schema of this file (for editors). Ignored by the debug host."
+    },
+    "instanceUrl": {
+      "type": "string",
+      "default": "http://localhost:8472",
+      "description": "The Instance the Client connects to."
+    },
+    "apiKey": {
+      "type": "string",
+      "description": "An API Key for the Instance (sent in the X-API-Key header)."
+    },
+    "bearerToken": {
+      "type": "string",
+      "description": "A Bearer Token for the Instance (sent in the Authorization header)."
+    },
+    "configurationId": {
+      "type": "string",
+      "default": "debug",
+      "description": "The ID of the module's Configuration (on an Instance, each Configuration has its own ID)."
+    },
+    "volumePath": {
+      "type": "string",
+      "description": "The folder used as the module's Volume. A relative path is relative to the build output. Defaults to \"volume\"."
+    },
+    "parameters": {
+      "type": "object",
+      "description": "The Configuration Parameters (as set in the module's Configuration on an Instance). Also used by 'th dev run'."
+    },
+    "input": {
+      "type": "object",
+      "description": "Functions only: the input Parameters the Function is run with (used when none are passed as an argument)."
+    },
+    "theme": {
+      "type": "string",
+      "enum": [ "light", "dark" ],
+      "description": "Apps only: the Theme shown until one is picked."
+    }
+  },
+  "additionalProperties": false
+}

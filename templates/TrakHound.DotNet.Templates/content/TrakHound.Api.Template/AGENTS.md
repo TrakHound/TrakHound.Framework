@@ -23,6 +23,7 @@ Developer guide: https://github.com/TrakHound/TrakHound.Framework/blob/main/docs
 | `Program.cs` | Local debug host (left out of the package) |
 | `trakhound.debug.json` | The debug host's settings: `instanceUrl`, `apiKey` and the configuration `parameters` (left out of the package). Keep real credentials out of source control |
 | `Properties/launchSettings.json` | The launch profile for `dotnet run`, Visual Studio and VS Code (port 5091, Development environment, opens the Api Debugger) |
+| `.vscode/` | VS Code: the launch configurations (the debug host, and Attach to Instance for `th dev run`), tasks (build, Build package, Publish package, Dev run, Dev clean), the recommended extension (C# Dev Kit) and the Instance's MCP Server (`mcp.json`) |
 | `trakhound.package.json` | The package manifest: `id`, `category`, `metadata` (publisher, description, ...) and `dependencies` |
 | `trakhound.package.publish.json` | Where to publish : the Publish Targets (only created when a package server was given; otherwise the nearest one in a parent folder is used) |
 | `README.md` | What the package does and how to configure it, shown with the package on the Instance and the package server |

@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug host",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/bin/Debug/net10.0/UserPackageId.dll",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "UserPackageId"
+    },
+    {
+      "name": "Debug host (name = Alice)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/bin/Debug/net10.0/UserPackageId.dll",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "UserPackageId (name = Alice)"
+    },
+    {
+      "name": "Attach to Instance",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "TrakHound.Instance"
+    }
+  ]
+}

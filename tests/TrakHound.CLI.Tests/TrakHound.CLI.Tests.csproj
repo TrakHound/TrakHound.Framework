@@ -18,6 +18,8 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\cli\TrakHound.CLI.csproj" />
+		<!-- For the trakhound.debug.json schema test -->
+		<ProjectReference Include="..\..\debug\TrakHound.Debug\TrakHound.Debug.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

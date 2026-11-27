@@ -94,6 +94,24 @@ namespace TrakHound.CLI.Tests
         }
 
         [Fact]
+        public void SchemaProperty_IsAllowed()
+        {
+            using var repo = CreateRepository(Targets.Replace("\"defaultTarget\"", "\"$schema\": \"https://www.trakhound.com/schemas/trakhound.package.publish.schema.json\",\n  \"defaultTarget\""));
+
+            var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
+            Assert.NotNull(settings);
+            Assert.Equal("development", settings.TargetName);
+        }
+
+        [Fact]
+        public void UnknownProperty_IsAnError()
+        {
+            using var repo = CreateRepository(Targets.Replace("\"defaultTarget\"", "\"defaultTargets\": \"x\",\n  \"defaultTarget\""));
+
+            Assert.Null(PackagesCommands.ReadPublishSettings(Package(repo), log: false));
+        }
+
+        [Fact]
         public void NoDefaultTarget_IsAnError()
         {
             using var repo = CreateRepository(Targets.Replace("\"defaultTarget\": \"development\",", ""));

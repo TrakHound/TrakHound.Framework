@@ -31,6 +31,7 @@ namespace TrakHound.CLI.Packages
         }
 
 
+        private const string SchemaProperty = "$schema";
         private static readonly string[] _publishSettingsProperties = { "defaultTarget", "targets" };
         private static readonly string[] _publishTargetProperties = { "destinations", "versionSuffix", "allowDirty", "requireSigning" };
         private static readonly string[] _publishDestinationProperties = { "packageServer", "organization", "apiTokenVariable" };
@@ -165,6 +166,7 @@ namespace TrakHound.CLI.Packages
             foreach (var property in document.RootElement.EnumerateObject())
             {
                 if (_publishSettingsProperties.Contains(property.Name, StringComparer.OrdinalIgnoreCase)) continue;
+                if (property.Name == SchemaProperty) continue; // For editors (the templates set it)
 
                 if (string.Equals(property.Name, "version", StringComparison.OrdinalIgnoreCase))
                 {

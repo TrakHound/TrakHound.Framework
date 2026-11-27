@@ -1,0 +1,12 @@
+{
+  // The MCP Server of the Instance, for AI agents in VS Code (ex. Copilot agent mode). Turn it on in the Instance's
+  // Settings > Interfaces > MCP Server. From the same machine it needs no API Key, unless a Security Profile covers system:mcp.
+  // To send one, add "headers": { "X-API-Key": "${input:trakhound-api-key}" } to the server and this to the file:
+  // "inputs": [ { "type": "promptString", "id": "trakhound-api-key", "description": "TrakHound API Key", "password": true } ]
+  "servers": {
+    "trakhound": {
+      "type": "http",
+      "url": "{instanceUrl}/_mcp"
+    }
+  }
+}

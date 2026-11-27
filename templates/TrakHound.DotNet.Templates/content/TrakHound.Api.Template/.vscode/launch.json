@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug host",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/bin/Debug/net10.0/UserPackageId.dll",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "UserPackageId",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s/_debug"
+      }
+    },
+    {
+      "name": "Attach to Instance",
+      "type": "coreclr",
+      "request": "attach",
+      "processName": "TrakHound.Instance"
+    }
+  ]
+}

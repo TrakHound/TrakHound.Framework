@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.trakhound.com/schemas/trakhound.debug.schema.json",
   // Settings for the local debug host (Program.cs, Debug.razor and DebugRoutes.razor). Left out of the package
   "instanceUrl": "{instanceUrl}",
   "apiKey": "",
