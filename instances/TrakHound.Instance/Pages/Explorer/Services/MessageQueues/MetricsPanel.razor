@@ -235,8 +235,9 @@
 
 @code {
 
-    // Matches the RabbitMQ management plugin's statistics interval (rates change every 5 seconds)
-    private const int _updateInterval = 5000;
+    // Every second, like the other metrics charts, so the charts stay close to now. Some Services refresh their statistics less often
+    // (the RabbitMQ management plugin every 5 seconds), and their values are the same until they do
+    private const int _updateInterval = 1000;
     private static readonly TimeSpan _window = TimeSpan.FromMinutes(10);
     private static readonly string _windowText = $"{_window.TotalMinutes:0} min";
     private const string _totalKey = "\0total";
