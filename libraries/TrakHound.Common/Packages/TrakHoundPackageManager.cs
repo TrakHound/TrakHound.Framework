@@ -1425,7 +1425,7 @@ namespace TrakHound.Packages
 
                         AddInstalled(information);
 
-                        UpdatePackagesFile(version);
+                        UpdatePackagesFile(information.Uuid, version);
 
                         lock (_lock)
                         {
@@ -1572,7 +1572,11 @@ namespace TrakHound.Packages
         //}
 
 
-        private bool UpdatePackagesFile(string version = null)
+        /// <summary>
+        /// Write the installed Packages to the packages file. The requested Version (if any) is for the Package just installed (packageUuid);
+        /// the others keep the ones the file lists, and its Auto Updates are kept. Origins are written from memory, since an install from a file clears one
+        /// </summary>
+        private bool UpdatePackagesFile(string packageUuid = null, string version = null)
         {
             List<TrakHoundPackage> installedPackages;
             Dictionary<string, TrakHoundPackageOrigin> origins;
@@ -1589,14 +1593,14 @@ namespace TrakHound.Packages
                 {
                     var item = new TrakHoundPackagesFileItem();
                     item.Id = package.Id;
-                    item.Version = !string.IsNullOrEmpty(version) ? version : package.Version;
+                    item.Version = !string.IsNullOrEmpty(version) && package.Uuid == packageUuid ? version : null;
                     item.Category = package.Category;
                     item.Installed = package.Version;
                     item.Origin = origins.GetValueOrDefault(package.Uuid);
                     items.Add(item);
                 }
 
-                return TrakHoundPackagesFile.Write(items, path: _path);
+                return TrakHoundPackagesFile.Update(items, _path);
             }
             else
             {
