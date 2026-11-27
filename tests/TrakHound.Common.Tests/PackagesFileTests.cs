@@ -46,16 +46,16 @@ namespace TrakHound.Common.Tests
 
 
         [Fact]
-        public async Task Install_KeepsTheAutoUpdates()
+        public async Task AFileWithAutoUpdates_IsRead_AndWrittenWithoutThem()
         {
-            var autoUpdates = new[] { new TrakHoundPackageUpdateConfiguration("function", "Test.A", "1.*") };
-            TrakHoundPackagesFile.Write(new[] { new TrakHoundPackagesFileItem("function", "Test.Old", "1.0.0", "1.0.0") }, autoUpdates, _packages);
+            // Auto Updates were removed : a file written before then still reads, and they're dropped on the next write
+            File.WriteAllText(Path.Combine(_packages, TrakHoundPackagesFile.Filename),
+                "{\"autoUpdates\":[{\"category\":\"function\",\"id\":\"Test.A\",\"version\":\"1.*\"}],\"packages\":[{\"category\":\"function\",\"id\":\"Test.A\",\"version\":\"1.*\",\"installed\":\"1.0.0\"}]}");
 
             await _manager.Install(Pack("Test.A"));
 
-            var autoUpdate = Assert.Single(TrakHoundPackagesFile.Read(_packages).AutoUpdates);
-            Assert.Equal("Test.A", autoUpdate.Id);
-            Assert.Equal("1.*", autoUpdate.Version);
+            Assert.Equal("1.*", Item("Test.A").Version);
+            Assert.DoesNotContain("autoUpdates", File.ReadAllText(Path.Combine(_packages, TrakHoundPackagesFile.Filename)));
         }
 
         [Fact]

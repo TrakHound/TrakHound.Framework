@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 namespace TrakHound.Packages
 {
     /// <summary>
-    /// The packages file (trakhound-packages.json) that lists the installed Packages and their Auto Update configurations
+    /// The packages file (trakhound-packages.json) that lists the installed Packages : the Version each was requested with, and where it came from
     /// </summary>
     public class TrakHoundPackagesFile
     {
@@ -21,12 +21,6 @@ namespace TrakHound.Packages
         /// </summary>
         public const string Filename = "trakhound-packages.json";
 
-
-        /// <summary>
-        /// Packages that are configured to update automatically
-        /// </summary>
-        [JsonPropertyName("autoUpdates")]
-        public IEnumerable<TrakHoundPackageUpdateConfiguration> AutoUpdates { get; set; }
 
         /// <summary>
         /// The installed Packages
@@ -82,7 +76,7 @@ namespace TrakHound.Packages
 
         /// <summary>
         /// Write the installed Packages to the packages file in the directory, keeping what the file already has that isn't known from the
-        /// installed Packages : its Auto Updates, and for each installed Version that it already listed, the requested Version (when the item
+        /// installed Packages : for each installed Version that it already listed, the requested Version (when the item
         /// has none) and with keepOrigins the Origin (when the item has none). An item that is new and has no requested Version requests its
         /// installed Version. Returns false (and nothing is written) if there are no Packages
         /// </summary>
@@ -103,7 +97,7 @@ namespace TrakHound.Packages
                 items.Add(item);
             }
 
-            return Write(items, existing?.AutoUpdates, path);
+            return Write(items, path);
         }
 
         /// <summary>
@@ -120,7 +114,7 @@ namespace TrakHound.Packages
         /// <summary>
         /// Write the packages file to the specified directory (the application base directory if null). Returns false (and nothing is written) if there are no Packages
         /// </summary>
-        public static bool Write(IEnumerable<TrakHoundPackagesFileItem> packages, IEnumerable<TrakHoundPackageUpdateConfiguration> autoUpdates = null, string path = null)
+        public static bool Write(IEnumerable<TrakHoundPackagesFileItem> packages, string path = null)
         {
             if (!packages.IsNullOrEmpty())
             {
@@ -130,7 +124,6 @@ namespace TrakHound.Packages
 
                 var file = new TrakHoundPackagesFile();
                 file.Packages = packages;
-                file.AutoUpdates = autoUpdates;
 
                 Json.Write(file, filePath, atomic: true);
                 return true;
@@ -142,7 +135,7 @@ namespace TrakHound.Packages
         /// <summary>
         /// Write the packages file to the specified directory (the application base directory if null). Returns false (and nothing is written) if there are no Packages
         /// </summary>
-        public static async Task<bool> WriteAsync(IEnumerable<TrakHoundPackagesFileItem> packages, IEnumerable<TrakHoundPackageUpdateConfiguration> autoUpdates = null, string path = null)
+        public static async Task<bool> WriteAsync(IEnumerable<TrakHoundPackagesFileItem> packages, string path = null)
         {
             if (!packages.IsNullOrEmpty())
             {
@@ -152,7 +145,6 @@ namespace TrakHound.Packages
 
                 var file = new TrakHoundPackagesFile();
                 file.Packages = packages;
-                file.AutoUpdates = autoUpdates;
 
                 await Json.WriteAsync(file, filePath, atomic: true);
                 return true;

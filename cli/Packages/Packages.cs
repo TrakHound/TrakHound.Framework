@@ -226,7 +226,7 @@ namespace TrakHound.CLI.Packages
         }
 
         /// <summary>
-        /// Write the installed Packages to the Packages File, keeping its Auto Updates and, for each Version it already listed, the requested
+        /// Write the installed Packages to the Packages File, keeping, for each Version it already listed, the requested
         /// Version and Origin (the CLI doesn't record Origins, so one recorded by an Instance is kept)
         /// </summary>
         internal static void UpdatePackagesFile(string rootPath, string packagesPath)
@@ -245,7 +245,7 @@ namespace TrakHound.CLI.Packages
                 // A Packages File only in the legacy location (the root) is moved to the packages folder
                 var packagesFilePath = Path.Combine(packagesPath, TrakHoundPackagesFile.Filename);
                 var legacy = !File.Exists(packagesFilePath) ? TrakHoundPackagesFile.Read(rootPath) : null;
-                if (legacy != null) TrakHoundPackagesFile.Write(legacy.Packages ?? Enumerable.Empty<TrakHoundPackagesFileItem>(), legacy.AutoUpdates, packagesPath);
+                if (legacy != null) TrakHoundPackagesFile.Write(legacy.Packages ?? Enumerable.Empty<TrakHoundPackagesFileItem>(), packagesPath);
 
                 TrakHoundPackagesFile.Update(fileItems, packagesPath, keepOrigins: true);
             }

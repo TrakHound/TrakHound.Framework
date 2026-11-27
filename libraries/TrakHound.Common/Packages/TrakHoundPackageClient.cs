@@ -296,23 +296,6 @@ namespace TrakHound.Packages
             return (response.StatusCode, null, GetErrorMessage(response));
         }
 
-        /// <summary>
-        /// Gets the Packages that are updates for the Package Queries
-        /// </summary>
-        public async Task<IEnumerable<TrakHoundPackage>> QueryUpdates(IEnumerable<TrakHoundPackageQuery> queries)
-        {
-            if (!string.IsNullOrEmpty(Organization) && !queries.IsNullOrEmpty())
-            {
-                var url = Url.Combine(BaseUrl, "packages");
-                url = Url.Combine(url, Organization);
-                url = Url.Combine(url, "updates");
-
-                var responses = await TrakHoundHttpRequests.Post<IEnumerable<TrakHoundPackageJson>>(url, queries, headers: ApiTokenHeader);
-                return responses?.Select(o => o.ToPackage());
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// Gets the Manifest and signature of a Package without downloading it (null if the Package isn't found or the server doesn't provide Manifests)

@@ -20,13 +20,11 @@ namespace TrakHound.Packages
     {
         private const int _fileWatcherBufferSize = 8192 * 100; // 8192 (8 kb) is default
         private const int _notifyInterval = 2000;
-        private const int _updateInterval = 10000;
         private const int _maxConcurrentChecks = 8;
 
         private readonly string _path;
         private readonly TrakHoundPackageClient _client;
         private readonly List<TrakHoundPackagesFileItem> _packageFileItems = new List<TrakHoundPackagesFileItem>();
-        private readonly Dictionary<string, TrakHoundPackageUpdateConfiguration> _updateConfigurations = new Dictionary<string, TrakHoundPackageUpdateConfiguration>(); // Sender => UpdateConfiguration
         private readonly Dictionary<string, TrakHoundPackage> _installedPackages = new Dictionary<string, TrakHoundPackage>(); // PackageUuid => Package
         private readonly ListDictionary<string, string> _installedPackageUuidsByCategory = new ListDictionary<string, string>(); // Category => PackageUuid
         private readonly ListDictionary<string, string> _installedPackageIdsByCategory = new ListDictionary<string, string>(); // Category => PackageId
@@ -40,7 +38,6 @@ namespace TrakHound.Packages
         private readonly Dictionary<string, TrakHoundPackageOrigin> _origins = new Dictionary<string, TrakHoundPackageOrigin>(); // PackageUuid => Where it was downloaded from
         private readonly object _lock = new object();
         private readonly DelayEvent _notifyDelay = new DelayEvent(_notifyInterval);
-        private Timer _updateTimer;
         private FileSystemWatcher _fileSystemWatcher;
         private FileSystemWatcher _directoryWatcher;
 
@@ -195,19 +192,11 @@ namespace TrakHound.Packages
         }
 
         /// <summary>
-        /// Create the Package directory and start watching it for changes (and start the update timer when a Package Client is set). Called by the constructors
+        /// Create the Package directory and start watching it for changes. Called by the constructors
         /// </summary>
         public void Init()
         {
             _notifyDelay.Elapsed += NotifyDelayElapsed;
-
-            if (_client != null)
-            {
-                _updateTimer = new Timer();
-                _updateTimer.Interval = _updateInterval;
-                _updateTimer.Elapsed += UpdateTimerElapsed;
-                _updateTimer.Enabled = true;
-            }
 
             var dir = TrakHoundPackage.GetDirectory(_path);
             try
@@ -250,12 +239,6 @@ namespace TrakHound.Packages
                 _notifyDelay.Dispose();
             }
 
-            if (_updateTimer != null)
-            {
-                _updateTimer.Elapsed -= UpdateTimerElapsed;
-                _updateTimer.Dispose();
-            }
-
             if (_fileSystemWatcher != null)
             {
                 _fileSystemWatcher.Created -= FileSystemWatcherCreated;
@@ -282,7 +265,6 @@ namespace TrakHound.Packages
         public void Load()
         {
             //_notifyDelay.Enabled = false;
-            if (_updateTimer != null) _updateTimer.Enabled = false;
             _fileSystemWatcher.EnableRaisingEvents = false;
             if (_directoryWatcher != null) _directoryWatcher.EnableRaisingEvents = false;
 
@@ -345,7 +327,6 @@ namespace TrakHound.Packages
             }
 
             //_notifyDelay.Enabled = true;
-            if (_updateTimer != null) _updateTimer.Enabled = true;
             _fileSystemWatcher.EnableRaisingEvents = true;
             if (_directoryWatcher != null) _directoryWatcher.EnableRaisingEvents = true;
         }
@@ -877,150 +858,6 @@ namespace TrakHound.Packages
         {
             Console.WriteLine("ERROR :: " + e.GetException().Message);
         }
-
-        #endregion
-
-        #region "Updates"
-
-        /// <summary>
-        /// Automatically install updates of a Package that match the Version (may contain '*' wildcards). Replaces any configuration previously added by the same Sender
-        /// </summary>
-        public void AddUpdateConfiguration(string sender, string packageId, string packageVersion)
-        {
-            if (!string.IsNullOrEmpty(packageId) && !string.IsNullOrEmpty(packageVersion))
-            {
-                var configuration = new TrakHoundPackageUpdateConfiguration();
-                configuration.Id = packageId;
-                configuration.Version = packageVersion;
-
-                lock (_lock)
-                {
-                    _updateConfigurations.Remove(sender);
-                    _updateConfigurations.Add(sender, configuration);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Remove the update configuration added by the Sender
-        /// </summary>
-        public void RemoveUpdateConfiguration(string sender)
-        {
-            if (!string.IsNullOrEmpty(sender))
-            {
-                lock (_lock)
-                {
-                    _updateConfigurations.Remove(sender);
-                }
-            }
-        }
-
-
-        // async void : an exception would end the process, so nothing may escape
-        private async void UpdateTimerElapsed(object sender, ElapsedEventArgs e)
-        {
-            try
-            {
-                await CheckForUpdates();
-            }
-            catch { } // Checked again on the next interval
-        }
-
-        private async Task CheckForUpdates()
-        {
-            IEnumerable<TrakHoundPackageUpdateConfiguration> updateConfigurations;
-            lock (_lock) updateConfigurations = _updateConfigurations.Values.ToList();
-
-            if (!updateConfigurations.IsNullOrEmpty())
-            {
-                var queries = new List<TrakHoundPackageQuery>();
-                foreach (var updateConfiguration in updateConfigurations)
-                {
-                    if (updateConfiguration.Id != null)
-                    {
-                        var installedPackage = GetLatest(updateConfiguration.Id);
-                        if (installedPackage != null)
-                        {
-                            if (!queries.Any(o => o.Id == updateConfiguration.Id))
-                            {
-                                queries.Add(new TrakHoundPackageQuery(updateConfiguration.Id, installedPackage.Version, updateConfiguration.Version));
-                            }
-                        }
-                    }
-                }
-
-                if (!queries.IsNullOrEmpty())
-                {
-                    var updatedPackages = await _client.QueryUpdates(queries);
-                    if (!updatedPackages.IsNullOrEmpty())
-                    {
-                        queries.Clear();
-                        foreach (var updatedPackage in updatedPackages)
-                        {
-                            queries.Add(new TrakHoundPackageQuery(updatedPackage.Id, updatedPackage.Version));
-                        }
-
-                        var packageArchiveBytes = await _client.DownloadArchive(queries);
-                        await InstallArchive(packageArchiveBytes);
-
-                        //foreach (var package in updatedPackages)
-                        //{
-                        //    var packageBytes = await _client.Download(_organization, package.Id, package.Version);
-                        //    await Install(packageBytes);
-                        //}
-                    }
-                }
-            }
-        }
-
-        //private async void UpdateTimerElapsed(object sender, ElapsedEventArgs e)
-        //{
-        //    IEnumerable<TrakHoundPackageUpdateConfiguration> updateConfigurations;
-        //    IEnumerable<TrakHoundPackage> installedPackages;
-        //    lock (_lock)
-        //    {
-        //        updateConfigurations = _updateConfigurations.Values.ToList();
-        //        installedPackages = _installedPackages.ToList();
-        //    }
-
-        //    if (!updateConfigurations.IsNullOrEmpty() && !installedPackages.IsNullOrEmpty())
-        //    {
-        //        var queries = new List<TrakHoundPackageQuery>();
-        //        foreach (var updateConfiguration in updateConfigurations)
-        //        {
-        //            var installedPackage = installedPackages.Where(o => o.Id == updateConfiguration.Id)?.OrderByDescending(o => o.Version.ToVersion()).FirstOrDefault();
-        //            if (installedPackage != null)
-        //            {
-        //                if (!queries.Any(o => o.Id == updateConfiguration.Id))
-        //                {
-        //                    queries.Add(new TrakHoundPackageQuery(updateConfiguration.Id, installedPackage.Version, updateConfiguration.Version));
-        //                }
-        //            }
-        //        }
-
-        //        if (!queries.IsNullOrEmpty())
-        //        {
-        //            var updatedPackages = await _client.QueryUpdates(queries);
-        //            if (!updatedPackages.IsNullOrEmpty())
-        //            {
-        //                queries.Clear();
-        //                foreach (var updatedPackage in updatedPackages)
-        //                {
-        //                    queries.Add(new TrakHoundPackageQuery(updatedPackage.Id, updatedPackage.Version));
-        //                }
-
-        //                var packageArchiveBytes = await _client.DownloadArchive(queries);
-        //                await InstallArchive(packageArchiveBytes);
-
-        //                //foreach (var package in updatedPackages)
-        //                //{
-        //                //    var packageBytes = await _client.Download(_organization, package.Id, package.Version);
-        //                //    await Install(packageBytes);
-        //                //}
-        //            }
-        //        }
-        //    }
-        //}
 
         #endregion
 
@@ -1574,7 +1411,7 @@ namespace TrakHound.Packages
 
         /// <summary>
         /// Write the installed Packages to the packages file. The requested Version (if any) is for the Package just installed (packageUuid);
-        /// the others keep the ones the file lists, and its Auto Updates are kept. Origins are written from memory, since an install from a file clears one
+        /// the others keep the ones the file lists. Origins are written from memory, since an install from a file clears one
         /// </summary>
         private bool UpdatePackagesFile(string packageUuid = null, string version = null)
         {
