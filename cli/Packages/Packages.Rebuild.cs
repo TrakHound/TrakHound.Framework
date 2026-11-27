@@ -108,7 +108,14 @@ namespace TrakHound.CLI.Packages
                 (settings.GitBranch, settings.GitCommit, settings.GitDirty) = GitCommands.GetBranchAndCommit(projectPath);
 
                 // Reads the TrakHound version from the restore, as the original build did
-                if (!TrakHoundDotNetPackage.Restore(Path.Combine(projectPath, $"{manifest.Id}.csproj"), settings))
+                var projectFilePath = TrakHoundDotNetPackage.FindProjectFile(projectPath, manifest.Id, out var projectFileError);
+                if (projectFilePath == null)
+                {
+                    Console.Error.WriteLine($"Error : {projectFileError}");
+                    return false;
+                }
+
+                if (!TrakHoundDotNetPackage.Restore(projectFilePath, settings))
                 {
                     Console.Error.WriteLine("Error : Restore Failed");
                     return false;

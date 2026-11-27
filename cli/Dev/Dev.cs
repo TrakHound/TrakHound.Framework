@@ -642,9 +642,8 @@ namespace TrakHound.CLI.Dev
                 var extension = Path.GetExtension(path);
                 if (!_watchExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) return false;
 
-                // The Project file copies the build writes (ex. "Contoso.Hello-0.0.1.3.csproj")
-                var filename = Path.GetFileName(path);
-                if (filename.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) && filename.Contains('-')) return false;
+                // The Project file copies the build writes (ex. "Contoso.Hello-0.0.1.3.csproj"), but not a Project named with a '-' (ex. "example-api-01.csproj")
+                if (TrakHoundDotNetPackage.IsTemporaryProjectCopy(path)) return false;
 
                 return true;
             }

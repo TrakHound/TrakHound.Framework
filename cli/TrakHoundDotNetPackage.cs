@@ -55,7 +55,11 @@ namespace TrakHound.Packages
                         var information = TrakHoundPackage.ReadInformationFromFile(informationPath);
                         if (information != null)
                         {
-                            return CreateFromProjectFile(Path.Combine(path, $"{information.Id}.csproj"), settings);
+                            var projectFilePath = FindProjectFile(path, information.Id, out var error);
+                            if (projectFilePath != null) return CreateFromProjectFile(projectFilePath, settings);
+
+                            Console.Error.WriteLine(error);
+                            return null;
                         }
 
                         Console.Error.WriteLine($"Package Information File not Found : ({informationPath})");
@@ -72,6 +76,66 @@ namespace TrakHound.Packages
             }
 
             return null;
+        }
+
+        // The Project file copy a build writes next to the Project ([id]-[version].csproj, ex. "Contoso.Hello-0.0.1.3.csproj")
+        private static readonly System.Text.RegularExpressions.Regex _temporaryProjectCopyRegex = new(@"-\d+\.\d+\.\d+[^\\/]*\.csproj$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Whether a file is the Project file copy that packing writes next to the Project (ex. "Contoso.Hello-0.0.1.3.csproj"), and removes when it's done
+        /// </summary>
+        public static bool IsTemporaryProjectCopy(string path) => !string.IsNullOrEmpty(path) && _temporaryProjectCopyRegex.IsMatch(Path.GetFileName(path));
+
+        /// <summary>
+        /// The Project file of a Package's directory : [packageId].csproj, or else the directory's only Project file (ex. a project created
+        /// from a template as "example-api-01" has example-api-01.csproj, while its Package ID is example_api_01). A Project file that packing
+        /// moved aside (to .tmp) when it was interrupted is found by its original name, and restored when it's packed.
+        /// Returns null, with the reason in error, when the directory has none, or more than one and none is named after the Package
+        /// </summary>
+        public static string FindProjectFile(string directory, string packageId, out string error)
+        {
+            error = null;
+
+            if (!string.IsNullOrEmpty(packageId))
+            {
+                var named = Path.Combine(directory, $"{packageId}.csproj");
+                if (File.Exists(named) || File.Exists(Path.ChangeExtension(named, ".tmp"))) return named;
+            }
+
+            var projectFiles = Directory.GetFiles(directory, "*.csproj")
+                .Where(o => !IsTemporaryProjectCopy(o))
+                .ToList();
+
+            // An interrupted run leaves the original Project as [name].tmp
+            if (projectFiles.Count == 0)
+            {
+                projectFiles = Directory.GetFiles(directory, "*.tmp")
+                    .Where(IsProjectFile)
+                    .Select(o => Path.ChangeExtension(o, ".csproj"))
+                    .ToList();
+            }
+
+            if (projectFiles.Count == 1) return projectFiles[0];
+
+            error = projectFiles.Count == 0
+                ? $"Project File not Found : ({directory}) has no .csproj file"
+                : $"Project File not Found : ({directory}) has more than one .csproj file ({string.Join(", ", projectFiles.Select(Path.GetFileName))}) and none is named {packageId}.csproj. Pass the .csproj file instead of the directory";
+            return null;
+        }
+
+        private static bool IsProjectFile(string path)
+        {
+            try
+            {
+                using var reader = new StreamReader(path);
+                var buffer = new char[256];
+                var length = reader.Read(buffer, 0, buffer.Length);
+                return new string(buffer, 0, length).TrimStart('﻿', ' ', '\t', '\r', '\n').StartsWith("<Project", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static byte[] CreateFromProjectFile(string projectFilePath, TrakHoundDotNetPackageSettings settings)
