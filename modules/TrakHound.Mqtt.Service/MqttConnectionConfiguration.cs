@@ -50,6 +50,42 @@ namespace TrakHound.Mqtt.Service
         public bool UseTls { get; set; }
 
         /// <summary>
+        /// The Client Certificate to authenticate with (optional): a PEM file, a PKCS#12 file (.pfx or .p12) or the PEM text. Setting it turns on TLS
+        /// </summary>
+        [JsonPropertyName("clientCertificate")]
+        public string ClientCertificate { get; set; }
+
+        /// <summary>
+        /// The private key of a PEM <see cref="ClientCertificate"/>: a PEM file or the PEM text (optional when the certificate's PEM includes the key)
+        /// </summary>
+        [JsonPropertyName("clientKey")]
+        public string ClientKey { get; set; }
+
+        /// <summary>
+        /// The password of a PKCS#12 <see cref="ClientCertificate"/> or of an encrypted <see cref="ClientKey"/> (optional)
+        /// </summary>
+        [JsonPropertyName("clientCertificatePassword")]
+        public string ClientCertificatePassword { get; set; }
+
+        /// <summary>
+        /// The CA Certificate(s) the Broker's certificate must chain to, instead of the ones the system trusts (optional): a PEM or DER file or the PEM text. Setting it turns on TLS
+        /// </summary>
+        [JsonPropertyName("caCertificate")]
+        public string CaCertificate { get; set; }
+
+        /// <summary>
+        /// True when the connection uses TLS: <see cref="UseTls"/> is set, or a Client or CA Certificate is
+        /// </summary>
+        [JsonIgnore]
+        public bool IsTls => UseTls || !string.IsNullOrEmpty(ClientCertificate) || !string.IsNullOrEmpty(CaCertificate);
+
+        /// <summary>
+        /// The loaded <see cref="ClientCertificate"/> and <see cref="CaCertificate"/> (set by the Service)
+        /// </summary>
+        [JsonIgnore]
+        internal MqttCertificates Certificates { get; set; }
+
+        /// <summary>
         /// The Username to authenticate with (optional)
         /// </summary>
         [JsonPropertyName("username")]

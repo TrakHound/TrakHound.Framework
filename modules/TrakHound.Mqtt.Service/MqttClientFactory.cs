@@ -31,9 +31,23 @@ namespace TrakHound.Mqtt.Service
             builder.WithTimeout(TimeSpan.FromMilliseconds(GetTimeout(configuration)));
 
             // TLS
-            if (configuration.UseTls)
+            if (configuration.IsTls)
             {
-                builder.WithTlsOptions(o => o.UseTls());
+                var certificates = configuration.Certificates;
+                builder.WithTlsOptions(o =>
+                {
+                    o.UseTls();
+
+                    if (certificates?.ClientCertificate != null)
+                    {
+                        o.WithClientCertificates(new[] { certificates.ClientCertificate });
+                    }
+
+                    if (certificates?.CaCertificates != null)
+                    {
+                        o.WithCertificateValidationHandler(e => MqttCertificates.ValidateBrokerCertificate(e.Certificate, e.Chain, e.SslPolicyErrors, certificates.CaCertificates));
+                    }
+                });
             }
 
             // Credentials

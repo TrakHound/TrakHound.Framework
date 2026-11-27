@@ -18,6 +18,7 @@ namespace TrakHound.Mqtt.Service
         private readonly MqttConnectionConfiguration _connectionConfiguration;
         private readonly MqttServiceClient _publishClient;
         private readonly ConcurrentDictionary<string, string> _activeClientIds = new ConcurrentDictionary<string, string>(); // ClientId => StreamId
+        private readonly string _notAvailableMessage = "MQTT Connection Not Configured";
 
 
         public MqttMessageService(ITrakHoundServiceConfiguration configuration) : base(configuration)
@@ -35,6 +36,24 @@ namespace TrakHound.Mqtt.Service
                 connectionConfiguration.ReconnectInterval = configuration.GetParameter<int>("reconnectInterval");
                 connectionConfiguration.CleanSession = !bool.TryParse(configuration.GetParameter("cleanSession"), out var cleanSession) || cleanSession; // True unless set to false
                 connectionConfiguration.UseTls = configuration.GetParameter<bool>("useTls");
+                connectionConfiguration.ClientCertificate = configuration.GetParameter("clientCertificate");
+                connectionConfiguration.ClientKey = configuration.GetParameter("clientKey");
+                connectionConfiguration.ClientCertificatePassword = configuration.GetParameter("clientCertificatePassword");
+                connectionConfiguration.CaCertificate = configuration.GetParameter("caCertificate");
+
+                try
+                {
+                    // Loaded once, so a file that can't be read is reported here instead of on every connection
+                    connectionConfiguration.Certificates = MqttCertificates.Load(connectionConfiguration);
+                }
+                catch (Exception ex)
+                {
+                    // Connecting without the certificates would fail, or skip the check of the Broker, so requests return 503 instead
+                    _notAvailableMessage = $"MQTT Certificate Error : {ex.Message}";
+                    Log(TrakHoundLogLevel.Error, _notAvailableMessage);
+                    return;
+                }
+
                 _connectionConfiguration = connectionConfiguration;
 
                 // One Publish connection per Service instance (replaced along with the Service when the Configuration changes)
@@ -71,7 +90,7 @@ namespace TrakHound.Mqtt.Service
             }
             else
             {
-                response.Message = "MQTT Connection Not Configured";
+                response.Message = _notAvailableMessage;
             }
 
             return TrakHoundServiceResponse<TrakHoundServiceAvailabilityResponse>.Ok(response);
@@ -81,7 +100,7 @@ namespace TrakHound.Mqtt.Service
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (_connectionConfiguration == null) return Task.FromResult(TrakHoundServiceResponse<ITrakHoundStream<TrakHoundMessageResponse>>.NotAvailable("MQTT Connection Not Configured"));
+            if (_connectionConfiguration == null) return Task.FromResult(TrakHoundServiceResponse<ITrakHoundStream<TrakHoundMessageResponse>>.NotAvailable(_notAvailableMessage));
             if (topics.IsNullOrEmpty()) return Task.FromResult(TrakHoundServiceResponse<ITrakHoundStream<TrakHoundMessageResponse>>.BadRequest("No Topics Specified"));
             if (!MqttClientFactory.IsValidQos(qos)) return Task.FromResult(TrakHoundServiceResponse<ITrakHoundStream<TrakHoundMessageResponse>>.BadRequest($"Invalid QoS ({qos}) : Must be 0, 1, or 2"));
 
@@ -121,7 +140,7 @@ namespace TrakHound.Mqtt.Service
 
         public async Task<TrakHoundServiceResponse> Publish(string topic, Stream content, bool retain, int qos, CancellationToken cancellationToken = default)
         {
-            if (_publishClient == null) return TrakHoundServiceResponse.NotAvailable("MQTT Connection Not Configured");
+            if (_publishClient == null) return TrakHoundServiceResponse.NotAvailable(_notAvailableMessage);
             if (string.IsNullOrEmpty(topic) || content == null) return TrakHoundServiceResponse.BadRequest();
             if (!MqttClientFactory.IsValidQos(qos)) return TrakHoundServiceResponse.BadRequest($"Invalid QoS ({qos}) : Must be 0, 1, or 2");
 
