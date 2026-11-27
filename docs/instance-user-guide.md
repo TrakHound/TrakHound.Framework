@@ -232,7 +232,7 @@ Packages (`/_admin/packages`) installs, updates and removes packages. Choose the
 | Upload | Drop `.thp` package files, then click **Install** |
 | Sources | **Add Source** (Name, Base URL, Organization, Access Token Name, Access Token, TrakHound Package Manager), **Edit**, **Copy** (opens a new Source with the same settings, including the Access Token), **Remove** and **Test Connection** |
 
-**TrakHound Public:** on first run the Instance adds the TrakHound public Package Server (`https://packages.trakhound.com`, Organization `Public`) as a source. If it was removed, add it back with **Add TrakHound Public** (shown when there are no sources) or **Use TrakHound Public** in the Add Source dialog, which fills in the form so an Access Token or TrakHound Package Manager can still be set. Both are hidden while a source with that Base URL and Organization exists.
+**TrakHound Public:** on first run the Instance adds the TrakHound public Package Server (`https://packages.trakhound.com`, Organization `TrakHound`) as a source. If it was removed, add it back with **Add TrakHound Public** (shown when there are no sources) or **Use TrakHound Public** in the Add Source dialog, which fills in the form so an Access Token or TrakHound Package Manager can still be set. Both are hidden while a source with that Base URL and Organization exists.
 
 Installing a package doesn't run it. Add a configuration that uses it (section 2.5).
 

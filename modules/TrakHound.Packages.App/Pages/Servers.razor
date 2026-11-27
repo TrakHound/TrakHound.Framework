@@ -112,7 +112,7 @@
             <div class="form-row">
                 <div class="form-field">
                     <label>Organization</label>
-                    <RadzenTextBox @bind-Value="@editOrganization" Placeholder="ex. Public" />
+                    <RadzenTextBox @bind-Value="@editOrganization" Placeholder="ex. TrakHound" />
                     @if (submitted && string.IsNullOrWhiteSpace(editOrganization))
                     {
                         <span class="field-error">Organization is required</span>

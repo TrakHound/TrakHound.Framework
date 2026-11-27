@@ -451,7 +451,7 @@ namespace TrakHound.CLI.Packages
 
 
         [Command("publish", "Create a new Package from the specified directory and upload it to a Package Server")]
-        [CommandHelp(null, "th packages publish ./MyPackage --server https://packages.trakhound.com --organization Public")]
+        [CommandHelp(null, "th packages publish ./MyPackage --server https://packages.trakhound.com --organization TrakHound")]
         public static async Task<bool> Publish(
             [CommandParameter("The path to the directory to create the Package from. If not specified, the current working directory is used")]
             string path = null,

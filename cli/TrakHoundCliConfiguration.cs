@@ -16,7 +16,7 @@ namespace TrakHound.CLI
     {
         public const string Filename = "cli.config.yaml";
         public const string DefaultPackageServer = "https://packages.trakhound.com";
-        public const string DefaultOrganization = "Public";
+        public const string DefaultOrganization = "TrakHound";
 
         public static TrakHoundCliConfiguration Instance { get; private set; } = new TrakHoundCliConfiguration();
 

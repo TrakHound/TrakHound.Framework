@@ -85,7 +85,7 @@ namespace TrakHound.Instance.Configurations
             remoteConfiguration.Id = "public";
             remoteConfiguration.Name = "TrakHound Public";
             remoteConfiguration.BaseUrl = "https://packages.trakhound.com";
-            remoteConfiguration.Organization = "Public";
+            remoteConfiguration.Organization = "TrakHound";
             configuration.Remotes = new RemoteConfiguration[] { remoteConfiguration };
 
             return configuration;
