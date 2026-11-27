@@ -34,6 +34,12 @@ namespace TrakHound.Packages
         [JsonPropertyName("installed")]
         public string Installed { get; set; }
 
+        /// <summary>
+        /// The Package Server and Organization the installed Version was downloaded from (null if it was installed from a file, or before this was recorded)
+        /// </summary>
+        [JsonPropertyName("origin")]
+        public TrakHoundPackageOrigin Origin { get; set; }
+
 
         /// <summary>
         /// Create an empty item

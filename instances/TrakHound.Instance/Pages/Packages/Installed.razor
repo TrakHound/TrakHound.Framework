@@ -82,7 +82,7 @@
                     default:
                         <span class="empty-icon fa-regular fa-sharp fa-circle-check"></span>
                         <span class="empty-title">All Packages are up to date</span>
-                        <span class="empty-description">No newer versions of the installed Packages are available from @Packages.SelectedSource?.Name.</span>
+                        <span class="empty-description">No newer versions of the installed Packages are available from @Packages.SelectedSource?.Name, or from the Organizations they were installed from.</span>
                         break;
                 }
             </div>
@@ -175,7 +175,7 @@
                                     {
                                         @if (!updating)
                                         {
-                                            <button class="admin-write btn btn-sm btn-primary btn-update" title="Install v@(update.Version) from @Packages.SelectedSource?.Name" @onclick="() => Update(row.Id, update)"><span class="icon fa-solid fa-sharp fa-up-to-line"></span>Update to v@(update.Version)</button>
+                                            <button class="admin-write btn btn-sm btn-primary btn-update" title="Install v@(update.Version) from @GetUpdateSourceName(row.Id)" @onclick="() => Update(row.Id, update)"><span class="icon fa-solid fa-sharp fa-up-to-line"></span>Update to v@(update.Version)</button>
                                         }
                                         else
                                         {
@@ -184,7 +184,7 @@
                                     }
                                     else if (available != null)
                                     {
-                                        <span class="up-to-date" title="The installed version is the latest from @Packages.SelectedSource?.Name"><span class="icon fa-solid fa-sharp fa-check"></span>Latest</span>
+                                        <span class="up-to-date" title="The installed version is the latest from @GetUpdateSourceName(row.Id)"><span class="icon fa-solid fa-sharp fa-check"></span>Latest</span>
                                     }
                                     else
                                     {
@@ -215,6 +215,7 @@
                                                     <th>Version</th>
                                                     <th>Built</th>
                                                     <th>Size</th>
+                                                    <th>From</th>
                                                     <th>Used by</th>
                                                     <th>Verification</th>
                                                 </tr>
@@ -226,6 +227,19 @@
                                                         <td>v@(version.Version)@(version.IsLatest ? " (latest)" : "")</td>
                                                         <td>@version.BuildDate.ToLocalTime().ToString("g")</td>
                                                         <td>@(version.Size.HasValue ? PackagesContext.FormatSize(version.Size.Value) : "–")</td>
+                                                        <td>
+                                                            @{
+                                                                var origin = Packages.PackageManager?.GetOrigin(row.Id, version.Version);
+                                                            }
+                                                            @if (origin != null)
+                                                            {
+                                                                <span title="@origin.Server">@GetOriginName(origin)</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="muted" title="Installed from a file (ex. uploaded or by a Deployment), or before the Instance recorded where Packages come from. Updates are checked with the selected Source">File</span>
+                                                            }
+                                                        </td>
                                                         <td>
                                                             @if (row.IsProfilePackage)
                                                             {
@@ -828,6 +842,24 @@
             .Concat((verification.Changed ?? Enumerable.Empty<string>()).Select(o => $"Changed : {o}"))
             .Concat((verification.Missing ?? Enumerable.Empty<string>()).Select(o => $"Missing : {o}"))
             .Concat((verification.Added ?? Enumerable.Empty<string>()).Select(o => $"Added : {o}"));
+    }
+
+    /// <summary>
+    /// The name of the Source an origin is (else its Organization and server)
+    /// </summary>
+    private string GetOriginName(TrakHoundPackageOrigin origin)
+    {
+        var source = Packages.Sources.FirstOrDefault(o => origin.Matches(o.BaseUrl, o.Organization));
+        return source != null ? $"{source.Name ?? source.Id} ({origin.Organization})" : origin.ToString();
+    }
+
+    /// <summary>
+    /// Where a Package's Updates come from : where it was downloaded from, else (unknown, ex. uploaded) the selected Source
+    /// </summary>
+    private string GetUpdateSourceName(string packageId)
+    {
+        var origin = PackagesContext.GetInstalledOrigin(Packages.PackageManager, packageId);
+        return origin != null ? GetOriginName(origin) : Packages.SelectedSource?.Name;
     }
 
     /// <summary>

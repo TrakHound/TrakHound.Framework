@@ -182,7 +182,7 @@ namespace TrakHound.Instance.Pages.Configuration
 
                 if (packageBytes == null) return $"{description} could not be downloaded from {_packages.SelectedSource?.Name ?? PackageClient.BaseUrl}";
 
-                var results = (await _packages.Install(packageBytes))?.ToList();
+                var results = (await _packages.Install(packageBytes, PackageClient.Origin))?.ToList();
                 var failed = results?.Where(o => !o.Success).Select(o => string.IsNullOrEmpty(o.Message) ? $"{o.PackageId} {o.PackageVersion}".Trim() : o.Message).ToList();
 
                 if (results.IsNullOrEmpty() || !results.Any(o => o.Success && o.PackageId == packageId))

@@ -37,6 +37,7 @@ namespace TrakHound.Packages
         private readonly Dictionary<string, TrakHoundPackage> _refusedPackages = new Dictionary<string, TrakHoundPackage>(); // PackageUuid => Package
         private readonly Dictionary<string, TrakHoundPackageVerificationResult> _verificationResults = new Dictionary<string, TrakHoundPackageVerificationResult>(); // PackageUuid => Result
         private readonly HashSet<string> _alreadyVerified = new HashSet<string>(); // PackageUuid (so that a Package isn't checked again when it is added)
+        private readonly Dictionary<string, TrakHoundPackageOrigin> _origins = new Dictionary<string, TrakHoundPackageOrigin>(); // PackageUuid => Where it was downloaded from
         private readonly object _lock = new object();
         private readonly DelayEvent _notifyDelay = new DelayEvent(_notifyInterval);
         private Timer _updateTimer;
@@ -292,6 +293,7 @@ namespace TrakHound.Packages
                 _refusedPackages.Clear();
                 _verificationResults.Clear();
                 _alreadyVerified.Clear();
+                _origins.Clear();
             }
 
             // Read "trakhound-packages.json"
@@ -301,6 +303,16 @@ namespace TrakHound.Packages
                 if (!packagesFile.Packages.IsNullOrEmpty())
                 {
                     _packageFileItems.AddRange(packagesFile.Packages);
+
+                    // Kept for the installed Versions they were recorded for, since the file is written again from the installed Packages
+                    lock (_lock)
+                    {
+                        foreach (var item in packagesFile.Packages)
+                        {
+                            var uuid = item?.Origin != null ? TrakHoundPackage.GenerateUuid(item.Id, item.Installed) : null;
+                            if (uuid != null) _origins[uuid] = item.Origin;
+                        }
+                    }
                 }
             }
 
@@ -1156,6 +1168,18 @@ namespace TrakHound.Packages
         }
 
         /// <summary>
+        /// Where an installed Package Version was downloaded from : a Package Server and Organization. Null if it was installed from a file
+        /// (ex. uploaded, or by a Deployment), or before Origins were recorded
+        /// </summary>
+        public TrakHoundPackageOrigin GetOrigin(string packageId, string packageVersion)
+        {
+            var uuid = TrakHoundPackage.GenerateUuid(packageId, packageVersion);
+            if (uuid == null) return null;
+
+            lock (_lock) return _origins.GetValueOrDefault(uuid);
+        }
+
+        /// <summary>
         /// Get the installed Package that a requested Version resolves to (see <see cref="TrakHoundPackage.SelectVersion"/>). Returns null if none match
         /// </summary>
         public TrakHoundPackage Resolve(string packageId, string packageVersion)
@@ -1269,7 +1293,7 @@ namespace TrakHound.Packages
                 await RefreshApprovals();
 
                 var packageBytes = await client.Download(packageUuid);
-                return await Install(packageBytes, packageClient: packageClient);
+                return await Install(packageBytes, packageClient: packageClient, origin: client.Origin);
             }
 
             return results;
@@ -1287,13 +1311,14 @@ namespace TrakHound.Packages
 
         /// <summary>
         /// Install a Package (.thp) file, downloading and installing its Dependencies first (Dependencies that are already installed are skipped).
-        /// The Version (if specified) is written to the packages file as the requested Version
+        /// The Version (if specified) is written to the packages file as the requested Version. The origin is where the file was downloaded from
+        /// (null for a file from anywhere else, ex. uploaded). Dependencies record the Package Client's server and Organization they're downloaded from
         /// </summary>
-        public async Task<IEnumerable<TrakHoundPackageInstallResult>> Install(byte[] packageBytes, string version = null, TrakHoundPackageClient packageClient = null)
+        public async Task<IEnumerable<TrakHoundPackageInstallResult>> Install(byte[] packageBytes, string version = null, TrakHoundPackageClient packageClient = null, TrakHoundPackageOrigin origin = null)
         {
             await RefreshApprovals();
 
-            return await InstallPackage(packageBytes, version, packageClient, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            return await InstallPackage(packageBytes, version, packageClient, origin, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         }
 
         private async Task<IEnumerable<TrakHoundPackageInstallResult>> DownloadAndInstall(ITrakHoundPackageDependency dependency, TrakHoundPackageClient packageClient, HashSet<string> visitedPackageIds)
@@ -1327,13 +1352,13 @@ namespace TrakHound.Packages
                     }
                 }
 
-                return await InstallPackage(packageBytes, dependency.Version, packageClient, visitedPackageIds);
+                return await InstallPackage(packageBytes, dependency.Version, packageClient, client.Origin, visitedPackageIds);
             }
 
             return results;
         }
 
-        private async Task<IEnumerable<TrakHoundPackageInstallResult>> InstallPackage(byte[] packageBytes, string version, TrakHoundPackageClient packageClient, HashSet<string> visitedPackageIds)
+        private async Task<IEnumerable<TrakHoundPackageInstallResult>> InstallPackage(byte[] packageBytes, string version, TrakHoundPackageClient packageClient, TrakHoundPackageOrigin origin, HashSet<string> visitedPackageIds)
         {
             var results = new List<TrakHoundPackageInstallResult>();
 
@@ -1389,7 +1414,14 @@ namespace TrakHound.Packages
 
                     if (TrakHoundPackage.Install(packageBytes, _path))
                     {
-                        lock (_lock) _refusedPackages.Remove(information.Uuid);
+                        lock (_lock)
+                        {
+                            _refusedPackages.Remove(information.Uuid);
+
+                            // Replaced, since the same Version installed from a file no longer came from the server it was downloaded from before
+                            if (origin != null) _origins[information.Uuid] = origin;
+                            else _origins.Remove(information.Uuid);
+                        }
 
                         AddInstalled(information);
 
@@ -1493,6 +1525,7 @@ namespace TrakHound.Packages
                     refusedPackage = _refusedPackages.GetValueOrDefault(packageUuid);
                     _refusedPackages.Remove(packageUuid);
                     _verificationResults.Remove(packageUuid);
+                    _origins.Remove(packageUuid);
                 }
 
                 // A refused Package isn't in use, so there's nothing to unload. It isn't in the packages file either, so it's removed by its directory
@@ -1542,7 +1575,12 @@ namespace TrakHound.Packages
         private bool UpdatePackagesFile(string version = null)
         {
             List<TrakHoundPackage> installedPackages;
-            lock (_lock) installedPackages = _installedPackages.Values.ToList();
+            Dictionary<string, TrakHoundPackageOrigin> origins;
+            lock (_lock)
+            {
+                installedPackages = _installedPackages.Values.ToList();
+                origins = new Dictionary<string, TrakHoundPackageOrigin>(_origins);
+            }
 
             if (!installedPackages.IsNullOrEmpty())
             {
@@ -1554,6 +1592,7 @@ namespace TrakHound.Packages
                     item.Version = !string.IsNullOrEmpty(version) ? version : package.Version;
                     item.Category = package.Category;
                     item.Installed = package.Version;
+                    item.Origin = origins.GetValueOrDefault(package.Uuid);
                     items.Add(item);
                 }
 

@@ -206,7 +206,8 @@
 
             try
             {
-                var results = (await Packages.Install(item.Bytes))?.ToList();
+                // An uploaded file has no origin, so its Updates are checked with the selected Source (its Dependencies are downloaded from there)
+                var results = (await Packages.Install(item.Bytes, null))?.ToList();
                 var success = await Packages.ReportInstallResults(results, item.Package.Id, item.Package.Version);
 
                 var failed = results?.Where(o => !o.Success).Select(o => string.IsNullOrEmpty(o.Message) ? $"{o.PackageId} {o.PackageVersion}".Trim() : o.Message).Where(o => !string.IsNullOrEmpty(o)).ToList();

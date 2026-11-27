@@ -118,18 +118,33 @@ namespace TrakHound.Instance.Notifications
             // A Prerelease is only an Update for a Package that a Configuration includes Prereleases for (ex. "*-*")
             var prereleasePackageIds = PackagesContext.GetPrereleasePackageIds(_instance);
 
-            foreach (var source in sources)
+            // Every Source, and the origins of installed Packages that are another Organization on a Source's server
+            var checks = sources.Select(o => (Name: o.Name ?? o.BaseUrl, Client: PackagesContext.CreateClient(o))).Where(o => o.Client != null).ToList();
+            var origins = packageManager.PackageIds?.Select(o => PackagesContext.GetInstalledOrigin(packageManager, o)).Where(o => o != null)
+                .GroupBy(PackagesContext.GetOriginKey, StringComparer.OrdinalIgnoreCase).Select(o => o.First()) ?? Enumerable.Empty<TrakHoundPackageOrigin>();
+            foreach (var origin in origins)
             {
-                var (packages, error) = await PackagesContext.QueryAvailable(PackagesContext.CreateClient(source), packageManager, prereleasePackageIds);
+                if (checks.Any(o => PackagesContext.IsFrom(origin, o.Client))) continue;
+
+                var client = PackagesContext.CreateOriginClient(sources, origin);
+                if (client != null) checks.Add((origin.ToString(), client));
+            }
+
+            foreach (var check in checks)
+            {
+                var (packages, error) = await PackagesContext.QueryAvailable(check.Client, packageManager, prereleasePackageIds);
                 if (packages == null)
                 {
                     allSourcesReached = false;
-                    _logger?.Debug($"Package Update Check : Source ({source.Name ?? source.BaseUrl}) not available : {error}");
+                    _logger?.Debug($"Package Update Check : Source ({check.Name}) not available : {error}");
                     continue;
                 }
 
                 foreach (var available in packages.Values)
                 {
+                    // A Package is only updated from where it was downloaded (one without an origin, ex. uploaded, from any Source)
+                    if (!PackagesContext.IsFrom(PackagesContext.GetInstalledOrigin(packageManager, available.Id), check.Client)) continue;
+
                     var includePrereleases = prereleasePackageIds.Contains(available.Id);
                     var installed = PackagesContext.GetInstalledLatest(packageManager, available.Id, includePrereleases);
                     var update = PackagesContext.GetUpdate(available, installed, includePrereleases);
@@ -138,7 +153,7 @@ namespace TrakHound.Instance.Notifications
                     var existing = updates.GetValueOrDefault(update.Id);
                     if (existing == null || PackagesContext.GetUpdate(update, existing.Package, includePrereleases) != null)
                     {
-                        updates[update.Id] = new PackageUpdate(update, installed.Version, source.Name ?? source.BaseUrl);
+                        updates[update.Id] = new PackageUpdate(update, installed.Version, check.Name);
                     }
                 }
             }

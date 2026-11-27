@@ -35,6 +35,11 @@ namespace TrakHound.Packages
         /// </summary>
         public string Organization { get; set; }
 
+        /// <summary>
+        /// The server and Organization that Packages this Client downloads come from (null without an Organization)
+        /// </summary>
+        public TrakHoundPackageOrigin Origin => !string.IsNullOrEmpty(Organization) ? new TrakHoundPackageOrigin(_baseUrl, Organization) : null;
+
         private Dictionary<string, string> ApiTokenHeader
         {
             get

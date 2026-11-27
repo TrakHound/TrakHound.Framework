@@ -59,7 +59,9 @@ namespace TrakHound.Instance.Pages.Packages
         private readonly ITrakHoundInstance _instance;
         private readonly RemotesConfiguration _remotesConfiguration;
         private readonly object _lock = new object();
-        private Dictionary<string, TrakHoundPackage> _sourcePackages = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase); // Package ID => Latest
+        private Dictionary<string, TrakHoundPackage> _sourcePackages = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase); // Package ID => Latest on the selected Source
+        private Dictionary<string, TrakHoundPackage> _availablePackages = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase); // Package ID => What an Update is compared with (from the installed Package's origin)
+        private Dictionary<string, TrakHoundPackageClient> _availableClients = new Dictionary<string, TrakHoundPackageClient>(); // Package UUID => Client for an available Package that isn't on the selected Source
         private int _sourceVersion;
         private HashSet<string> _sourcePrereleasePackageIds; // The Packages that the Source's Versions were selected with Prereleases for
 
@@ -216,7 +218,12 @@ namespace TrakHound.Instance.Pages.Packages
 
             if (PackageClient == null)
             {
-                lock (_lock) _sourcePackages = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase);
+                lock (_lock)
+                {
+                    _sourcePackages = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase);
+                    _availablePackages = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase);
+                    _availableClients = new Dictionary<string, TrakHoundPackageClient>();
+                }
                 SourceStatus = PackageSourceStatus.None;
                 SourceError = null;
                 NotifyChanged();
@@ -231,6 +238,7 @@ namespace TrakHound.Instance.Pages.Packages
             lock (_lock) _sourcePrereleasePackageIds = prereleasePackageIds;
 
             var (packages, error) = await QueryAvailable(PackageClient, PackageManager, prereleasePackageIds);
+            var (availablePackages, availableClients) = await QueryOrigins(PackageClient, packages, Sources, PackageManager, prereleasePackageIds);
 
             // Ignore the result if another Source was selected meanwhile
             if (version != _sourceVersion) return;
@@ -238,6 +246,8 @@ namespace TrakHound.Instance.Pages.Packages
             lock (_lock)
             {
                 _sourcePackages = packages ?? new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase);
+                _availablePackages = availablePackages;
+                _availableClients = availableClients;
             }
 
             SourceStatus = packages != null ? PackageSourceStatus.Online : PackageSourceStatus.Offline;
@@ -337,12 +347,115 @@ namespace TrakHound.Instance.Pages.Packages
         }
 
         /// <summary>
-        /// The Version of the Package available from the selected Source that an Update is compared with (null if not available)
+        /// What each installed Package's Updates are compared with. A Package downloaded from a Package Server is compared with the Server and
+        /// Organization it came from (its origin), whichever Source is selected, so a Package with the same ID in another Organization isn't
+        /// offered as its Update. An origin that can't be checked (its server isn't a Source any more, or it didn't answer) offers no Update.
+        /// A Package without an origin (ex. uploaded) is compared with the selected Source, as before origins were recorded.
+        /// Returns the Packages by ID, and the Client for each (by UUID) that isn't on the selected Source
+        /// </summary>
+        public static async Task<(Dictionary<string, TrakHoundPackage> Packages, Dictionary<string, TrakHoundPackageClient> Clients)> QueryOrigins(
+            TrakHoundPackageClient selectedClient, Dictionary<string, TrakHoundPackage> selectedPackages, IEnumerable<RemoteConfiguration> sources,
+            TrakHoundPackageManager packageManager, HashSet<string> prereleasePackageIds)
+        {
+            var available = new Dictionary<string, TrakHoundPackage>(StringComparer.OrdinalIgnoreCase);
+            var clients = new Dictionary<string, TrakHoundPackageClient>();
+
+            // Installed Packages by origin. Others (no origin, or from the selected Source) use the selected Source
+            var otherOrigins = new Dictionary<string, (TrakHoundPackageOrigin Origin, List<string> PackageIds)>(StringComparer.OrdinalIgnoreCase);
+            var otherPackageIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var packageId in packageManager?.PackageIds ?? Enumerable.Empty<string>())
+            {
+                var origin = GetInstalledOrigin(packageManager, packageId);
+                if (IsFrom(origin, selectedClient)) continue;
+
+                otherPackageIds.Add(packageId);
+                var key = GetOriginKey(origin);
+                if (!otherOrigins.TryGetValue(key, out var group)) otherOrigins[key] = group = (origin, new List<string>());
+                group.PackageIds.Add(packageId);
+            }
+
+            if (selectedPackages != null)
+            {
+                foreach (var package in selectedPackages.Values)
+                {
+                    if (!otherPackageIds.Contains(package.Id)) available[package.Id] = package;
+                }
+            }
+
+            await Task.WhenAll(otherOrigins.Values.Select(async group =>
+            {
+                var client = CreateOriginClient(sources, group.Origin);
+                if (client == null) return;
+
+                var (packages, _) = await QueryAvailable(client, packageManager, prereleasePackageIds);
+                if (packages == null) return;
+
+                lock (available)
+                {
+                    foreach (var packageId in group.PackageIds)
+                    {
+                        var package = packages.GetValueOrDefault(packageId);
+                        if (package == null) continue;
+
+                        available[packageId] = package;
+                        if (!string.IsNullOrEmpty(package.Uuid)) clients[package.Uuid] = client;
+                    }
+                }
+            }));
+
+            return (available, clients);
+        }
+
+        /// <summary>
+        /// Where the newest installed Version of a Package was downloaded from (null if unknown, ex. uploaded)
+        /// </summary>
+        public static TrakHoundPackageOrigin GetInstalledOrigin(TrakHoundPackageManager packageManager, string packageId)
+        {
+            var installed = packageManager?.Resolve(packageId, TrakHoundPackage.WilcardVersion + TrakHoundPackage.PrereleaseWildcardSuffix);
+            return installed != null ? packageManager.GetOrigin(installed.Id, installed.Version) : null;
+        }
+
+        /// <summary>
+        /// Whether a Package with the origin can be updated from the Client : the origin is the Client's server and Organization, or isn't known
+        /// </summary>
+        public static bool IsFrom(TrakHoundPackageOrigin origin, TrakHoundPackageClient client)
+        {
+            return origin == null || (client != null && origin.Matches(client.BaseUrl, client.Organization));
+        }
+
+        public static string GetOriginKey(TrakHoundPackageOrigin origin) => $"{origin?.Server?.TrimEnd('/')}|{origin?.Organization}";
+
+        /// <summary>
+        /// A Client for an origin : the Source with that server and Organization, else another Organization of a Source with that server (with its
+        /// Access Token). Null if no Source is on that server any more, so a server that was removed isn't contacted
+        /// </summary>
+        public static TrakHoundPackageClient CreateOriginClient(IEnumerable<RemoteConfiguration> sources, TrakHoundPackageOrigin origin)
+        {
+            if (origin == null || sources == null) return null;
+
+            var source = sources.FirstOrDefault(o => origin.Matches(o.BaseUrl, o.Organization));
+            if (source != null) return CreateClient(source);
+
+            source = sources.FirstOrDefault(o => TrakHoundPackageOrigin.IsSameServer(o.BaseUrl, origin.Server));
+            return source != null ? CreateClient(source)?.ForOrganization(origin.Organization) : null;
+        }
+
+        /// <summary>
+        /// The Client for a Package listed as available from another origin than the selected Source (null if it's from the selected Source)
+        /// </summary>
+        public TrakHoundPackageClient GetAvailableClient(TrakHoundPackage package)
+        {
+            if (string.IsNullOrEmpty(package?.Uuid)) return null;
+            lock (_lock) return _availableClients.GetValueOrDefault(package.Uuid);
+        }
+
+        /// <summary>
+        /// The Version of the Package that an Update is compared with (null if not available) : from the installed Package's origin, else the selected Source
         /// </summary>
         public TrakHoundPackage GetSourceLatest(string packageId)
         {
             if (string.IsNullOrEmpty(packageId)) return null;
-            lock (_lock) return _sourcePackages.GetValueOrDefault(packageId);
+            lock (_lock) return _availablePackages.GetValueOrDefault(packageId);
         }
 
         /// <summary>
@@ -464,12 +577,13 @@ namespace TrakHound.Instance.Pages.Packages
 
         /// <summary>
         /// Install a Package (with its Dependencies, downloaded from the selected Source, or from packageClient for a Package found in
-        /// another Organization). Every install the pages make goes through this
+        /// another Organization). The origin is where the Package file was downloaded from (null for an uploaded file), so that its Updates
+        /// are checked there. Every install the pages make goes through this
         /// </summary>
-        public async Task<IEnumerable<TrakHoundPackageInstallResult>> Install(byte[] packageBytes, TrakHoundPackageClient packageClient = null)
+        public async Task<IEnumerable<TrakHoundPackageInstallResult>> Install(byte[] packageBytes, TrakHoundPackageOrigin origin, TrakHoundPackageClient packageClient = null)
         {
             DemandInstall(packageBytes);
-            return await PackageManager.Install(packageBytes, packageClient: packageClient ?? PackageClient);
+            return await PackageManager.Install(packageBytes, packageClient: packageClient ?? PackageClient, origin: origin);
         }
 
         public bool Uninstall(string packageId, string packageVersion)
@@ -488,13 +602,14 @@ namespace TrakHound.Instance.Pages.Packages
 
         /// <summary>
         /// Download a Package from the selected Source and install it (with its Dependencies), adding a default Configuration if it doesn't have one.
-        /// A Package found in another Organization of the Source's server is downloaded with packageClient (that Organization), and so are its Dependencies
+        /// A Package found in another Organization of the Source's server is downloaded with packageClient (that Organization), and so are its Dependencies.
+        /// An Update found at an installed Package's origin (see GetUpdate) is downloaded from there
         /// </summary>
         public async Task<bool> InstallFromSource(TrakHoundPackage package, TrakHoundPackageClient packageClient = null)
         {
             if (package == null) return false;
 
-            var client = packageClient ?? PackageClient;
+            var client = packageClient ?? GetAvailableClient(package) ?? PackageClient;
             if (client == null)
             {
                 Notify(PackageNotificationType.Error, $"Install {package.Id} Failed", "No Package Source is selected");
@@ -511,7 +626,7 @@ namespace TrakHound.Instance.Pages.Packages
                     return false;
                 }
 
-                var results = await Install(packageBytes, client);
+                var results = await Install(packageBytes, client.Origin, client);
                 return await ReportInstallResults(results, package.Id, package.Version);
             }
             catch (Exception ex)
@@ -566,7 +681,38 @@ namespace TrakHound.Instance.Pages.Packages
             }
 
             NotifyChanged();
+
+            // The installed Packages' origins changed, so what their Updates are compared with is read again
+            if (installed.Count > 0) _ = RefreshAvailable();
+
             return success;
+        }
+
+        /// <summary>
+        /// Read again what the installed Packages' Updates are compared with (their origins changed), keeping the selected Source's Packages
+        /// </summary>
+        private async Task RefreshAvailable()
+        {
+            try
+            {
+                var version = _sourceVersion;
+                var client = PackageClient;
+                var prereleasePackageIds = GetPrereleasePackageIds(_instance);
+
+                Dictionary<string, TrakHoundPackage> sourcePackages;
+                lock (_lock) sourcePackages = _sourcePackages;
+
+                var (availablePackages, availableClients) = await QueryOrigins(client, sourcePackages, Sources, PackageManager, prereleasePackageIds);
+                if (version != _sourceVersion) return; // A newer refresh applies its own
+
+                lock (_lock)
+                {
+                    _availablePackages = availablePackages;
+                    _availableClients = availableClients;
+                }
+                NotifyChanged();
+            }
+            catch { } // Shown again on the next refresh
         }
 
         #endregion

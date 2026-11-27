@@ -534,7 +534,7 @@
                     {
                         // Install using PackageManager
                         TrakHound.Instance.Pages.Packages.PackagesContext.DemandInstall(packageBytes);
-                        var results = await PackageManager.Install(packageBytes, packageClient: packageClient);
+                        var results = await PackageManager.Install(packageBytes, packageClient: packageClient, origin: packageClient.Origin);
                         if (!results.IsNullOrEmpty())
                         {
                             foreach (var result in results)
