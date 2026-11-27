@@ -35,45 +35,79 @@
     color: var(--textMild);
 }
 
-/* Keep the area fill light so the 2px line reads as the primary mark */
-.metrics-chart ::deep .rz-area-series path[stroke="none"] {
-    fill-opacity: 0.2;
+/* The canvas and the tooltip are added to the plot by the script (wwwroot/js/metrics-chart.js), so the tooltip is styled with ::deep */
+.metrics-chart-plot {
+    position: relative;
+    height: 180px;
 }
 
-/* Recessive axes : tick labels in muted ink */
-.metrics-chart ::deep .rz-tick-text {
-    fill: var(--textMild);
-}
-
-.metrics-chart ::deep .rz-legend-item-text {
-    color: var(--textMild);
-    font-size: var(--fontSizeSm);
-}
-
-.metrics-chart-tooltip {
-    display: flex;
-    flex-direction: column;
-    font-size: var(--fontSizeSm);
-}
-
-    .metrics-chart-tooltip .tooltip-time {
-        color: var(--textMild);
+    .metrics-chart-plot.with-legend {
+        height: 154px;
     }
 
-    .metrics-chart-tooltip .tooltip-series {
+.metrics-chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 16px;
+    height: 26px;
+    padding-top: 6px;
+    font-size: var(--fontSizeSm);
+    color: var(--textMild);
+}
+
+    .metrics-chart-legend .legend-item {
         display: flex;
         align-items: center;
         gap: 6px;
     }
 
-    .metrics-chart-tooltip .tooltip-swatch {
+    .metrics-chart-legend .legend-swatch {
         display: inline-block;
         width: 10px;
         height: 2px;
         border-radius: 1px;
     }
 
-    .metrics-chart-tooltip .tooltip-value {
-        font-weight: bold;
-        font-variant-numeric: tabular-nums;
-    }
+.metrics-chart ::deep .metrics-chart-tooltip {
+    position: absolute;
+    top: 6px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 9px;
+    font-size: var(--fontSizeSm);
+    white-space: nowrap;
+    color: var(--textDark);
+    background: var(--panelBackground);
+    border: 1px solid var(--borderColorLight);
+    border-radius: 3px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    pointer-events: none;
+}
+
+.metrics-chart ::deep .tooltip-time {
+    color: var(--textMild);
+    font-variant-numeric: tabular-nums;
+}
+
+.metrics-chart ::deep .tooltip-series {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.metrics-chart ::deep .tooltip-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.metrics-chart ::deep .tooltip-value {
+    margin-left: auto;
+    padding-left: 10px;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+}

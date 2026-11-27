@@ -1,5 +1,8 @@
-@* Plots one or more values of a time-series Sample over time (one value axis, shared by all Series) *@
+@* Plots one or more values of a time-series Sample over time (one value axis, shared by all Series).
+   The chart is drawn in the browser (wwwroot/js/metrics-chart.js), so a live chart moves all the time instead of only when a Sample is added. *@
 @typeparam TItem
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 <div class="metrics-chart">
     <div class="metrics-chart-header">
@@ -7,39 +10,21 @@
         <span class="metrics-chart-subtitle">@Subtitle</span>
     </div>
 
-    @if (_hasPoints)
+    @if (HasData)
     {
-        <RadzenChart Style="height: 180px; width: 100%;">
-            @foreach (var line in _lines)
-            {
-                if (Area)
+        var legend = _series.Count > 1;
+
+        <div class="metrics-chart-plot @(legend ? "with-legend" : null)" @ref="_plot" role="img" aria-label="@GetDescription()"></div>
+
+        @if (legend)
+        {
+            <div class="metrics-chart-legend" aria-hidden="true">
+                @foreach (var series in _series)
                 {
-                    <RadzenAreaSeries TItem="ChartPoint" @key="line.Series.Property" Data="@line.Points" CategoryProperty="Timestamp" ValueProperty="Value" Title="@line.Series.Title" Stroke="@line.Series.Color" StrokeWidth="2" Fill="@line.Series.Color" Smooth="false">
-                        <TooltipTemplate Context="point">
-                            @Tooltip(point, line.Series)
-                        </TooltipTemplate>
-                    </RadzenAreaSeries>
+                    <span class="legend-item" @key="series.Property"><span class="legend-swatch" style="background: @series.Color;"></span>@series.Title</span>
                 }
-                else
-                {
-                    <RadzenLineSeries TItem="ChartPoint" @key="line.Series.Property" Data="@line.Points" CategoryProperty="Timestamp" ValueProperty="Value" Title="@line.Series.Title" Stroke="@line.Series.Color" StrokeWidth="2" Smooth="false">
-                        <ChildContent>
-                            <RadzenMarkers MarkerType="MarkerType.None" />
-                        </ChildContent>
-                        <TooltipTemplate Context="point">
-                            @Tooltip(point, line.Series)
-                        </TooltipTemplate>
-                    </RadzenLineSeries>
-                }
-            }
-            <RadzenCategoryAxis Formatter="@FormatTimestamp" Padding="0">
-                <RadzenGridLines Visible="false" />
-            </RadzenCategoryAxis>
-            <RadzenValueAxis Min="0" Max="@GetAxisMax()" Step="@GetAxisStep()" Formatter="@FormatAxisValue">
-                <RadzenGridLines Visible="true" LineType="LineType.Dashed" />
-            </RadzenValueAxis>
-            <RadzenLegend Visible="@(_lines.Length > 1)" Position="LegendPosition.Bottom" />
-        </RadzenChart>
+            </div>
+        }
     }
     else
     {
@@ -48,13 +33,6 @@
 </div>
 
 @code {
-
-    // Bucket widths (seconds) used when there are more Samples than MaxPoints
-    private static readonly int[] _bucketSeconds = new[] { 1, 2, 3, 4, 5, 6, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600 };
-
-    // How far past MaxPoints a bucket width may go (so a window of exactly MaxPoints x width doesn't flip to the next width on timer jitter)
-    private const double _maxPointsTolerance = 1.2;
-
 
     [Parameter]
     public string Title { get; set; }
@@ -81,12 +59,11 @@
     public Func<TItem, string, double> GetValue { get; set; }
 
     /// <summary>
-    /// The most points to draw per Series. More Samples than this are combined into time buckets
-    /// (the average, or the maximum for Max / Peak Series) and only complete buckets are drawn,
-    /// so the chart redraws once per bucket instead of on every Sample
+    /// The Samples are read as they happen, so the chart scrolls with the clock. Set to false for Samples that
+    /// cover a fixed time (ex. time buckets), so the chart shows all of them and doesn't move
     /// </summary>
     [Parameter]
-    public int MaxPoints { get; set; } = 60;
+    public bool Live { get; set; } = true;
 
     /// <summary>
     /// Fill the area under the line (use for a single Series)
@@ -104,235 +81,215 @@
     public Func<double, string> ValueFormatter { get; set; }
 
     /// <summary>
-    /// Format of the (local) Timestamps on the time axis and in the Tooltip
+    /// Format of the (local) Timestamps in the Tooltip
     /// </summary>
     [Parameter]
     public string TimestampFormat { get; set; } = "HH:mm:ss";
 
 
-    public class ChartPoint
-    {
-        public DateTime Timestamp { get; }
+    private IReadOnlyList<TItem> _samples = Array.Empty<TItem>();
+    private IReadOnlyList<MetricsChartSeries> _series = Array.Empty<MetricsChartSeries>();
 
-        public double Value { get; }
+    private bool HasData => _samples.Count > 1 && _series.Count > 0 && GetTimestamp != null && GetValue != null;
 
+    // What the browser has been sent, so only the Samples that were added are sent after the first time
+    private ElementReference _plot;
+    private string _sentPlotId;
+    private IEnumerable<MetricsChartSeries> _sentSeries;
+    private TItem _sentSample;
+    private DateTime _sentTimestamp;
+    private double[] _sentValues;
+    private string _sentAxis;
+    private bool? _matchByReference;
+    private bool _disposed;
 
-        public ChartPoint(DateTime timestamp, double value)
-        {
-            Timestamp = timestamp;
-            Value = value;
-        }
-    }
-
-    private class ChartLine
-    {
-        public MetricsChartSeries Series { get; set; }
-
-        public ChartPoint[] Points { get; set; }
-    }
-
-
-    private ChartLine[] _lines = Array.Empty<ChartLine>();
-    private bool _hasPoints;
-    private bool _shouldRender = true;
-
-    // The parameters the drawn points were last built from (pages pass a new Samples collection on each render)
-    private IEnumerable<TItem> _samples;
-    private IEnumerable<MetricsChartSeries> _series;
-    private object _max;
-    private string _title;
-    private string _subtitle;
-    private bool _area;
-    private string _timestampFormat;
-    private Func<double, string> _valueFormatter;
-
-
-    private RenderFragment Tooltip(ChartPoint point, MetricsChartSeries series) =>
-        @<div class="metrics-chart-tooltip">
-            <span class="tooltip-time">@point.Timestamp.ToLocalTime().ToString(TimestampFormat)</span>
-            <span class="tooltip-series"><span class="tooltip-swatch" style="background: @series.Color;"></span>@series.Title</span>
-            <span class="tooltip-value">@FormatValue(point.Value)</span>
-        </div>;
 
     // When no Max is set, scale the axis to a rounded value above the data (1, 2, 2.5, 5 x 10^n)
-    // so the axis always has labelled ticks (the automatic scale only labels 0 for small values)
-    private double? _axisMax;
-    private double? _axisStep;
+    // so the axis always has labelled ticks
+    private double _axisMax = 1;
+    private double _axisStep = 1;
 
     protected override void OnParametersSet()
     {
-        var seriesChanged = !ReferenceEquals(Series, _series);
-        var maxChanged = !Equals(Max, _max);
-        var displayChanged = Title != _title || Subtitle != _subtitle || Area != _area || TimestampFormat != _timestampFormat || !Equals(ValueFormatter, _valueFormatter);
+        _samples = Samples as IReadOnlyList<TItem> ?? Samples?.ToArray() ?? Array.Empty<TItem>();
+        _series = Series?.Where(o => o != null).ToArray() ?? Array.Empty<MetricsChartSeries>();
 
-        var pointsChanged = false;
-        if (seriesChanged || !ReferenceEquals(Samples, _samples))
+        if (Max != null)
         {
-            var lines = BuildLines();
-            pointsChanged = seriesChanged || !LinesEqual(lines, _lines);
-            if (pointsChanged)
-            {
-                _lines = lines;
-                _hasPoints = lines.Length > 0 && lines[0].Points.Length > 1;
-            }
+            _axisMax = Math.Max(Convert.ToDouble(Max), double.Epsilon);
+            _axisStep = GetNiceScale(_axisMax).step;
         }
-
-        if (pointsChanged || maxChanged) UpdateScale();
-
-        _samples = Samples;
-        _series = Series;
-        _max = Max;
-        _title = Title;
-        _subtitle = Subtitle;
-        _area = Area;
-        _timestampFormat = TimestampFormat;
-        _valueFormatter = ValueFormatter;
-
-        // Skip the (SVG) chart render when nothing drawn changed
-        _shouldRender = pointsChanged || maxChanged || displayChanged;
-    }
-
-    protected override bool ShouldRender()
-    {
-        var shouldRender = _shouldRender;
-        _shouldRender = false;
-        return shouldRender;
-    }
-
-    private ChartLine[] BuildLines()
-    {
-        var series = Series?.Where(o => o != null).ToArray() ?? Array.Empty<MetricsChartSeries>();
-        var lines = series.Select(o => new ChartLine { Series = o, Points = Array.Empty<ChartPoint>() }).ToArray();
-
-        var samples = Samples as IReadOnlyList<TItem> ?? Samples?.ToArray() ?? Array.Empty<TItem>();
-        if (lines.Length < 1 || samples.Count < 2 || GetTimestamp == null || GetValue == null) return lines;
-
-        var timestamps = new DateTime[samples.Count];
-        for (var i = 0; i < samples.Count; i++) timestamps[i] = GetTimestamp(samples[i]);
-
-        var bucket = GetBucketSize(timestamps);
-        if (bucket <= TimeSpan.Zero)
-        {
-            // Few enough Samples to draw each one
-            foreach (var line in lines)
-            {
-                var points = new ChartPoint[samples.Count];
-                for (var i = 0; i < samples.Count; i++) points[i] = new ChartPoint(timestamps[i], GetValue(samples[i], line.Series.Property));
-                line.Points = points;
-            }
-            return lines;
-        }
-
-        // Draw only complete buckets : the oldest bucket is partly trimmed from the window and the newest is still filling,
-        // so leaving both out keeps the drawn points unchanged until the next bucket completes
-        var firstIndex = timestamps[0].Ticks / bucket.Ticks;
-        var lastIndex = timestamps[timestamps.Length - 1].Ticks / bucket.Ticks;
-        var peaks = lines.Select(o => IsPeak(o.Series)).ToArray();
-        var linePoints = lines.Select(o => new List<ChartPoint>()).ToArray();
-
-        var start = 0;
-        while (start < samples.Count)
-        {
-            var index = timestamps[start].Ticks / bucket.Ticks;
-            var end = start + 1;
-            while (end < samples.Count && timestamps[end].Ticks / bucket.Ticks == index) end++;
-
-            if (index != firstIndex && index != lastIndex)
-            {
-                var timestamp = new DateTime(index * bucket.Ticks, timestamps[start].Kind);
-                for (var l = 0; l < lines.Length; l++)
-                {
-                    var property = lines[l].Series.Property;
-                    var value = peaks[l] ? double.MinValue : 0;
-                    for (var i = start; i < end; i++)
-                    {
-                        var sampleValue = GetValue(samples[i], property);
-                        if (peaks[l]) value = Math.Max(value, sampleValue);
-                        else value += sampleValue;
-                    }
-                    if (!peaks[l]) value /= end - start;
-
-                    linePoints[l].Add(new ChartPoint(timestamp, value));
-                }
-            }
-
-            start = end;
-        }
-
-        for (var l = 0; l < lines.Length; l++) lines[l].Points = linePoints[l].ToArray();
-        return lines;
-    }
-
-    // Zero when every Sample can be drawn
-    private TimeSpan GetBucketSize(DateTime[] timestamps)
-    {
-        var maxPoints = Math.Max(MaxPoints, 2);
-        if (timestamps.Length <= maxPoints) return TimeSpan.Zero;
-
-        var span = (timestamps[timestamps.Length - 1] - timestamps[0]).TotalSeconds;
-        if (span <= 0) return TimeSpan.Zero;
-
-        foreach (var seconds in _bucketSeconds)
-        {
-            if (span / seconds <= maxPoints * _maxPointsTolerance) return TimeSpan.FromSeconds(seconds);
-        }
-
-        return TimeSpan.FromSeconds(Math.Ceiling(span / maxPoints));
-    }
-
-    // Peak Series show the highest value in each bucket (averaging would hide the peaks); everything else (rates, levels) the average
-    private static bool IsPeak(MetricsChartSeries series)
-    {
-        var property = series.Property ?? "";
-        return property.StartsWith("Max", StringComparison.OrdinalIgnoreCase) || property.StartsWith("Peak", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool LinesEqual(ChartLine[] a, ChartLine[] b)
-    {
-        if (a.Length != b.Length) return false;
-
-        for (var l = 0; l < a.Length; l++)
-        {
-            if (!ReferenceEquals(a[l].Series, b[l].Series)) return false;
-
-            var x = a[l].Points;
-            var y = b[l].Points;
-            if (x.Length != y.Length) return false;
-
-            for (var i = 0; i < x.Length; i++)
-            {
-                if (x[i].Timestamp != y[i].Timestamp || !x[i].Value.Equals(y[i].Value)) return false;
-            }
-        }
-
-        return true;
-    }
-
-    private void UpdateScale()
-    {
-        _axisMax = null;
-        _axisStep = null;
-
-        if (Max == null && _lines.Length > 0)
+        else
         {
             var dataMax = 0.0;
-            foreach (var line in _lines)
+            if (HasData)
             {
-                foreach (var point in line.Points)
+                foreach (var sample in _samples)
                 {
-                    dataMax = Math.Max(dataMax, point.Value);
+                    foreach (var series in _series)
+                    {
+                        var value = GetValue(sample, series.Property);
+                        if (double.IsFinite(value)) dataMax = Math.Max(dataMax, value);
+                    }
                 }
             }
 
-            var (niceMax, step) = GetNiceScale(dataMax);
-            _axisMax = niceMax;
-            _axisStep = step;
+            (_axisMax, _axisStep) = GetNiceScale(dataMax);
         }
     }
 
-    private object GetAxisMax() => Max ?? _axisMax;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!HasData)
+        {
+            _sentPlotId = null; // The plot was removed, so it's sent everything when it's shown again
+            return;
+        }
 
-    private object GetAxisStep() => Max == null ? _axisStep : null;
+        try
+        {
+            var update = GetUpdate();
+            if (update != null && !_disposed) await JS.InvokeVoidAsync("thMetricsChart.update", _plot, update);
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        catch (OperationCanceledException) { }
+    }
+
+    /// <summary>
+    /// What to send to the browser : the Samples added since it was sent last (or all of them, when they aren't the ones
+    /// it has), with the value axis. Null when nothing changed.
+    /// </summary>
+    private object GetUpdate()
+    {
+        var samples = _samples;
+
+        // The Samples are added to when the one that was sent last is still among them
+        var reset = _sentPlotId != _plot.Id || !ReferenceEquals(_sentSeries, Series) || _sentValues == null;
+        var start = 0;
+        if (!reset)
+        {
+            var index = FindSent(samples);
+            if (index >= 0) start = index + 1;
+            else reset = true;
+        }
+
+        var ticks = new List<object>();
+        for (var i = 0; i * _axisStep <= _axisMax * 1.0001 && i < 20; i++)
+        {
+            var value = i * _axisStep;
+            ticks.Add(new { v = value, l = FormatValue(value) ?? "" });
+        }
+
+        // The Instance's Time Zone, which the time axis is labelled in (as the rest of the page is)
+        var offset = (int)Math.Round(TimeZoneInfo.Local.GetUtcOffset(DateTime.UtcNow).TotalMinutes);
+        var axis = $"{_axisMax:R}|{string.Join(",", ticks.Select(o => o.ToString()))}|{offset}|{Area}|{Live}";
+
+        var added = samples.Count - start;
+        if (!reset && added == 0 && axis == _sentAxis) return null;
+
+        var times = new long[added];
+        var timeLabels = new string[added];
+        for (var i = 0; i < added; i++)
+        {
+            var timestamp = GetTimestamp(samples[start + i]);
+            times[i] = GetMilliseconds(timestamp);
+            timeLabels[i] = timestamp.ToLocalTime().ToString(TimestampFormat);
+        }
+
+        var series = new List<object>();
+        foreach (var item in _series)
+        {
+            var values = new double[added];
+            var labels = new string[added];
+            for (var i = 0; i < added; i++)
+            {
+                var value = GetValue(samples[start + i], item.Property);
+                if (!double.IsFinite(value)) value = 0;
+
+                values[i] = value;
+                labels[i] = FormatValue(value) ?? "";
+            }
+
+            series.Add(new { title = item.Title, color = item.Color, values, labels });
+        }
+
+        var last = samples[samples.Count - 1];
+        _sentPlotId = _plot.Id;
+        _sentSeries = Series;
+        _sentSample = last;
+        _sentTimestamp = GetTimestamp(last);
+        _sentValues = GetValues(last);
+        _sentAxis = axis;
+
+        return new
+        {
+            reset,
+            live = Live,
+            times,
+            timeLabels,
+            series,
+            area = Area,
+            max = _axisMax,
+            ticks,
+            offset,
+            span = GetMilliseconds(GetTimestamp(last)) - GetMilliseconds(GetTimestamp(samples[0]))
+        };
+    }
+
+    /// <summary>
+    /// The index of the Sample that was sent last, or -1 when it isn't among the Samples (they're other Samples, ex. of another item).
+    /// Pages that keep their Samples pass the same objects each time, so they're found by reference. Samples that are read
+    /// again each time (ex. from a remote Instance) are found by their Timestamp and values instead.
+    /// </summary>
+    private int FindSent(IReadOnlyList<TItem> samples)
+    {
+        if (_matchByReference != false)
+        {
+            for (var i = samples.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(samples[i], _sentSample))
+                {
+                    _matchByReference = true;
+                    return i;
+                }
+            }
+
+            // Once the Samples are known to be kept, one that is missing means they were replaced
+            if (_matchByReference == true) return -1;
+        }
+
+        for (var i = samples.Count - 1; i >= 0; i--)
+        {
+            var timestamp = GetTimestamp(samples[i]);
+            if (timestamp < _sentTimestamp) break;
+            if (timestamp == _sentTimestamp)
+            {
+                if (!GetValues(samples[i]).SequenceEqual(_sentValues)) return -1;
+
+                _matchByReference = false;
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private double[] GetValues(TItem sample) => _series.Select(o => GetValue(sample, o.Property)).ToArray();
+
+    private static long GetMilliseconds(DateTime timestamp)
+    {
+        var utc = timestamp.Kind == DateTimeKind.Local ? timestamp.ToUniversalTime() : timestamp;
+        return (long)(utc - DateTime.UnixEpoch).TotalMilliseconds;
+    }
+
+    // The chart is drawn on a canvas, so what it shows now is described for a screen reader
+    private string GetDescription()
+    {
+        var latest = _samples[_samples.Count - 1];
+        var values = _series.Select(o => $"{o.Title} {FormatValue(GetValue(latest, o.Property))}");
+        return $"{Title} : {string.Join(", ", values)}";
+    }
 
     private static (double max, double step) GetNiceScale(double value)
     {
@@ -350,17 +307,18 @@
 
     private string FormatValue(double value) => ValueFormatter != null ? ValueFormatter(value) : value.ToString("0.##");
 
-    private string FormatAxisValue(object value)
+    public async ValueTask DisposeAsync()
     {
-        if (value is double d) return FormatValue(d);
-        if (value is int i) return FormatValue(i);
-        return value?.ToString();
-    }
+        _disposed = true;
 
-    private string FormatTimestamp(object value)
-    {
-        if (value is DateTime timestamp) return timestamp.ToLocalTime().ToString(TimestampFormat);
-        return value?.ToString();
+        try
+        {
+            if (_sentPlotId != null) await JS.InvokeVoidAsync("thMetricsChart.dispose", _plot);
+        }
+        catch (Exception)
+        {
+            // The browser has gone (the script also cleans up a chart that is removed from the page)
+        }
     }
 
 }

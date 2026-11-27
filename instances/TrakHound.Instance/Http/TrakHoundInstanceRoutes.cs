@@ -45,6 +45,7 @@ namespace TrakHound.Instance.Http
             new TrakHoundInstanceRoute("/_images", "Explorer Images", "Images used by the Explorer"),
             new TrakHoundInstanceRoute("/img", "Images", "Static image files"),
             new TrakHoundInstanceRoute("/css", "Stylesheets", "Static CSS files"),
+            new TrakHoundInstanceRoute("/js", "Scripts", "Static script files used by the Admin Interface"),
             new TrakHoundInstanceRoute("/TrakHound.Instance.styles.css", "Instance Stylesheet", "The Admin Interface's scoped CSS bundle")
         };
 
