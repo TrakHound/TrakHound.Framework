@@ -491,7 +491,7 @@ namespace TrakHound.CLI.Packages
 
             var publishSettings = ReadPublishSettings(sourcePath, target);
             if (publishSettings == null) return false;
-            if (!CheckServerOptions(publishSettings, server, organization)) return false;
+            if (!ApplyServerOptions(publishSettings, server, organization)) return false;
             if (!CheckApiTokens(publishSettings)) return false;
             if (!CheckPublishTarget(publishSettings, sourcePath, signer != null, ref allowDirty)) return false;
 
@@ -651,7 +651,7 @@ namespace TrakHound.CLI.Packages
             {
                 publishSettings = ReadPublishSettings(projectDir, target);
                 if (publishSettings == null) return null;
-                if (!CheckServerOptions(publishSettings, server, organization)) return null;
+                if (!ApplyServerOptions(publishSettings, server, organization)) return null;
                 if (!CheckApiTokens(publishSettings)) return null;
                 if (!CheckPublishTarget(publishSettings, projectDir, signer != null, ref allowDirty)) return null;
             }
@@ -769,9 +769,9 @@ namespace TrakHound.CLI.Packages
 
         private const string VersionSuffixDescription = "A Prerelease Label to add to the Version (ex. dev.{timestamp} creates 0.3.4-dev.20261114153000). Replaces the Publish Target's \"versionSuffix\". {timestamp} and {branch} are replaced as in a Target. Instances only select a Prerelease when a Version requests one (ex. \"*-*\") or no Stable Version matches";
 
-        private const string ServerDescription = $"The URL of the TrakHound Package Server to upload the package to (only for a Package without a {TrakHoundPackagePublishSettings.Filename} file)";
+        private const string ServerDescription = $"The URL of the TrakHound Package Server to upload the package to. With a {TrakHoundPackagePublishSettings.Filename} file, it replaces the Publish Target's Package Server (its other settings still apply, and its apiTokenVariable is only used for its own server)";
 
-        private const string OrganizationDescription = $"The Organization to upload the package to (only for a Package without a {TrakHoundPackagePublishSettings.Filename} file)";
+        private const string OrganizationDescription = $"The Organization to upload the package to. With a {TrakHoundPackagePublishSettings.Filename} file, it replaces the Publish Target's Organization";
 
         private const string TargetDescription = $"The Publish Target to publish to (ex. development or release), from the nearest {TrakHoundPackagePublishSettings.Filename}. If not specified, its \"defaultTarget\" is used";
 
@@ -842,7 +842,7 @@ namespace TrakHound.CLI.Packages
             // The same Destinations that PublishPackage() uploads to
             var targets = publishSettings?.Destinations != null
                 ? publishSettings.Destinations.ToList()
-                : new List<TrakHoundPackagePublishDestination> { new TrakHoundPackagePublishDestination { Organization = organization, ManagementServer = server } };
+                : new List<TrakHoundPackagePublishDestination> { new TrakHoundPackagePublishDestination { Organization = organization, PackageServer = server } };
 
             var published = new List<TrakHoundPackagePublishDestination>();
             var unreadable = 0;

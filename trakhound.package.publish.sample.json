@@ -14,7 +14,7 @@
     "development": {
       "destinations": [
         {
-          "managementServer": "http://packages.contoso.local:8472",
+          "packageServer": "http://packages.contoso.local:8472",
           "organization": "Contoso"
         }
       ],
@@ -24,7 +24,7 @@
     "release": {
       "destinations": [
         {
-          "managementServer": "https://packages.contoso.com",
+          "packageServer": "https://packages.contoso.com",
           "organization": "Contoso",
           "apiTokenVariable": "CONTOSO_RELEASE_TOKEN"
         }

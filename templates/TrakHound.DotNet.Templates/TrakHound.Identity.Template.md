@@ -27,9 +27,9 @@ The project name is used as the package `id` in **trakhound.package.json**.
 | `--instanceUrl` | `http://localhost:8472` | The Instance the debug host in **Program.cs** connects to |
 | `--publisher` | | Sets the `publisher` metadata in **trakhound.package.json** |
 | `--description` | | Sets the `description` metadata in **trakhound.package.json** |
-| `--managementServer` | | Sets the Package Server of the `default` Publish Target in **trakhound.package.publish.json**, which is then its `defaultTarget` |
+| `--packageServer` | | Sets the Package Server of the `default` Publish Target in **trakhound.package.publish.json**, which is then its `defaultTarget` |
 | `--organization` | | Sets the Organization of the `default` Publish Target in **trakhound.package.publish.json**, which is then its `defaultTarget` |
-| `--localTarget` | `true` | Adds the `local` Publish Target to **trakhound.package.publish.json** : the Dev Package Server of the development Instance at `instanceUrl` (ex. a `trakhound/instance-dev` container), with a prerelease version so it can be published again with uncommitted changes. Set it to `false` in a repository that has a shared **trakhound.package.publish.json** (without `--managementServer` or `--organization`, the file is then left out) |
+| `--localTarget` | `true` | Adds the `local` Publish Target to **trakhound.package.publish.json** : the Dev Package Server of the development Instance at `instanceUrl` (ex. a `trakhound/instance-dev` container), with a prerelease version so it can be published again with uncommitted changes. Set it to `false` in a repository that has a shared **trakhound.package.publish.json** (without `--packageServer` or `--organization`, the file is then left out) |
 
 ## Project Structure
 | File | Description |

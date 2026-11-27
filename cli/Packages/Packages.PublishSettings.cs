@@ -33,7 +33,7 @@ namespace TrakHound.CLI.Packages
 
         private static readonly string[] _publishSettingsProperties = { "defaultTarget", "targets" };
         private static readonly string[] _publishTargetProperties = { "destinations", "versionSuffix", "allowDirty", "requireSigning" };
-        private static readonly string[] _publishDestinationProperties = { "managementServer", "organization", "apiTokenVariable" };
+        private static readonly string[] _publishDestinationProperties = { "packageServer", "organization", "apiTokenVariable" };
 
 
         /// <summary>
@@ -203,6 +203,12 @@ namespace TrakHound.CLI.Packages
                         {
                             foreach (var property in destination.EnumerateObject())
                             {
+                                if (string.Equals(property.Name, "managementServer", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    Console.Error.WriteLine($"Error : \"managementServer\" in a Destination of Publish Target ({target.Name}) is now \"packageServer\" : ({path})");
+                                    return false;
+                                }
+
                                 if (!_publishDestinationProperties.Contains(property.Name, StringComparer.OrdinalIgnoreCase))
                                 {
                                     Console.Error.WriteLine($"Error : Unknown property \"{property.Name}\" in a Destination of Publish Target ({target.Name}) : ({path}) : Expected {string.Join(", ", _publishDestinationProperties)}");
@@ -242,29 +248,50 @@ namespace TrakHound.CLI.Packages
 
         /// <summary>
         /// Get the Destinations that have a Package Server or Organization set (null if there are none).
-        /// Destinations left blank (ex. a template created without --managementServer) are ignored
+        /// Destinations left blank (ex. a template created without --packageServer) are ignored
         /// </summary>
         private static List<TrakHoundPackagePublishDestination> GetPublishDestinations(IEnumerable<TrakHoundPackagePublishDestination> destinations)
         {
             var result = destinations?
-                .Where(o => o != null && (!string.IsNullOrWhiteSpace(o.ManagementServer) || !string.IsNullOrWhiteSpace(o.Organization)))
+                .Where(o => o != null && (!string.IsNullOrWhiteSpace(o.PackageServer) || !string.IsNullOrWhiteSpace(o.Organization)))
                 .ToList();
 
             return !result.IsNullOrEmpty() ? result : null;
         }
 
         /// <summary>
-        /// --server and --organization are only for a Package without a Publish Settings file. With one, they would be ignored, so the Package would
-        /// go somewhere other than where it was asked to
+        /// With a Publish Target, --server and --organization replace its Destinations with one (ex. a development container on another port),
+        /// and its other settings (versionSuffix, allowDirty, requireSigning) still apply. Either one can be left out when the Target has one
+        /// Destination, which gives the other. The Target's apiTokenVariable isn't used for another Package Server, since its token is for the
+        /// Target's own server : the CLI Configuration's Api Token (TRAKHOUND_API_TOKEN) is used instead.
+        /// Returns false (after writing an error) when the Target has more than one Destination and only one of the two is given
         /// </summary>
-        internal static bool CheckServerOptions(PublishSettings publishSettings, string server, string organization)
+        internal static bool ApplyServerOptions(PublishSettings publishSettings, string server, string organization, bool log = true)
         {
-            if (publishSettings?.HasTarget == true && (!string.IsNullOrEmpty(server) || !string.IsNullOrEmpty(organization)))
+            if (publishSettings?.HasTarget != true || (string.IsNullOrEmpty(server) && string.IsNullOrEmpty(organization))) return true;
+
+            var destinations = publishSettings.Destinations ?? new List<TrakHoundPackagePublishDestination>();
+            var single = destinations.Count == 1 ? destinations[0] : null;
+
+            if (single == null && (string.IsNullOrEmpty(server) || string.IsNullOrEmpty(organization)))
             {
-                Console.Error.WriteLine($"Error : --server and --organization can't be used with a Publish Target : ({publishSettings.Path}) sets the Destinations of ({publishSettings.TargetName})");
+                Console.Error.WriteLine($"Error : Publish Target ({publishSettings.TargetName}) has {destinations.Count} Destinations, so replacing them needs both --server and --organization : ({publishSettings.Path})");
                 return false;
             }
 
+            var packageServer = !string.IsNullOrEmpty(server) ? server : single.PackageServer;
+            var sameServer = single != null && string.Equals(packageServer?.TrimEnd('/'), single.PackageServer?.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+            var destination = new TrakHoundPackagePublishDestination
+            {
+                PackageServer = packageServer,
+                Organization = !string.IsNullOrEmpty(organization) ? organization : single.Organization,
+                ApiTokenVariable = sameServer ? single.ApiTokenVariable : null
+            };
+
+            publishSettings.Destinations = new List<TrakHoundPackagePublishDestination> { destination };
+
+            if (log) Console.WriteLine($"Publish Destination : ({destination.PackageServer} | {destination.Organization}) from --server/--organization, instead of the Destinations of Publish Target ({publishSettings.TargetName})");
             return true;
         }
 
@@ -281,7 +308,7 @@ namespace TrakHound.CLI.Packages
             {
                 if (!string.IsNullOrWhiteSpace(destination.ApiTokenVariable) && PackageClient.GetApiToken(destination) == null)
                 {
-                    Console.Error.WriteLine($"Error : The Environment Variable {destination.ApiTokenVariable.Trim()} isn't set : It holds the Api Token for ({destination.ManagementServer} | {destination.Organization}) in Publish Target ({publishSettings.TargetName}) : ({publishSettings.Path})");
+                    Console.Error.WriteLine($"Error : The Environment Variable {destination.ApiTokenVariable.Trim()} isn't set : It holds the Api Token for ({destination.PackageServer} | {destination.Organization}) in Publish Target ({publishSettings.TargetName}) : ({publishSettings.Path})");
                     success = false;
                 }
             }

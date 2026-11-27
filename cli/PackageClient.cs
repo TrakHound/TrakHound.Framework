@@ -18,7 +18,7 @@ namespace TrakHound.CLI
         {
             var configuration = TrakHoundCliConfiguration.Instance;
 
-            var baseUrl = FirstValue(server, configuration.ManagementServer, TrakHoundCliConfiguration.DefaultManagementServer);
+            var baseUrl = FirstValue(server, configuration.PackageServer, TrakHoundCliConfiguration.DefaultPackageServer);
             var targetOrganization = FirstValue(organization, configuration.Organization, TrakHoundCliConfiguration.DefaultOrganization);
             var token = FirstValue(apiToken, configuration.ApiToken);
 
@@ -43,7 +43,7 @@ namespace TrakHound.CLI
         /// </summary>
         public static TrakHoundPackageClient Get(TrakHoundPackagePublishDestination destination)
         {
-            return Get(destination?.ManagementServer, destination?.Organization, GetApiToken(destination));
+            return Get(destination?.PackageServer, destination?.Organization, GetApiToken(destination));
         }
 
         /// <summary>

@@ -13,8 +13,8 @@ namespace TrakHound.Packages
         /// <summary>
         /// Url of the Package Server
         /// </summary>
-        [JsonPropertyName("managementServer")]
-        public string ManagementServer { get; set; }
+        [JsonPropertyName("packageServer")]
+        public string PackageServer { get; set; }
 
         /// <summary>
         /// Organization to publish the Package to

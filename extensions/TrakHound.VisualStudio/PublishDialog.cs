@@ -173,9 +173,10 @@ namespace TrakHound.VisualStudio
                 }
                 else if (publishing.Any(o => o.SetsServer))
                 {
-                    // --target applies to every Project that publishes, and the CLI refuses a Target for a Project the Build File gives a server
+                    // The server the Build File sets replaces the Publish Target's Destinations, so the Target only gives the version and its settings.
+                    // --target applies to every Project that publishes, so it isn't chosen here
                     choices = PublishTargetChoices.None;
-                    note = "Published to the server the Build File sets (no Publish Target)";
+                    note = "Published to the server the Build File sets (each Project's defaultTarget gives the version)";
                 }
                 else
                 {
@@ -261,7 +262,7 @@ namespace TrakHound.VisualStudio
             IsDefault = isDefault;
 
             Destinations = target.Destinations.Count > 0
-                ? string.Join(Environment.NewLine, target.Destinations.Select(o => $"{o.ManagementServer} | {o.Organization}"))
+                ? string.Join(Environment.NewLine, target.Destinations.Select(o => $"{o.PackageServer} | {o.Organization}"))
                 : "(no Destinations)";
 
             var notes = new List<string>();

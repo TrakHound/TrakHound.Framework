@@ -17,16 +17,16 @@ namespace TrakHound.CLI.Tests
               "defaultTarget": "development",
               "targets": {
                 "development": {
-                  "destinations": [ { "managementServer": "http://dev.test", "organization": "Dev" } ],
+                  "destinations": [ { "packageServer": "http://dev.test", "organization": "Dev" } ],
                   "versionSuffix": "dev{branch}.{timestamp}",
                   "allowDirty": true,
                 },
                 "Release": {
-                  "destinations": [ { "managementServer": "https://packages.test", "organization": "Contoso", "apiTokenVariable": "TEST_RELEASE_TOKEN" } ],
+                  "destinations": [ { "packageServer": "https://packages.test", "organization": "Contoso", "apiTokenVariable": "TEST_RELEASE_TOKEN" } ],
                   "requireSigning": true
                 },
                 "plain": {
-                  "destinations": [ { "managementServer": "http://plain.test", "organization": "Plain" } ]
+                  "destinations": [ { "packageServer": "http://plain.test", "organization": "Plain" } ]
                 }
               }
             }
@@ -70,7 +70,7 @@ namespace TrakHound.CLI.Tests
 
             var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
             Assert.Equal("development", settings.TargetName);
-            Assert.Equal("http://dev.test", Assert.Single(settings.Destinations).ManagementServer);
+            Assert.Equal("http://dev.test", Assert.Single(settings.Destinations).PackageServer);
             Assert.Equal(repo.PathOf("trakhound.package.publish.json"), settings.Path);
         }
 
@@ -106,7 +106,7 @@ namespace TrakHound.CLI.Tests
         public void TheNearestFileIsUsedAsAWhole()
         {
             using var repo = CreateRepository();
-            repo.Write("pkg/trakhound.package.publish.json", """{ "defaultTarget": "own", "targets": { "own": { "destinations": [ { "managementServer": "http://own.test" } ] } } }""");
+            repo.Write("pkg/trakhound.package.publish.json", """{ "defaultTarget": "own", "targets": { "own": { "destinations": [ { "packageServer": "http://own.test" } ] } } }""");
 
             var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
             Assert.Equal("own", settings.TargetName);
@@ -121,14 +121,14 @@ namespace TrakHound.CLI.Tests
             using var repo = CreateRepository();
             Assert.Null(PackagesCommands.GetHiddenPublishSettings(repo.PathOf("trakhound.package.publish.json")));
 
-            repo.Write("pkg/trakhound.package.publish.json", """{ "defaultTarget": "own", "targets": { "own": { "destinations": [ { "managementServer": "http://own.test" } ] } } }""");
+            repo.Write("pkg/trakhound.package.publish.json", """{ "defaultTarget": "own", "targets": { "own": { "destinations": [ { "packageServer": "http://own.test" } ] } } }""");
             Assert.Equal(repo.PathOf("trakhound.package.publish.json"), PackagesCommands.GetHiddenPublishSettings(repo.PathOf("pkg/trakhound.package.publish.json")));
         }
 
         [Fact]
         public void TheTemplatesLocalTarget_IsValid()
         {
-            // trakhound.package.publish.json as the TrakHound templates create it (without --managementServer or --organization)
+            // trakhound.package.publish.json as the TrakHound templates create it (without --packageServer or --organization)
             using var repo = CreateRepository(targets: null);
             repo.Write("pkg/trakhound.package.publish.json", """
                 {
@@ -139,7 +139,7 @@ namespace TrakHound.CLI.Tests
                     "local": {
                       "destinations": [
                         {
-                          "managementServer": "http://localhost:8472",
+                          "packageServer": "http://localhost:8472",
                           "organization": "Dev"
                         }
                       ],
@@ -154,7 +154,7 @@ namespace TrakHound.CLI.Tests
             var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
             Assert.Equal("local", settings.TargetName);
             var destination = Assert.Single(settings.Destinations);
-            Assert.Equal("http://localhost:8472", destination.ManagementServer);
+            Assert.Equal("http://localhost:8472", destination.PackageServer);
             Assert.Equal("Dev", destination.Organization);
 
             // Published again with uncommitted changes, as a prerelease
@@ -166,7 +166,7 @@ namespace TrakHound.CLI.Tests
 
         [Theory]
         [InlineData("""{ "version": "1.0.0", "defaultTarget": "a", "targets": { "a": { "destinations": [ { "organization": "A" } ] } } }""")]
-        [InlineData("""{ "destinations": [ { "managementServer": "http://old.test" } ] }""")]
+        [InlineData("""{ "destinations": [ { "packageServer": "http://old.test" } ] }""")]
         [InlineData("""{ "defaultTarget": "a", "targets": { "a": { "destinations": [ { "organization": "A" } ], "versionSufix": "dev" } } }""")]
         [InlineData("""{ "defaultTarget": "a", "targets": { "a": { "destinations": [ { "organization": "A", "apiKey": "secret" } ] } } }""")]
         [InlineData("""{ "defaultTarget": "a", "targets": { "a": { "destinations": [ ] } } }""")]
@@ -248,17 +248,82 @@ namespace TrakHound.CLI.Tests
 
 
         [Fact]
-        public void ServerOptions_AreOnlyForAPackageWithoutTargets()
+        public void Server_ReplacesTheTargetsServer_AndKeepsItsOrganizationAndSettings()
+        {
+            // ex. the 'local' Target published to a development container on another port
+            using var repo = CreateRepository();
+            var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
+
+            Assert.True(PackagesCommands.ApplyServerOptions(settings, "http://localhost:32772", null, log: false));
+
+            var destination = Assert.Single(settings.Destinations);
+            Assert.Equal("http://localhost:32772", destination.PackageServer);
+            Assert.Equal("Dev", destination.Organization);
+            Assert.Equal("development", settings.TargetName);
+            Assert.True(settings.Target.AllowDirty);
+        }
+
+        [Fact]
+        public void Organization_ReplacesTheTargetsOrganization_AndKeepsItsServerAndToken()
+        {
+            using var repo = CreateRepository();
+            var settings = PackagesCommands.ReadPublishSettings(Package(repo), "release", log: false);
+
+            Assert.True(PackagesCommands.ApplyServerOptions(settings, null, "Other", log: false));
+
+            var destination = Assert.Single(settings.Destinations);
+            Assert.Equal("https://packages.test", destination.PackageServer);
+            Assert.Equal("Other", destination.Organization);
+            Assert.Equal("TEST_RELEASE_TOKEN", destination.ApiTokenVariable);
+        }
+
+        [Fact]
+        public void AnotherServer_DoesNotGetTheTargetsApiToken()
+        {
+            // The token is for the Target's own server, so it isn't sent anywhere else
+            using var repo = CreateRepository();
+            var settings = PackagesCommands.ReadPublishSettings(Package(repo), "release", log: false);
+
+            Assert.True(PackagesCommands.ApplyServerOptions(settings, "http://other.test", null, log: false));
+
+            var destination = Assert.Single(settings.Destinations);
+            Assert.Equal("Contoso", destination.Organization);
+            Assert.Null(destination.ApiTokenVariable);
+        }
+
+        [Fact]
+        public void ServerOptions_WithManyDestinations_NeedBoth()
+        {
+            using var repo = CreateRepository(Targets.Replace(
+                """[ { "packageServer": "http://plain.test", "organization": "Plain" } ]""",
+                """[ { "packageServer": "http://plain.test", "organization": "Plain" }, { "packageServer": "http://second.test", "organization": "Second" } ]"""));
+
+            Assert.False(PackagesCommands.ApplyServerOptions(PackagesCommands.ReadPublishSettings(Package(repo), "plain", log: false), "http://other.test", null, log: false));
+
+            var settings = PackagesCommands.ReadPublishSettings(Package(repo), "plain", log: false);
+            Assert.True(PackagesCommands.ApplyServerOptions(settings, "http://other.test", "Other", log: false));
+            Assert.Equal("http://other.test", Assert.Single(settings.Destinations).PackageServer);
+        }
+
+        [Fact]
+        public void NoServerOptions_KeepTheTargetsDestinations()
         {
             using var repo = CreateRepository();
             var settings = PackagesCommands.ReadPublishSettings(Package(repo), log: false);
 
-            Assert.False(PackagesCommands.CheckServerOptions(settings, "http://other.test", null));
-            Assert.False(PackagesCommands.CheckServerOptions(settings, null, "Other"));
-            Assert.True(PackagesCommands.CheckServerOptions(settings, null, null));
+            Assert.True(PackagesCommands.ApplyServerOptions(settings, null, null, log: false));
+            Assert.Equal("http://dev.test", Assert.Single(settings.Destinations).PackageServer);
 
             using var noTargets = CreateRepository(targets: null);
-            Assert.True(PackagesCommands.CheckServerOptions(PackagesCommands.ReadPublishSettings(Package(noTargets), log: false), "http://other.test", "Other"));
+            Assert.True(PackagesCommands.ApplyServerOptions(PackagesCommands.ReadPublishSettings(Package(noTargets), log: false), "http://other.test", "Other", log: false));
+        }
+
+        [Fact]
+        public void ManagementServer_IsNowPackageServer()
+        {
+            using var repo = CreateRepository("""{ "defaultTarget": "a", "targets": { "a": { "destinations": [ { "managementServer": "http://old.test", "organization": "A" } ] } } }""");
+
+            Assert.Null(PackagesCommands.ReadPublishSettings(Package(repo), log: false));
         }
 
         [Fact]

@@ -96,9 +96,9 @@ The project name becomes the package ID, so use a unique dotted name. The templa
 | `--instanceUrl` | `http://localhost:8472` | `instanceUrl` in `trakhound.debug.json`: the Instance the debug host connects to |
 | `--publisher` | (empty) | `publisher` in `trakhound.package.json` |
 | `--description` | (empty) | `description` in `trakhound.package.json` |
-| `--managementServer` | (empty) | The package server of the `default` Publish Target in `trakhound.package.publish.json`, which is then its `defaultTarget` |
+| `--packageServer` | (empty) | The package server of the `default` Publish Target in `trakhound.package.publish.json`, which is then its `defaultTarget` |
 | `--organization` | (empty) | The organization of the `default` Publish Target in `trakhound.package.publish.json`, which is then its `defaultTarget` |
-| `--localTarget` | `true` | Adds the `local` Publish Target to `trakhound.package.publish.json`: the Dev Package Server of the development Instance at `instanceUrl` (section 2.5). Set it to `false` in a repository with a shared `trakhound.package.publish.json` (section 8); without `--managementServer` or `--organization` the file is then left out |
+| `--localTarget` | `true` | Adds the `local` Publish Target to `trakhound.package.publish.json`: the Dev Package Server of the development Instance at `instanceUrl` (section 2.5). Set it to `false` in a repository with a shared `trakhound.package.publish.json` (section 8); without `--packageServer` or `--organization` the file is then left out |
 | `--skipRestore` | `false` | Skip the NuGet restore after the project is created |
 
 By default the project references the TrakHound version the templates were released with. If your Instance runs an older TrakHound version, set `--trakhoundVersion` to the Instance's version: a package can't use a newer TrakHound than its Instance (section 3.1).
@@ -928,12 +928,12 @@ The CLI adds `trakhoundVersion` (the TrakHound version the package was built aga
   "defaultTarget": "development",
   "targets": {
     "development": {
-      "destinations": [ { "managementServer": "http://packages.contoso.local:8472", "organization": "Contoso" } ],
+      "destinations": [ { "packageServer": "http://packages.contoso.local:8472", "organization": "Contoso" } ],
       "versionSuffix": "dev{branch}.{timestamp}",
       "allowDirty": true
     },
     "release": {
-      "destinations": [ { "managementServer": "https://packages.contoso.com", "organization": "Contoso", "apiTokenVariable": "CONTOSO_RELEASE_TOKEN" } ],
+      "destinations": [ { "packageServer": "https://packages.contoso.com", "organization": "Contoso", "apiTokenVariable": "CONTOSO_RELEASE_TOKEN" } ],
       "requireSigning": true
     }
   }
@@ -946,7 +946,7 @@ The CLI adds `trakhoundVersion` (the TrakHound version the package was built aga
 - `requireSigning` requires a signing key (section 9) and a clean working tree.
 - `--target` (ex. `th packages publish --target release`) picks the Target. Without it, `defaultTarget` is used.
 
-The CLI uses the nearest `trakhound.package.publish.json`, looking in the package folder first and then in each parent folder, so one file at the root of a repository covers every package in it. The nearest file is used as a whole. A package only needs its own file to publish somewhere different from the rest. Without any file, `--server` and `--organization` set where to publish.
+The CLI uses the nearest `trakhound.package.publish.json`, looking in the package folder first and then in each parent folder, so one file at the root of a repository covers every package in it. The nearest file is used as a whole. A package only needs its own file to publish somewhere different from the rest. Without any file, `--server` and `--organization` set where to publish. With one, they replace the Target's destinations for that command, ex. `th packages dotnet --publish --server http://localhost:32772` to publish with the `local` Target to a container on another port. The Target's version suffix and other settings still apply, and its `apiTokenVariable` is only sent to its own server (another server gets `TRAKHOUND_API_TOKEN`).
 
 ## 9. Building and publishing
 
@@ -962,7 +962,7 @@ The CLI uses the nearest `trakhound.package.publish.json`, looking in the packag
 | `--target`, `-t` | `defaultTarget` | The Publish Target to upload to (with `--publish`) |
 | `--version`, `-v` | Prefix and git height | The package version |
 | `--version-suffix` | The Target's `versionSuffix` | A prerelease label added to the version (ex. `dev.{timestamp}` gives `0.3.14-dev.20261111224029`) |
-| `--server`, `-s` / `--organization` | | Where to upload, for a package without a `trakhound.package.publish.json` |
+| `--server`, `-s` / `--organization` | | Where to upload. With a Publish Target, they replace its destinations (section 8) |
 | `--skip-existing` | `false` | Skip a destination that already has the version when it was published from the same commit (see below) |
 
 Options also work in camel case (`--projectConfiguration`). The version is `--version` if set, otherwise the manifest's prefix and the git height (section 8). Before uploading, the CLI reads the versions on each of the Target's destinations: it stops if the version is already published (unless `--skip-existing` applies), and publishes nothing if a destination can't be read (ex. an unreachable server), so a package goes to all of them or none. The Target is checked before building too: its Api Tokens, its signing key (`requireSigning`) and uncommitted changes (`allowDirty`).
@@ -1045,7 +1045,7 @@ TrakHound itself is only referenced to compile: the Instance provides `TrakHound
 | `th packages keygen [name]` | Create a key pair for signing packages |
 | `th trust list\|add\|remove` | Manage the publishers a configuration profile trusts |
 
-**Signing in to a package server:** the CLI reads `managementServer`, `organization` and `apiToken` from `cli.config.yaml` (next to `th.exe`, then `~/.trakhound/cli.config.yaml`) or from the `TRAKHOUND_MANAGEMENT_SERVER`, `TRAKHOUND_ORGANIZATION` and `TRAKHOUND_API_TOKEN` environment variables.
+**Signing in to a package server:** the CLI reads `packageServer`, `organization` and `apiToken` from `cli.config.yaml` (next to `th.exe`, then `~/.trakhound/cli.config.yaml`) or from the `TRAKHOUND_PACKAGE_SERVER`, `TRAKHOUND_ORGANIZATION` and `TRAKHOUND_API_TOKEN` environment variables.
 
 **Visual Studio:** with the TrakHound extension, right-click the project in Solution Explorer (or open the Tools menu) and choose **Publish TrakHound Package**. It runs `th packages dotnet --project-configuration Release --publish` and shows the output in the **TrakHound** output pane. To publish several projects together, choose **Publish TrakHound Packages...** from the same menus: it finds the `trakhound.build.json` files in and near the solution folder, lets you pick which of the listed projects to include, and runs `th packages build` for them. Projects are built in dependency order, and nothing is published unless every selected project builds. When the nearest `trakhound.package.publish.json` has more than one Target, the dialog lists them, each with its destinations, how it versions and signs, and a warning if its `apiTokenVariable` isn't set. `defaultTarget` starts selected, and the selected one is passed as `--target`. **Publish TrakHound Package** only shows the dialog when there is a Target to choose. **Publish TrakHound Packages...** shows the projects and the Targets in one dialog: only the Targets that all of the selected projects' files have are listed, and none when the Build File sets a selected project's `server`.
 

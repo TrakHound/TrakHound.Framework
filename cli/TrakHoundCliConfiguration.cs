@@ -10,12 +10,12 @@ namespace TrakHound.CLI
     /// CLI Configuration. Values are read (lowest to highest priority) from:
     /// 1. cli.config.yaml in the application directory
     /// 2. cli.config.yaml in the user directory (~/.trakhound/cli.config.yaml)
-    /// 3. Environment Variables (TRAKHOUND_MANAGEMENT_SERVER, TRAKHOUND_ORGANIZATION, TRAKHOUND_API_TOKEN, TRAKHOUND_DOTNET_SDK)
+    /// 3. Environment Variables (TRAKHOUND_PACKAGE_SERVER, TRAKHOUND_ORGANIZATION, TRAKHOUND_API_TOKEN, TRAKHOUND_DOTNET_SDK)
     /// </summary>
     public class TrakHoundCliConfiguration
     {
         public const string Filename = "cli.config.yaml";
-        public const string DefaultManagementServer = "https://packages.trakhound.com";
+        public const string DefaultPackageServer = "https://packages.trakhound.com";
         public const string DefaultOrganization = "Public";
 
         public static TrakHoundCliConfiguration Instance { get; private set; } = new TrakHoundCliConfiguration();
@@ -23,7 +23,7 @@ namespace TrakHound.CLI
 
         public string DotnetSdkLocation { get; set; }
 
-        public string ManagementServer { get; set; }
+        public string PackageServer { get; set; }
 
         public string Organization { get; set; }
 
@@ -42,7 +42,7 @@ namespace TrakHound.CLI
             configuration.Merge(Read(UserConfigurationPath));
             configuration.Merge(new TrakHoundCliConfiguration
             {
-                ManagementServer = Environment.GetEnvironmentVariable("TRAKHOUND_MANAGEMENT_SERVER"),
+                PackageServer = Environment.GetEnvironmentVariable("TRAKHOUND_PACKAGE_SERVER"),
                 Organization = Environment.GetEnvironmentVariable("TRAKHOUND_ORGANIZATION"),
                 ApiToken = Environment.GetEnvironmentVariable("TRAKHOUND_API_TOKEN"),
                 DotnetSdkLocation = Environment.GetEnvironmentVariable("TRAKHOUND_DOTNET_SDK")
@@ -56,7 +56,7 @@ namespace TrakHound.CLI
             if (configuration != null)
             {
                 if (!string.IsNullOrEmpty(configuration.DotnetSdkLocation)) DotnetSdkLocation = configuration.DotnetSdkLocation;
-                if (!string.IsNullOrEmpty(configuration.ManagementServer)) ManagementServer = configuration.ManagementServer;
+                if (!string.IsNullOrEmpty(configuration.PackageServer)) PackageServer = configuration.PackageServer;
                 if (!string.IsNullOrEmpty(configuration.Organization)) Organization = configuration.Organization;
                 if (!string.IsNullOrEmpty(configuration.ApiToken)) ApiToken = configuration.ApiToken;
             }

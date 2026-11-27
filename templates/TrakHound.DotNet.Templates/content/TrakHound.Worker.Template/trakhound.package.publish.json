@@ -2,7 +2,7 @@
   // Publish Targets for this package : 'th packages publish' (and 'th packages dotnet --publish') uses the defaultTarget, or the
   // one named with --target, and the Visual Studio Publish dialog lists them. The CLI uses the nearest trakhound.package.publish.json,
   // so in a repository that has a shared one in a parent directory, delete this file to use that one instead
-//#if (managementServer != "" || organization != "")
+//#if (packageServer != "" || organization != "")
   "defaultTarget": "default",
 //#else
   "defaultTarget": "local",
@@ -16,23 +16,23 @@
     "local": {
       "destinations": [
         {
-          "managementServer": "{instanceUrl}",
+          "packageServer": "{instanceUrl}",
           "organization": "Dev"
         }
       ],
       "versionSuffix": "dev{branch}.{timestamp}",
       "allowDirty": true
-//#if (managementServer != "" || organization != "")
+//#if (packageServer != "" || organization != "")
     },
 //#else
     }
 //#endif
 //#endif
-//#if (managementServer != "" || organization != "")
+//#if (packageServer != "" || organization != "")
     "default": {
       "destinations": [
         {
-          "managementServer": "{managementServer}",
+          "packageServer": "{packageServer}",
           "organization": "{organization}"
         }
       ]

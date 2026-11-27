@@ -10,7 +10,7 @@ namespace TrakHound.VisualStudio
     /// </summary>
     internal class PublishTargetDestination
     {
-        public string ManagementServer { get; set; }
+        public string PackageServer { get; set; }
 
         public string Organization { get; set; }
 
@@ -159,7 +159,7 @@ namespace TrakHound.VisualStudio
                 {
                     Name = target.Name,
                     Destinations = targets.SelectMany(o => o.Destinations)
-                        .GroupBy(o => $"{o.ManagementServer}|{o.Organization}|{o.ApiTokenVariable}", StringComparer.OrdinalIgnoreCase)
+                        .GroupBy(o => $"{o.PackageServer}|{o.Organization}|{o.ApiTokenVariable}", StringComparer.OrdinalIgnoreCase)
                         .Select(o => o.First())
                         .ToList(),
                     VersionSuffix = target.VersionSuffix,
@@ -210,15 +210,15 @@ namespace TrakHound.VisualStudio
                     {
                         foreach (var destination in destinations.EnumerateArray())
                         {
-                            var managementServer = GetString(destination, "managementServer");
+                            var packageServer = GetString(destination, "packageServer");
                             var organization = GetString(destination, "organization");
 
-                            // The CLI ignores Destinations left blank (ex. a template created without --managementServer)
-                            if (string.IsNullOrWhiteSpace(managementServer) && string.IsNullOrWhiteSpace(organization)) continue;
+                            // The CLI ignores Destinations left blank (ex. a template created without --packageServer)
+                            if (string.IsNullOrWhiteSpace(packageServer) && string.IsNullOrWhiteSpace(organization)) continue;
 
                             target.Destinations.Add(new PublishTargetDestination
                             {
-                                ManagementServer = managementServer,
+                                PackageServer = packageServer,
                                 Organization = organization,
                                 ApiTokenVariable = GetString(destination, "apiTokenVariable")?.Trim(),
                             });

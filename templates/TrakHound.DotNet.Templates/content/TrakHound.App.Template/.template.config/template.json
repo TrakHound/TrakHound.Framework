@@ -20,7 +20,7 @@
     {
       "modifiers": [
         {
-          "condition": "(!localTarget && managementServer == \"\" && organization == \"\")",
+          "condition": "(!localTarget && packageServer == \"\" && organization == \"\")",
           "exclude": [ "trakhound.package.publish.json" ]
         }
       ]
@@ -64,13 +64,13 @@
     "localTarget": {
       "type": "parameter",
       "datatype": "bool",
-      "description": "Adds the 'local' Publish Target to trakhound.package.publish.json : the Dev Package Server of the development Instance at instanceUrl (ex. trakhound/instance-dev). Set it to false in a repository that has a shared trakhound.package.publish.json (without managementServer or organization, the file is then left out)",
+      "description": "Adds the 'local' Publish Target to trakhound.package.publish.json : the Dev Package Server of the development Instance at instanceUrl (ex. trakhound/instance-dev). Set it to false in a repository that has a shared trakhound.package.publish.json (without packageServer or organization, the file is then left out)",
       "defaultValue": "true"
     },
-    "managementServer": {
+    "packageServer": {
       "type": "parameter",
       "description": "The Package Server of the 'default' Publish Target in trakhound.package.publish.json, which is then the defaultTarget",
-      "replaces": "{managementServer}",
+      "replaces": "{packageServer}",
       "defaultValue": ""
     },
     "organization": {

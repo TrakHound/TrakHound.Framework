@@ -190,7 +190,7 @@ namespace TrakHound.CLI.Packages
                                     ? $" (Api Token : {destination.ApiTokenVariable.Trim()}{(PackageClient.GetApiToken(destination) == null ? ", NOT SET" : null)})"
                                     : null;
 
-                                Console.WriteLine(string.Format("    {0,-22}   {1} | {2}{3}", "", destination.ManagementServer, destination.Organization, token));
+                                Console.WriteLine(string.Format("    {0,-22}   {1} | {2}{3}", "", destination.PackageServer, destination.Organization, token));
                             }
 
                             var flags = new List<string>();
@@ -216,7 +216,7 @@ namespace TrakHound.CLI.Packages
                 var projectDirectory = GetProjectDirectory(project.Path);
 
                 var publishSettings = ReadPublishSettings(projectDirectory, target, log: false);
-                if (publishSettings == null || !CheckServerOptions(publishSettings, project.Server, project.Organization) || !CheckApiTokens(publishSettings))
+                if (publishSettings == null || !ApplyServerOptions(publishSettings, project.Server, project.Organization, log: false) || !CheckApiTokens(publishSettings))
                 {
                     publishProblems = true;
                     continue;

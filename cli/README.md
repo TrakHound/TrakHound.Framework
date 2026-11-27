@@ -62,7 +62,7 @@ Settings are read from the files below (later sources override earlier ones):
 
 | Setting | Environment Variable | Description |
 |---|---|---|
-| `managementServer` | `TRAKHOUND_MANAGEMENT_SERVER` | The default Package Server URL (`https://packages.trakhound.com` if not set) |
+| `packageServer` | `TRAKHOUND_PACKAGE_SERVER` | The default Package Server URL (`https://packages.trakhound.com` if not set) |
 | `organization` | `TRAKHOUND_ORGANIZATION` | The default Organization |
 | `apiToken` | `TRAKHOUND_API_TOKEN` | The API Token sent to the Package Server |
 | `dotnetSdkLocation` | `TRAKHOUND_DOTNET_SDK` | The directory containing the `dotnet` executable (if not on the PATH) |
@@ -114,12 +114,12 @@ Where packages are published is set in a `trakhound.package.publish.json` file, 
   "defaultTarget": "development",
   "targets": {
     "development": {
-      "destinations": [ { "managementServer": "http://packages.contoso.local:8472", "organization": "Contoso" } ],
+      "destinations": [ { "packageServer": "http://packages.contoso.local:8472", "organization": "Contoso" } ],
       "versionSuffix": "dev{branch}.{timestamp}",
       "allowDirty": true
     },
     "release": {
-      "destinations": [ { "managementServer": "https://packages.contoso.com", "organization": "Contoso", "apiTokenVariable": "CONTOSO_RELEASE_TOKEN" } ],
+      "destinations": [ { "packageServer": "https://packages.contoso.com", "organization": "Contoso", "apiTokenVariable": "CONTOSO_RELEASE_TOKEN" } ],
       "requireSigning": true
     }
   }
@@ -132,12 +132,12 @@ th packages publish --target release   # 0.3.4
 - The nearest `trakhound.package.publish.json` is used, starting in the package directory and continuing up through its parent directories, so one file at the root of a repository covers every package below it. The nearest file is used as a whole (files aren't merged). Comments and trailing commas are allowed.
 - `--target` (`-t`) picks the Target on `publish`, `dotnet --publish` and `build`. Without it the file's `defaultTarget` is used, and the CLI stops if there's none.
 - The file holds only `defaultTarget` and `targets`. A `version` or a top-level `destinations` (the old format), or a misspelled setting, is an error, so it isn't silently ignored.
-- `--server` and `--organization` (or `server` and `organization` in a build file) are only for a package without a `trakhound.package.publish.json`. With one, they're an error.
+- `--server` and `--organization` (or `server` and `organization` in a build file) replace the Target's destinations with one, ex. `th packages dotnet --publish --server http://localhost:32772` for a development container on another port. The Target's other settings still apply. Either one can be left out when the Target has one destination (it gives the other). The Target's `apiTokenVariable` is only used for its own server, so another server gets the CLI's Api Token (`TRAKHOUND_API_TOKEN`). Without a `trakhound.package.publish.json`, they're where to publish.
 - A package is published to every destination of the Target or to none: if any destination's versions can't be read (ex. a server on a network you're not connected to), nothing is uploaded.
 
 | Target setting | Description |
 |---|---|
-| `destinations` | The Package Servers to publish to : `managementServer`, `organization`, and optionally `apiTokenVariable` |
+| `destinations` | The Package Servers to publish to : `packageServer`, `organization`, and optionally `apiTokenVariable` |
 | `versionSuffix` | A prerelease label added to every version published to the Target. `{timestamp}` is the UTC time of the run (`yyyyMMddHHmmss`, the same for every package in one `build`). `{branch}` is empty on `main` (or `master`, or a detached HEAD) and `-[branch]` on any other branch, with characters other than letters, digits and `-` replaced by `-` (`dev{branch}.{timestamp}` is `dev.20261114153000` on `main` and `dev-feature-opc-ua.20261114153000` on `feature/opc-ua`). Without it, the Target publishes stable versions |
 | `allowDirty` | Packages can be built (and signed) from a working tree with uncommitted changes. Requires a `versionSuffix` with `{timestamp}`, so every build has its own version |
 | `requireSigning` | Packages must be signed (`--sign-key` or `TRAKHOUND_SIGNING_KEY`) and built from a commit : uncommitted changes are refused, even with `--allow-dirty` |
