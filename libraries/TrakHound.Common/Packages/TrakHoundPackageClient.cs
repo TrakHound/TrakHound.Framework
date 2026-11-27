@@ -63,6 +63,16 @@ namespace TrakHound.Packages
         /// </summary>
         public void SetToken(string token) => _apiToken = token;
 
+        /// <summary>
+        /// A Client for the same server and API Token with another Organization (ex. to download a Package found by Search)
+        /// </summary>
+        public TrakHoundPackageClient ForOrganization(string organization)
+        {
+            var client = new TrakHoundPackageClient(_baseUrl, organization);
+            client._apiToken = _apiToken;
+            return client;
+        }
+
 
         /// <summary>
         /// Gets the Package with the specified Uuid
@@ -244,6 +254,41 @@ namespace TrakHound.Packages
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Searches the latest Version of each Package in every Organization on the server (doesn't use the Organization). The query matches
+        /// anywhere in a Package ID or description. Returns the Status Code (0 if the server couldn't be reached; 404 from a server without
+        /// search), the Packages with their Organizations (null unless successful), and the error when it isn't successful
+        /// </summary>
+        public async Task<(int StatusCode, List<(string Organization, TrakHoundPackage Package)> Results, string Message)> Search(string query = null, string category = null, int skip = 0, int take = 100, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(BaseUrl)) return (0, null, "No Base URL");
+
+            var url = Url.Combine(BaseUrl, "packages");
+            url = Url.Combine(url, "search");
+            if (!string.IsNullOrEmpty(query)) url = Url.AddQueryParameter(url, "q", query);
+            if (!string.IsNullOrEmpty(category)) url = Url.AddQueryParameter(url, "category", category);
+            url = Url.AddQueryParameter(url, "skip", skip);
+            url = Url.AddQueryParameter(url, "take", take);
+
+            var response = await TrakHoundHttpRequests.GetResponse(url, ApiTokenHeader, cancellationToken);
+            if (response.StatusCode == 200)
+            {
+                try
+                {
+                    var results = JsonSerializer.Deserialize<List<TrakHoundPackageSearchResultJson>>(response.GetContentBytes(), Json.SharedOptions);
+                    if (results != null)
+                    {
+                        return (200, results.Where(o => o?.Package != null).Select(o => (o.Organization, o.Package.ToPackage())).ToList(), null);
+                    }
+                }
+                catch { }
+
+                return (200, null, "Invalid Response");
+            }
+
+            return (response.StatusCode, null, GetErrorMessage(response));
         }
 
         /// <summary>

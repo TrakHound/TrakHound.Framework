@@ -19,6 +19,11 @@
     else
     {
         <div class="toolbar-panel">
+            <div class="category-chips" role="group" aria-label="Organizations">
+                <button class="chip @(!allOrganizations ? "active" : "")" title="The Packages of the Source's Organization" @onclick="() => allOrganizations = false"><span class="icon fa-solid fa-sharp fa-building"></span>@(Packages.SelectedSource?.Organization ?? "Organization")</button>
+                <button class="chip @(allOrganizations ? "active" : "")" title="The Packages of every Organization on the Source's server" @onclick="() => allOrganizations = true"><span class="icon fa-solid fa-sharp fa-buildings"></span>All Organizations</button>
+            </div>
+            <span class="toolbar-divider"></span>
             <div class="category-chips" role="group" aria-label="Category">
                 <button class="chip @(selectedCategory == null ? "active" : "")" @onclick="() => selectedCategory = null">All</button>
                 @foreach (var category in PackagesContext.Categories)
@@ -35,6 +40,7 @@
             <PackageInstallBrowser PackageManager="@Packages.PackageManager"
                                    PackageClient="@Packages.PackageClient"
                                    Category="@selectedCategory"
+                                   AllOrganizations="@allOrganizations"
                                    InstallHandler="Install" />
         </div>
     }
@@ -44,15 +50,17 @@
 @code {
 
     private string selectedCategory;
+    private bool allOrganizations;
 
 
     [CascadingParameter]
     public PackagesContext Packages { get; set; }
 
 
-    private async Task<bool> Install(TrakHoundPackage package)
+    // The Client is for the Package's Organization, which isn't the Source's when every Organization is listed
+    private async Task<bool> Install(TrakHoundPackage package, TrakHoundPackageClient packageClient)
     {
-        return await Packages.InstallFromSource(package);
+        return await Packages.InstallFromSource(package, packageClient);
     }
 
 }

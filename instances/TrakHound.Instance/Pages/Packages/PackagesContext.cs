@@ -463,12 +463,13 @@ namespace TrakHound.Instance.Pages.Packages
         }
 
         /// <summary>
-        /// Install a Package (with its Dependencies, downloaded from the selected Source). Every install the pages make goes through this
+        /// Install a Package (with its Dependencies, downloaded from the selected Source, or from packageClient for a Package found in
+        /// another Organization). Every install the pages make goes through this
         /// </summary>
-        public async Task<IEnumerable<TrakHoundPackageInstallResult>> Install(byte[] packageBytes)
+        public async Task<IEnumerable<TrakHoundPackageInstallResult>> Install(byte[] packageBytes, TrakHoundPackageClient packageClient = null)
         {
             DemandInstall(packageBytes);
-            return await PackageManager.Install(packageBytes, packageClient: PackageClient);
+            return await PackageManager.Install(packageBytes, packageClient: packageClient ?? PackageClient);
         }
 
         public bool Uninstall(string packageId, string packageVersion)
@@ -486,13 +487,15 @@ namespace TrakHound.Instance.Pages.Packages
         }
 
         /// <summary>
-        /// Download a Package from the selected Source and install it (with its Dependencies), adding a default Configuration if it doesn't have one
+        /// Download a Package from the selected Source and install it (with its Dependencies), adding a default Configuration if it doesn't have one.
+        /// A Package found in another Organization of the Source's server is downloaded with packageClient (that Organization), and so are its Dependencies
         /// </summary>
-        public async Task<bool> InstallFromSource(TrakHoundPackage package)
+        public async Task<bool> InstallFromSource(TrakHoundPackage package, TrakHoundPackageClient packageClient = null)
         {
             if (package == null) return false;
 
-            if (PackageClient == null)
+            var client = packageClient ?? PackageClient;
+            if (client == null)
             {
                 Notify(PackageNotificationType.Error, $"Install {package.Id} Failed", "No Package Source is selected");
                 return false;
@@ -500,14 +503,15 @@ namespace TrakHound.Instance.Pages.Packages
 
             try
             {
-                var packageBytes = await PackageClient.Download(package.Id, package.Version);
+                var packageBytes = await client.Download(package.Id, package.Version);
                 if (packageBytes == null)
                 {
-                    Notify(PackageNotificationType.Error, $"Install {package.Id} Failed", $"Could not download v{package.Version} from {SelectedSource?.Name ?? PackageClient.BaseUrl}");
+                    var from = client.Organization != PackageClient?.Organization ? $"{client.Organization} on {SelectedSource?.Name ?? client.BaseUrl}" : SelectedSource?.Name ?? client.BaseUrl;
+                    Notify(PackageNotificationType.Error, $"Install {package.Id} Failed", $"Could not download v{package.Version} from {from}");
                     return false;
                 }
 
-                var results = await Install(packageBytes);
+                var results = await Install(packageBytes, client);
                 return await ReportInstallResults(results, package.Id, package.Version);
             }
             catch (Exception ex)

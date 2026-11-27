@@ -10,6 +10,13 @@
     overflow: hidden;
 }
 
+.toolbar-divider {
+    align-self: stretch;
+    width: 1px;
+    margin: 2px 4px;
+    background: var(--borderColor);
+}
+
 .updates-hint {
     margin-left: auto;
     font-size: var(--fontSizeSm);

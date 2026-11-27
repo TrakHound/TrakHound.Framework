@@ -228,13 +228,15 @@ Packages (`/_admin/packages`) installs, updates and removes packages. Choose the
 | --- | --- |
 | Installed | Search installed packages and see Category, Version, Used by, Size and Latest. **Remove** versions, **Revert** to the previous version, or install an update. **Clean Unused** removes packages no configuration uses |
 | Updates | The installed packages that have a newer version |
-| Browse | Packages on the source, by category, with **Install** |
+| Browse | Packages on the source, by category, with **Install**. **All Organizations** lists the packages of every organization on the source's server instead (its search), with each package's organization. Search there matches a package ID or description |
 | Upload | Drop `.thp` package files, then click **Install** |
 | Sources | **Add Source** (Name, Base URL, Organization, Access Token Name, Access Token, TrakHound Package Manager), **Edit**, **Copy** (opens a new Source with the same settings, including the Access Token), **Remove** and **Test Connection** |
 
 **TrakHound Public:** on first run the Instance adds the TrakHound public Package Server (`https://packages.trakhound.com`, Organization `TrakHound`) as a source. If it was removed, add it back with **Add TrakHound Public** (shown when there are no sources) or **Use TrakHound Public** in the Add Source dialog, which fills in the form so an Access Token or TrakHound Package Manager can still be set. Both are hidden while a source with that Base URL and Organization exists.
 
 Installing a package doesn't run it. Add a configuration that uses it (section 2.5).
+
+**Other organizations:** a package installed from **All Organizations** is downloaded from its own organization, with the source's access token, and so are its dependencies. Updates are still checked against the source's organization only. To get updates for a package from another organization, add a source for that organization. A package server from before search (or a TrakHound Package Manager) can't list every organization, and Browse says so.
 
 **TrakHound Package Manager sources:** tick **TrakHound Package Manager** on a source that is a TrakHound Package Manager feed (ex. `https://pm.contoso.com/trakhound/package-manager/api/feed`, with the access token it gave this Instance). The list of sources marks it **Package Manager**. For these sources only, the Instance:
 

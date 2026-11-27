@@ -63,6 +63,24 @@
             margin-left: 8px;
         }
 
+        .package-install-item .identity-container .organization {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 8px;
+            padding: 0 6px;
+            font-size: 11px;
+            font-weight: normal;
+            color: var(--textMild);
+            border: 1px solid var(--borderColor);
+            border-radius: 2px;
+        }
+
+            .package-install-item .identity-container .organization .icon {
+                font-size: 9px;
+                color: var(--textLight);
+            }
+
         .package-install-item .identity-container .description {
             display: block;
             font-size: 11px;

@@ -18,7 +18,7 @@
 
                 </div>
                 <div class="package-toolbar-search">
-                    <TextBox @bind-Value="Query" InputChangeType="InputChangeType.OnValueChange" PlaceHolder="Search for a package by Package ID.." SpellCheck="false" />
+                    <TextBox @bind-Value="Query" InputChangeType="InputChangeType.OnValueChange" PlaceHolder="@(AllOrganizations ? "Search every Organization by Package ID or description.." : "Search for a package by Package ID..")" SpellCheck="false" />
                 </div>
             </div>
         </div>
@@ -62,7 +62,7 @@
 
                         foreach (var package in visiblePackages)
                         {
-                            var isSelected = package.Id == selectedId;
+                            var isSelected = package.Uuid == selectedUuid;
                             var installedPackage = GetInstalled(package);
                             var installed = installedPackage != null;
                             var updated = installedPackage != null && (TrakHound.Extensions.VersionComparer.Default.Compare(installedPackage.Version, package.Version) > 0 ||
@@ -70,6 +70,7 @@
                             var packateInstalling = IsPackageInstalling(package.Id);
 
                             <PackageInstallItem Package="@package"
+                                                Organization="@(AllOrganizations ? GetOrganization(package) : null)"
                                                 IsSelected="@isSelected"
                                                 Clicked="ClickPackage"
                                                 IsInstalled="@installed"
@@ -88,14 +89,21 @@
                             <div class="not-found-container">
                                 <span class="icon fas fa-ban"></span>
 
+                                @{
+                                    var where = AllOrganizations ? "any Organization" : PackageClient.Organization;
+                                }
                                 @if (!string.IsNullOrEmpty(query))
                                 {
-                                    <span class="label">No Packages found that match "@query"</span>
+                                    <span class="label">No Packages found in @where that match "@query"</span>
                                 }
                                 else if (!string.IsNullOrEmpty(Category))
                                 {
                                     @* As the Category tabs show it (ex. app is App) *@
-                                    <span class="label">No @(char.ToUpperInvariant(Category[0]) + Category[1..]) Packages in @PackageClient.Organization</span>
+                                    <span class="label">No @(char.ToUpperInvariant(Category[0]) + Category[1..]) Packages in @where</span>
+                                }
+                                else if (AllOrganizations)
+                                {
+                                    <span class="label">No Packages on this server yet</span>
                                 }
                                 else
                                 {
@@ -121,7 +129,7 @@
                     <div class="information-back">
                         <button class="btn btn-light" @onclick="ClearSelection"><span class="icon fa-solid fa-sharp fa-arrow-left"></span>Back to Packages</button>
                     </div>
-                    <PackageInformation Package="@selectedPackage" PackageClient="@PackageClient" PackageManager="@PackageManager" ManifestCheck="@manifestChecks?.GetValueOrDefault(selectedPackage.Uuid)" />
+                    <PackageInformation Package="@selectedPackage" PackageClient="@GetClient(selectedPackage)" PackageManager="@PackageManager" ManifestCheck="@manifestChecks?.GetValueOrDefault(selectedPackage.Uuid)" />
                 }
                 else
                 {
@@ -141,15 +149,21 @@
 
     private readonly HashSet<string> packagesInstalling = new HashSet<string>();
 
+    // The most Packages a search across Organizations lists (the server's limit for one request)
+    private const int _maxSearchResults = 1000;
+
     IEnumerable<TrakHoundPackage> packages;
+    Dictionary<string, string> packageOrganizations; // Package UUID => Organization, when listing every Organization
+    Dictionary<string, TrakHoundPackageClient> organizationClients = new Dictionary<string, TrakHoundPackageClient>(); // Kept, so the details don't reload for a new Client each render
     Dictionary<string, TrakHoundPackageManifestCheck> manifestChecks;
     TrakHoundPackage selectedPackage;
-    string selectedId;
+    string selectedUuid;
 
     string previousPackageManagerPath;
     string previousPackageClientBaseUrl;
     string previousPackageClientOrganization;
     string previousCategory;
+    bool previousAllOrganizations;
 
     string query;
     string previousQuery;
@@ -169,8 +183,8 @@
             query = value;
             if (query != previousQuery)
             {
-                // All Categories are filtered locally (no Source query needed)
-                if (string.IsNullOrEmpty(Category))
+                // All Categories of one Organization are filtered locally (no Source query needed). Every Organization is searched by the server
+                if (string.IsNullOrEmpty(Category) && !AllOrganizations)
                 {
                     previousQuery = query;
                     return;
@@ -192,6 +206,12 @@
     [Parameter]
     public string Category { get; set; }
 
+    /// <summary>
+    /// List the Packages of every Organization on the PackageClient's server (its search), instead of only the PackageClient's Organization
+    /// </summary>
+    [Parameter]
+    public bool AllOrganizations { get; set; }
+
     [Parameter]
     public EventCallback<TrakHoundPackage> PackageInstalled { get; set; }
 
@@ -199,10 +219,10 @@
     public EventCallback<TrakHoundPackage> PackageUninstalled { get; set; }
 
     /// <summary>
-    /// Installs the Package (and reports the result). When set, it is used instead of the built-in install.
+    /// Installs the Package (and reports the result) with the Client for the Package's Organization. When set, it is used instead of the built-in install.
     /// </summary>
     [Parameter]
-    public Func<TrakHoundPackage, Task<bool>> InstallHandler { get; set; }
+    public Func<TrakHoundPackage, TrakHoundPackageClient, Task<bool>> InstallHandler { get; set; }
 
 
     protected async override Task OnInitializedAsync()
@@ -268,14 +288,19 @@
             (PackageManager != null && PackageManager.Path != previousPackageManagerPath) ||
             (PackageClient != null && (PackageClient.BaseUrl != previousPackageClientBaseUrl ||
             PackageClient.Organization != previousPackageClientOrganization)) ||
-            Category != previousCategory)
+            Category != previousCategory ||
+            AllOrganizations != previousAllOrganizations)
         {
+            // A Client for another server (or Token) can't be reused for its Organizations
+            if (PackageClient.BaseUrl != previousPackageClientBaseUrl || PackageClient.Organization != previousPackageClientOrganization) organizationClients = new Dictionary<string, TrakHoundPackageClient>();
+
             previousPackageManagerPath = PackageManager.Path;
             previousPackageClientBaseUrl = PackageClient.BaseUrl;
             previousPackageClientOrganization = PackageClient.Organization;
             previousCategory = Category;
+            previousAllOrganizations = AllOrganizations;
 
-            selectedId = null;
+            selectedUuid = null;
             selectedPackage = null;
             queryChanged = false;
 
@@ -289,16 +314,33 @@
             var version = System.Threading.Interlocked.Increment(ref loadVersion);
             var packageClient = PackageClient;
             var category = Category;
-            var q = query;
+            var allOrganizations = AllOrganizations;
+            var q = query?.Trim();
 
             _ = Task.Run(async () =>
             {
                 IEnumerable<TrakHoundPackage> result = null;
+                Dictionary<string, string> organizations = null;
                 string error = null;
 
                 try
                 {
-                    if (!string.IsNullOrEmpty(category))
+                    if (allOrganizations)
+                    {
+                        var (statusCode, results, message) = await packageClient.Search(q, category, 0, _maxSearchResults);
+                        if (results != null)
+                        {
+                            organizations = new Dictionary<string, string>();
+                            foreach (var item in results) organizations[item.Package.Uuid] = item.Organization;
+                            result = results.Select(o => o.Package).ToList();
+                        }
+                        else
+                        {
+                            // A Package Server from before search (or a TrakHound Package Manager) has no such route
+                            error = statusCode == 404 ? "This Package Server can't search across Organizations. Browse the Source's Organization instead" : message;
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(category))
                     {
                         result = await packageClient.Query(category, q);
                     }
@@ -309,7 +351,7 @@
                     }
 
                     // A Source with no Packages answers with an empty list, so null means it didn't answer (or answered with an error)
-                    if (result == null) error = "The Source didn't respond. Check its Base URL, and that this Instance can reach it";
+                    if (result == null) error ??= "The Source didn't respond. Check its Base URL, and that this Instance can reach it";
                     result = result?.OrderByDescending(o => o.BuildDate).ToList();
                 }
                 catch (Exception ex)
@@ -327,13 +369,14 @@
                         if (version != loadVersion) return;
 
                         packages = result;
+                        packageOrganizations = organizations;
                         manifestChecks = null;
                         loadError = error;
                         loading = false;
                         StateHasChanged();
                     });
 
-                    await LoadManifests(packageClient, result, version);
+                    await LoadManifests(result, version);
                 }
                 catch (ObjectDisposedException) { } // Component or Circuit disposed during the Query
             });
@@ -343,17 +386,30 @@
     /// <summary>
     /// Check who signed the listed Packages after the list is shown, so that a slow Source doesn't hold it up. A Source without Manifests shows no badges
     /// </summary>
-    private async Task LoadManifests(TrakHoundPackageClient packageClient, IEnumerable<TrakHoundPackage> listed, int version)
+    private async Task LoadManifests(IEnumerable<TrakHoundPackage> listed, int version)
     {
         if (listed.IsNullOrEmpty()) return;
 
         Dictionary<string, TrakHoundPackageManifestCheck> checks = null;
-        try
+
+        // Manifests are read from each Package's Organization (one request per Organization when listing every Organization)
+        foreach (var group in listed.GroupBy(o => GetClient(o)))
         {
-            var manifests = await packageClient.GetManifests(listed.Select(o => o.Uuid));
-            if (manifests != null) checks = PackageManager.CheckManifests(listed, manifests);
+            if (group.Key == null) continue;
+
+            try
+            {
+                var manifests = await group.Key.GetManifests(group.Select(o => o.Uuid));
+                if (manifests == null) continue;
+
+                var groupChecks = PackageManager.CheckManifests(group, manifests);
+                if (groupChecks == null) continue;
+
+                checks ??= new Dictionary<string, TrakHoundPackageManifestCheck>();
+                foreach (var check in groupChecks) checks[check.Key] = check.Value;
+            }
+            catch { } // The badges are optional, and Check Package still works
         }
-        catch { } // The badges are optional, and Check Package still works
 
         if (checks == null || disposed || version != System.Threading.Volatile.Read(ref loadVersion)) return;
 
@@ -368,7 +424,7 @@
 
     private IEnumerable<TrakHoundPackage> GetVisiblePackages()
     {
-        if (packages == null || string.IsNullOrWhiteSpace(query) || !string.IsNullOrEmpty(Category)) return packages;
+        if (packages == null || string.IsNullOrWhiteSpace(query) || !string.IsNullOrEmpty(Category) || previousAllOrganizations) return packages;
 
         // Category queries are searched by the Source. The latest Packages (All Categories) are filtered here.
         var q = query.Trim();
@@ -376,19 +432,48 @@
             (o.Metadata?.Any(m => string.Equals(m.Key, TrakHoundPackage.DescriptionName, StringComparison.OrdinalIgnoreCase) && (m.Value?.ToString()?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)) ?? false));
     }
 
-    private void ClickPackage(string packageId)
+    // By UUID, since two Organizations can list a Package with the same ID
+    private void ClickPackage(string packageUuid)
     {
-        selectedId = packageId;
+        selectedUuid = packageUuid;
         if (!packages.IsNullOrEmpty())
         {
-            selectedPackage = packages.FirstOrDefault(o => o.Id == packageId);
+            selectedPackage = packages.FirstOrDefault(o => o.Uuid == packageUuid);
         }
     }
 
     private void ClearSelection()
     {
-        selectedId = null;
+        selectedUuid = null;
         selectedPackage = null;
+    }
+
+    /// <summary>
+    /// The Organization a listed Package belongs to (the PackageClient's, unless every Organization is listed)
+    /// </summary>
+    private string GetOrganization(TrakHoundPackage package)
+    {
+        if (package != null && packageOrganizations != null && packageOrganizations.TryGetValue(package.Uuid, out var organization)) return organization;
+        return PackageClient?.Organization;
+    }
+
+    /// <summary>
+    /// The Client for a listed Package's Organization : the same server and Token as the PackageClient
+    /// </summary>
+    private TrakHoundPackageClient GetClient(TrakHoundPackage package)
+    {
+        var organization = GetOrganization(package);
+        if (PackageClient == null || string.IsNullOrEmpty(organization) || organization == PackageClient.Organization) return PackageClient;
+
+        lock (organizationClients)
+        {
+            if (!organizationClients.TryGetValue(organization, out var client))
+            {
+                client = PackageClient.ForOrganization(organization);
+                organizationClients[organization] = client;
+            }
+            return client;
+        }
     }
 
     /// <summary>
@@ -417,7 +502,7 @@
 
             try
             {
-                await InstallHandler(package);
+                await InstallHandler(package, GetClient(package));
             }
             catch (Exception ex)
             {
@@ -435,6 +520,8 @@
             packagesInstalling.Add(package.Id);
             await InvokeAsync(StateHasChanged);
 
+            var packageClient = GetClient(package);
+
             _ = Task.Run(async () =>
             {
                 string error = null;
@@ -442,12 +529,12 @@
                 try
                 {
                     // Download Package
-                    var packageBytes = await PackageClient.Download(package.Id, package.Version);
+                    var packageBytes = await packageClient.Download(package.Id, package.Version);
                     if (packageBytes != null)
                     {
                         // Install using PackageManager
                         TrakHound.Instance.Pages.Packages.PackagesContext.DemandInstall(packageBytes);
-                        var results = await PackageManager.Install(packageBytes, packageClient: PackageClient);
+                        var results = await PackageManager.Install(packageBytes, packageClient: packageClient);
                         if (!results.IsNullOrEmpty())
                         {
                             foreach (var result in results)

@@ -271,9 +271,9 @@ namespace TrakHound.Tables.Conformance.Tests
             return Read<TrakHoundPackageJson>(await controller.Upload(organization, stream));
         }
 
-        private static List<TrakHound.Packages.Api.Models.PackageSearchResult> Search(TrakHoundApiResponse response)
+        private static List<TrakHoundPackageSearchResultJson> Search(TrakHoundApiResponse response)
         {
-            return Read<List<TrakHound.Packages.Api.Models.PackageSearchResult>>(response);
+            return Read<List<TrakHoundPackageSearchResultJson>>(response);
         }
 
         [SkippableFact]

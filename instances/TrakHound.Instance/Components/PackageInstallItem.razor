@@ -23,6 +23,10 @@
                 {
                     <span class="publisher">by @publisher</span>
                 }
+                @if (!string.IsNullOrEmpty(Organization))
+                {
+                    <span class="organization" title="Organization"><span class="icon fa-solid fa-sharp fa-building"></span>@Organization</span>
+                }
             </span>
             <span class="description">@description</span>
             @if (ManifestCheck != null)
@@ -81,6 +85,12 @@
 
     [Parameter]
     public TrakHoundPackage Package { get; set; }
+
+    /// <summary>
+    /// The Organization the Package is listed from, shown when the list has more than one
+    /// </summary>
+    [Parameter]
+    public string Organization { get; set; }
 
     [Parameter]
     public bool IsInstalled { get; set; }
@@ -148,7 +158,7 @@
 
     private async void Click()
     {
-        await Clicked.InvokeAsync(Package.Id);
+        await Clicked.InvokeAsync(Package.Uuid);
     }
 
     private async void Select()

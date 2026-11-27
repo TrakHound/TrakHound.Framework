@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -162,7 +162,7 @@ namespace TrakHound.Packages.Api
             if (!matchResponse.Success) return InternalError(matchResponse.Message);
 
             var matches = matchResponse.Result?.ToList() ?? new List<PackageModel>();
-            if (matches.Count == 0) return Ok(Array.Empty<PackageSearchResult>());
+            if (matches.Count == 0) return Ok(Array.Empty<TrakHoundPackageSearchResultJson>());
 
             // Packages are read (and cached) per Organization, then put back in the order of the matches
             var packages = new Dictionary<(string Organization, string Uuid), TrakHoundPackageJson>();
@@ -174,12 +174,12 @@ namespace TrakHound.Packages.Api
                 foreach (var package in organizationPackages) packages[(organization.Key, package.Uuid)] = package;
             }
 
-            var results = new List<PackageSearchResult>();
+            var results = new List<TrakHoundPackageSearchResultJson>();
             foreach (var match in matches)
             {
                 if (packages.TryGetValue((match.Organization, match.Uuid), out var package))
                 {
-                    results.Add(new PackageSearchResult { Organization = match.Organization, Package = package });
+                    results.Add(new TrakHoundPackageSearchResultJson { Organization = match.Organization, Package = package });
                 }
             }
 
