@@ -50,3 +50,7 @@ th packages build examples
 ```
 
 builds each project in `trakhound.build.json` and publishes it to the Publish Target in the nearest `trakhound.package.publish.json`. Each example's version is the prefix in its `trakhound.package.json` (`0.1`) plus the git height, like the modules. To only build a package file, run `th packages dotnet --output ./out` in a project directory.
+
+## Run an Instance in Docker
+
+[docker](docker) has Docker Compose files for running an Instance from the `trakhound/instance` image, and for developing packages with the `trakhound/instance-dev` image, which these examples can be pushed to (see its README).

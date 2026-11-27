@@ -342,6 +342,8 @@ To give the Instance the same name as its container (ex. from a script that crea
 
 The Docker image installs its default packages when it starts with no packages (a new volume), as the Windows installer does on a new install: the Welcome App at `/` and the API Explorer it uses at `/api-explorer`, each with a configuration. To start without them (ex. in production), set `TRAKHOUND_DEFAULT_PACKAGES=false`, the equivalent of the installer's `/DEFAULTPACKAGES=no`. It's only read while the package folder is empty, so it doesn't remove packages from an existing volume. Remove those from Packages and Config.
 
+The Docker Compose examples in the repository's `examples/docker` folder set these up: `docker-compose.yml` for running an Instance, and `docker-compose.dev.yml` for developing packages, with a name and port for each Instance. Its README covers the commands and variables.
+
 For developing packages, use the `trakhound/instance-dev` image, which is this image with `TRAKHOUND_DEV_PACKAGES=true` set (or set it on `trakhound/instance`). The container then serves the Dev Package Server (`TrakHound.Packages.Dev.Api`, included in the image) at `/packages`, and adds a `Development` package source for the Instance itself (first in the list, ID `dev`, organization `Dev`), so packages pushed to it are listed in Packages > **Browse**:
 
 ```powershell

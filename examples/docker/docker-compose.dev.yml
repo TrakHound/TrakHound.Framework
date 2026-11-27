@@ -1,0 +1,56 @@
+# Example Docker Compose file for developing TrakHound packages
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml logs instance     (the admin password, generated on the first start)
+#
+# The container, the Instance and the Compose project share one name, and the port can be chosen too, so a script can start
+# several side by side, each with its own volume:
+#
+#   INSTANCE_NAME=line1 INSTANCE_PORT=8481 docker compose -f docker-compose.dev.yml up -d
+#   INSTANCE_NAME=line2 INSTANCE_PORT=8482 docker compose -f docker-compose.dev.yml up -d
+#
+# (in PowerShell, set them first : $env:INSTANCE_NAME = 'line1'; $env:INSTANCE_PORT = '8481'). Use the same variables with
+# 'down', 'logs' and the other commands, so they act on that Instance.
+#
+# Push a package to it, then install it from Packages > Browse (the 'Development' Package Source):
+#
+#   th packages push <file.thp> -s http://localhost:8472 --organization Dev
+#
+# or build and publish a project created from the TrakHound templates with its 'local' Publish Target
+# ('th packages dotnet --publish --target local'), adding '--server http://localhost:<port>' for another port.
+#
+# Don't use this file in production (see docker-compose.yml)
+
+name: ${INSTANCE_NAME:-trakhound-dev}
+
+services:
+  instance:
+    # The trakhound/instance image with TRAKHOUND_DEV_PACKAGES=true set : the Dev Package Server at '/packages', the
+    # 'Development' Package Source, and the Welcome page's System Information made public. 'latest' is the latest release,
+    # 'dev' the latest development build
+    image: trakhound/instance-dev:latest
+    container_name: ${INSTANCE_NAME:-trakhound-dev}
+    restart: unless-stopped
+    ports:
+      # On this machine only, since anyone who can reach the port can upload packages to the Dev Package Server
+      - "127.0.0.1:${INSTANCE_PORT:-8472}:8472"
+    environment:
+      # Shown in the Explorer and to other Instances (Settings > General shows it comes from the variable)
+      TRAKHOUND_INSTANCE_NAME: ${INSTANCE_NAME:-trakhound-dev}
+      TRAKHOUND_INSTANCE_DESCRIPTION: ${INSTANCE_DESCRIPTION:-Package development}
+      # Stable when the container is recreated (ex. to update the image), so Licenses keep applying
+      TRAKHOUND_DEVICE_ID: ${INSTANCE_NAME:-trakhound-dev}
+      # Without an admin account, 'admin' is created on the first start with a generated password, shown once in the
+      # container's output (see above). Change it in Security > Admin Accounts
+      # Require this token for uploads (at least 16 characters, ex. from 'openssl rand -hex 24'), sent by 'th packages push'
+      # from TRAKHOUND_API_TOKEN. Use it when others can reach this machine's loopback address (ex. a shared host)
+      # TRAKHOUND_DEV_UPLOAD_TOKEN: ${DEV_UPLOAD_TOKEN}
+    volumes:
+      # Everything the Instance writes: configuration, packages (including the ones pushed to it), volumes, variables, logs.
+      # Named after the project, so each Instance has its own. 'down -v' removes it, to start over
+      - trakhound-data:/var/lib/trakhound/instance
+    # The Instance can take up to 60 seconds to stop
+    stop_grace_period: 90s
+
+volumes:
+  trakhound-data:

@@ -1,0 +1,3 @@
+# Made when running the examples in place : the admin password and Compose variables stay out of source control
+trakhound_admin_password.txt
+.env

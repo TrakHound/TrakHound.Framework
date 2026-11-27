@@ -1,0 +1,64 @@
+# Example Docker Compose file for the TrakHound Instance
+#
+#   docker compose up -d
+#
+# The admin account is created on first start from the trakhound_admin_password secret (a file whose first line is the password).
+# The file must be readable by the container's user (uid 1654). It's ignored once an account exists; use
+# 'docker compose exec instance /opt/trakhound/docker-entrypoint.sh set-admin admin' to change it.
+# Without TRAKHOUND_ADMIN_USERNAME and the secret, the Instance creates 'admin' with a generated password instead, and shows
+# it once in the container's output ('docker compose logs instance'). TRAKHOUND_ADMIN_GENERATE: "false" turns that off.
+
+services:
+  instance:
+    image: trakhound/instance:latest
+    restart: unless-stopped
+    ports:
+      - "8472:8472"
+      # With TRAKHOUND_DEV_PACKAGES (below), publish the port on this machine only instead, since anyone who can reach it can
+      # upload packages to the Dev Package Server
+      # - "127.0.0.1:8472:8472"
+    environment:
+      TRAKHOUND_ADMIN_USERNAME: admin
+      TRAKHOUND_ADMIN_PASSWORD_FILE: /run/secrets/trakhound_admin_password
+      # Licenses are issued for the Device ID, which comes from the container's hostname unless this is set. The hostname
+      # changes when the container is recreated (ex. 'docker compose pull && docker compose up -d'), so set a stable value
+      # (ex. this deployment's name) before requesting Licenses. Changing it later means the Licenses must be issued again.
+      TRAKHOUND_DEVICE_ID: trakhound-instance
+      # The Instance's Name and Description in the Explorer and to other Instances (ex. the same name as the container). While
+      # one is set it replaces the setting on each start, and the setting goes back to its default when it's removed
+      # TRAKHOUND_INSTANCE_NAME: trakhound-instance
+      # TRAKHOUND_INSTANCE_DESCRIPTION: "Line 2 cell controller"
+      # A new volume starts with the Default Packages: the Welcome App (a page at '/' for trying the Instance out) and the
+      # API Explorer it uses (at '/api-explorer'). Set this to start without them (ex. in production). It only applies while
+      # the volume has no packages
+      # TRAKHOUND_DEFAULT_PACKAGES: "false"
+      # For developing packages only : serve the Dev Package Server at '/packages', add a 'Development' Package Source and make the Welcome
+      # page's read-only System Information public (Security Profile 'dev-system-information'), so packages
+      # pushed with 'th packages push <file> -s http://localhost:8472 --organization Dev' (or the 'local' Publish Target of a
+      # project created from the TrakHound templates) can be installed from Packages > Browse. The trakhound/instance-dev image
+      # has it set already. Anyone who can reach the port can upload (installing still needs an Admin), so publish it on
+      # 127.0.0.1 (above). They're all removed again when the container starts without it. Don't set it in production
+      # TRAKHOUND_DEV_PACKAGES: "true"
+      # Require this token for uploads instead (at least 16 characters, ex. from 'openssl rand -hex 24'), sent by
+      # 'th packages push' from TRAKHOUND_API_TOKEN. Also enables the Dev Package Server
+      # TRAKHOUND_DEV_UPLOAD_TOKEN: "<long random value>"
+      # Install the Deployment files (.thd) in a host folder when the Instance starts (see the deployments volume below).
+      # Each file is installed once; a folder's files are moved to 'installed' or 'failed' afterwards.
+      # TRAKHOUND_DEPLOYMENT_PATH: /var/lib/trakhound/deployments
+    secrets:
+      - trakhound_admin_password
+    volumes:
+      # Everything the Instance writes: configuration, packages, volumes, variables, logs, backups and temporary files
+      - trakhound-data:/var/lib/trakhound/instance
+      # Startup Deployments (with TRAKHOUND_DEPLOYMENT_PATH above). Must be writable by uid 1654, or mount a single file
+      # read-only (ex. './site.thd:/var/lib/trakhound/deployments/site.thd:ro' and set the variable to that file)
+      # - ./deployments:/var/lib/trakhound/deployments
+    # The Instance can take up to 60 seconds to stop
+    stop_grace_period: 90s
+
+volumes:
+  trakhound-data:
+
+secrets:
+  trakhound_admin_password:
+    file: ./trakhound_admin_password.txt
