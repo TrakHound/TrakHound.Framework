@@ -190,7 +190,8 @@ namespace TrakHound.Packages.Dev.Api
                 .Select(o => o.ToJson())
                 .ToList();
 
-            return packages.Count > 0 ? Ok(packages) : NotFound("No Packages Found Matching Query");
+            // An empty list (not 404), so a client can tell an Organization with no Packages yet from a Server that didn't answer
+            return Ok(packages);
         }
 
         #endregion

@@ -316,7 +316,7 @@ namespace TrakHound.Packages.Api
                             }
                             else
                             {
-                                return NotFound("No Packages Found Matching Query");
+                                return Ok(Array.Empty<TrakHoundPackageJson>());
                             }
                         }
                         else
@@ -349,7 +349,7 @@ namespace TrakHound.Packages.Api
                         }
                         else
                         {
-                            return NotFound("No Packages Found Matching Query");
+                            return Ok(Array.Empty<TrakHoundPackageJson>());
                         }
                     }
                     else
@@ -416,7 +416,7 @@ namespace TrakHound.Packages.Api
                             }
                             else
                             {
-                                return NotFound("No Packages Found Matching Query");
+                                return Ok(Array.Empty<TrakHoundPackageJson>());
                             }
                         }
                         else
@@ -450,7 +450,7 @@ namespace TrakHound.Packages.Api
                         }
                         else
                         {
-                            return NotFound("No Packages Found Matching Query");
+                            return Ok(Array.Empty<TrakHoundPackageJson>());
                         }
                     }
                     else

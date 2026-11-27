@@ -190,6 +190,14 @@
     color: var(--textMild);
 }
 
+.not-found .sublabel {
+    display: block;
+    max-width: 320px;
+    margin-top: 4px;
+    font-size: var(--fontSizeSm);
+    color: var(--textLight);
+}
+
 
 /* Unreachable Source */
 

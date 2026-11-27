@@ -92,9 +92,16 @@
                                 {
                                     <span class="label">No Packages found that match "@query"</span>
                                 }
+                                else if (!string.IsNullOrEmpty(Category))
+                                {
+                                    @* As the Category tabs show it (ex. app is App) *@
+                                    <span class="label">No @(char.ToUpperInvariant(Category[0]) + Category[1..]) Packages in @PackageClient.Organization</span>
+                                }
                                 else
                                 {
-                                    <span class="label">No Packages found</span>
+                                    @* The Source answered with an empty list : an Organization with nothing published to it yet *@
+                                    <span class="label">No Packages in @PackageClient.Organization yet</span>
+                                    <span class="sublabel">Packages published to this Source are listed here</span>
                                 }
 
                             </div>
@@ -301,7 +308,8 @@
                         result = await packageClient.QueryLatestByOrganization();
                     }
 
-                    if (result == null) error = "The Source did not respond, or the Organization was not found";
+                    // A Source with no Packages answers with an empty list, so null means it didn't answer (or answered with an error)
+                    if (result == null) error = "The Source didn't respond. Check its Base URL, and that this Instance can reach it";
                     result = result?.OrderByDescending(o => o.BuildDate).ToList();
                 }
                 catch (Exception ex)

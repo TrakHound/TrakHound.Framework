@@ -234,7 +234,7 @@ namespace TrakHound.Packages.App
             try
             {
                 var packages = await client.QueryLatestByOrganization();
-                if (packages == null) return (null, $"No response from {client.BaseUrl} (the Server is unreachable, or the Organization has no Packages)");
+                if (packages == null) return (null, $"No response from {client.BaseUrl} (the Server is unreachable)");
 
                 return (packages.OrderBy(o => o.Id, StringComparer.OrdinalIgnoreCase).ToList(), null);
             }

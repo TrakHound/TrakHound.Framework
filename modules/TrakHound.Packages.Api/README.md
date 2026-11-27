@@ -168,7 +168,7 @@ curl -X POST "http://localhost:8472/packages/Public" \
 ## Response Codes
 | Code | Description |
 |---|---|
-| 200 | Success |
+| 200 | Success. The lists (`{organization}/latest` and `{organization}/category/{category}`) return an empty list when nothing matches, including an Organization with no Packages yet |
 | 400 | Missing or invalid parameters (ex. invalid version string or package file) |
 | 404 | Package, version, or organization not found |
 | 500 | Error communicating with the Tables, Blobs, or KeyValues services |

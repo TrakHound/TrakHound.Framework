@@ -156,7 +156,24 @@ namespace TrakHound.Packages.Dev.Api.Tests
             var prefix = Read<List<TrakHoundPackageJson>>(await controller.QueryLatest(Organization, "Test.F"));
             Assert.Equal(PackageId, Assert.Single(prefix).Id);
 
-            Assert.Equal(404, (await controller.QueryLatest(Organization, "Missing")).StatusCode);
+            // Nothing matching is an empty list (not 404), so it isn't mistaken for a Server that didn't answer
+            var missing = await controller.QueryLatest(Organization, "Missing");
+            Assert.Equal(200, missing.StatusCode);
+            Assert.Empty(Read<List<TrakHoundPackageJson>>(missing));
+        }
+
+        [Fact]
+        public async Task QueryLatest_AnOrganizationWithNoPackages_IsAnEmptyList()
+        {
+            var controller = await CreateController();
+
+            var latest = await controller.QueryLatest("Dev");
+            Assert.Equal(200, latest.StatusCode);
+            Assert.Empty(Read<List<TrakHoundPackageJson>>(latest));
+
+            var category = await controller.QueryByCategory("Dev", "app");
+            Assert.Equal(200, category.StatusCode);
+            Assert.Empty(Read<List<TrakHoundPackageJson>>(category));
         }
 
         [Fact]
