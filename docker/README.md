@@ -1,4 +1,4 @@
-<img alt="TrakHound" src="https://static.trakhound.com/brand/icon/trakhound-icon-background-128.png" width="96">
+![TrakHound](https://static.trakhound.com/brand/icon/trakhound-icon-background-128.png)
 
 # TrakHound Instance
 
