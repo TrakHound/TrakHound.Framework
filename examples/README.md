@@ -53,8 +53,8 @@ builds each project in `trakhound.build.json` and publishes it to the Publish Ta
 
 ## MQTT to Time Series
 
-[TrakHound.Example.MqttToTimeSeries](TrakHound.Example.MqttToTimeSeries) is a Worker on its own, apart from the four above: it subscribes to MQTT Messages through a Message Service and writes their values to a Time Series Service, with Tags taken from the Topic. The plant stack in [docker/plant](docker/plant) runs it with simulated machines, Mosquitto and TimescaleDB. `th packages build examples` builds and publishes it with the others.
+[TrakHound.Example.MqttToTimeSeries](TrakHound.Example.MqttToTimeSeries) is a Worker on its own, apart from the four above: it subscribes to MQTT Messages through a Message Service and writes their values to a Time Series Service, with Tags taken from the Topic. The plant stack in [docker/compose/plant](../docker/compose/plant) runs it with simulated machines, Mosquitto and TimescaleDB. `th packages build examples` builds and publishes it with the others.
 
 ## Run an Instance in Docker
 
-[docker](docker) has Docker Compose files for running an Instance from the `trakhound/instance` image, and for developing packages with the `trakhound/instance-dev` image, which these examples can be pushed to (see its README).
+[docker/compose](../docker/compose/README.md) has Docker Compose files for running an Instance from the `trakhound/instance` image, and for developing packages with the `trakhound/instance-dev` image, which these examples can be pushed to (see its README).

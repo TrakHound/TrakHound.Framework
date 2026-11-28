@@ -55,7 +55,7 @@ For Linux, IIS and Docker Compose, see [Install an Instance](#install-an-instanc
 ### Install an Instance
 
 - **Windows:** the installer (`trakhound-instance-<version>-install.exe`) installs the Instance as a Windows Service (served on port **8472** by default) or into an IIS Application.
-- **Docker:** the `trakhound/instance` image runs an Instance, and `trakhound/instance-dev` adds a Package Server for developing packages. [examples/docker](examples/docker/README.md) has Docker Compose files for each, for running an Instance with HTTPS (Caddy), MQTT, PostgreSQL / TimescaleDB, SQL Server or Redis, and for all of them together in a simulated plant.
+- **Docker:** the `trakhound/instance` image runs an Instance, and `trakhound/instance-dev` adds a Package Server for developing packages. See [docker](docker/README.md) for their settings and how to build the image from source, and [docker/compose](docker/compose/README.md) for Docker Compose files that run an Instance with HTTPS (Caddy), MQTT, PostgreSQL / TimescaleDB, SQL Server or Redis, and all of them together in a simulated plant.
 - **Linux:** the release archive (`trakhound-instance-<version>-linux-x64.tar.gz` or `-linux-arm64`) includes the .NET runtime and an `install.sh` that installs, upgrades or uninstalls the Instance as a systemd service.
 
 See the [Installation Guide](docs/instance-installation-guide.md) for requirements, upgrades, silent installs and uninstalling.
@@ -282,7 +282,8 @@ See [cli/README.md](cli/README.md) for installation on Windows and Linux and the
 ```
 cli/         TrakHound.CLI (`th`) – create, pack, publish and install packages and deployments
 debug/       Debug hosts for running Api, App, Function, Worker, Service and Identity packages outside of an Instance, and TrakHound.Testing for unit tests
-examples/    Example packages (an Api, App, Function and Worker that work together, and an MQTT to Time Series Worker) and Docker Compose examples
+docker/      The Instance Docker image (Dockerfiles, entrypoint, Docker Hub README) and Docker Compose examples in docker/compose
+examples/    Example packages (an Api, App, Function and Worker that work together, and an MQTT to Time Series Worker)
 extensions/  TrakHound.VisualStudio – Visual Studio extension to publish packages through the CLI
 img/         The icon used by this README
 instances/   TrakHound.Instance – the host application and Admin interface
@@ -352,7 +353,7 @@ The first four packages work together around a simulated sensor: install `TrakHo
 | `TrakHound.Example.App` | app | A page that shows the readings from the Api and the Function's summary (route `example`) |
 | `TrakHound.Example.MqttToTimeSeries` | worker | Subscribes to Messages (ex. from an MQTT Broker) and writes each value to a Time Series Service |
 
-[examples/docker](examples/docker/README.md) has Docker Compose files that run an Instance with the servers the Service packages use. Its `plant` example runs `TrakHound.Example.MqttToTimeSeries` with simulated machines, Mosquitto and TimescaleDB.
+[docker/compose](docker/compose/README.md) has Docker Compose files that run an Instance with the servers the Service packages use. Its `plant` example runs `TrakHound.Example.MqttToTimeSeries` with simulated machines, Mosquitto and TimescaleDB.
 
 ## Contributing
 

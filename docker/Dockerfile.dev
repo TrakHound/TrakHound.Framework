@@ -1,0 +1,23 @@
+# TrakHound Instance Development Docker Image ([imageName]-dev, ex. trakhound/instance-dev)
+#
+# The Instance Image with the Dev Package Server turned on (TRAKHOUND_DEV_PACKAGES, see docker-entrypoint.sh), for developing
+# packages : 'docker run -d -p 127.0.0.1:8472:8472 trakhound/instance-dev', then 'th packages push' (or the 'local' Publish
+# Target of a project created from the TrakHound templates) uploads packages to it, and they're installed from Packages > Browse.
+# The Welcome page's read-only System Information is public (Security Profile 'dev-system-information'), so it shows what is
+# installed from the host's browser.
+# Anyone who can reach the port can upload, so publish it on 127.0.0.1. TRAKHOUND_DEV_UPLOAD_TOKEN requires a token instead, and
+# TRAKHOUND_DEV_PACKAGES=false turns it off. Not for production
+#
+# Built by the Builder ('instance docker build') right after the Instance Image for the same platform, which is the BASE_IMAGE
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG VERSION
+ARG IMAGE
+LABEL org.opencontainers.image.title="TrakHound Instance (Development)" \
+      org.opencontainers.image.description="The TrakHound Instance with the Dev Package Server turned on, for developing packages. Not for production" \
+      org.opencontainers.image.version="${VERSION}"
+
+ENV TRAKHOUND_DEV_PACKAGES=true \
+    TRAKHOUND_DOCKER_IMAGE=${IMAGE}

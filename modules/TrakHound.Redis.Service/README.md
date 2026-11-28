@@ -26,7 +26,7 @@ Connecting, and each command, time out after 5 seconds. The connection is opened
 
 See [Services](https://www.trakhound.com/docs/trakhound-framework/services) for adding a Service configuration, and [Routing](https://www.trakhound.com/docs/trakhound-framework/routing) for sending Key-Value requests to it.
 
-To try it, [examples/docker/redis](../../examples/docker/redis) runs two Instances that share Key-Values through a Redis server with Docker Compose, with this Service already configured on both.
+To try it, [docker/compose/redis](../../docker/compose/redis) runs two Instances that share Key-Values through a Redis server with Docker Compose, with this Service already configured on both.
 
 ## Storage
 - Each entry is a Redis string with the key `{collection}:{key}`. The Collection name is URL encoded (ex. `a:b` is stored as `a%3Ab`), so a `:` in a Collection name can't be confused with the start of the Key. Keys are stored as they are.

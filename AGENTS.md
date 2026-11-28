@@ -15,6 +15,7 @@ A modular .NET 10 platform: a TrakHound **Instance** (ASP.NET Core / Blazor host
 | `cli/` | The TrakHound CLI (`th`): packs, publishes and installs packages |
 | `templates/` | `dotnet new` templates for packages (each project gets its own `AGENTS.md`) |
 | `debug/`, `examples/` | Debug hosts and the `TrakHound.Testing` unit test library for running packages without an Instance, and example packages |
+| `docker/` | The Instance Docker image: the release Dockerfiles (built by the release Builder, which reads them from here), `Dockerfile.source` to build it from source, the entrypoint and health check scripts, the Docker Hub README (`docker/README.md`, published as the images' Overview) and the Docker Compose examples (`docker/compose`). A change to the entrypoint's variables also updates that README and the Installation Guide (section 6.2) |
 | `tests/` | xUnit test projects |
 | `docs/` | Installation, User and Developer guides (`.md`, with `.pdf` copies) |
 

@@ -22,7 +22,7 @@ PostgreSQL Services for the TrakHound Framework.
 | `password` | No | | Password for the `user` login |
 | `connectionTimeout` | No | `10000` | How long to wait for a connection, in milliseconds (rounded up to whole seconds) |
 
-To try it with a server, [examples/docker/postgres](../../examples/docker/postgres) runs an Instance and a PostgreSQL (TimescaleDB) server with Docker Compose, with this Service already configured.
+To try it with a server, [docker/compose/postgres](../../docker/compose/postgres) runs an Instance and a PostgreSQL (TimescaleDB) server with Docker Compose, with this Service already configured.
 
 ## Queries
 - The Service runs the `postgres` version of a Query Variant, then the `ansi` version.

@@ -11,7 +11,7 @@
     { "path": "TrakHound.Example.Function" },
     { "path": "TrakHound.Example.Api" },
     { "path": "TrakHound.Example.App" },
-    // Used by the plant stack in docker/plant
+    // Used by the plant stack in docker/compose/plant
     { "path": "TrakHound.Example.MqttToTimeSeries" }
   ]
 }

@@ -1,6 +1,6 @@
 # Docker Compose Examples
 
-Docker Compose files for running a TrakHound Instance from the `trakhound/instance` and `trakhound/instance-dev` images. Copy one to a folder of its own, as `docker-compose.yml`, and edit it there. The TrakHound Instance Installation Guide (Docker section) describes the image and its variables.
+Docker Compose files for running a TrakHound Instance from the `trakhound/instance` and `trakhound/instance-dev` images. Copy one to a folder of its own, as `docker-compose.yml`, and edit it there. The [image's README](../README.md) describes its settings and variables.
 
 | File | Image | For |
 | --- | --- | --- |

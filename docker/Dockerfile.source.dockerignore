@@ -1,0 +1,19 @@
+# The build context of Dockerfile.source (the repository root). Docker reads this file instead of a .dockerignore at the root
+
+.git
+.vs
+.vscode
+**/bin
+**/obj
+**/node_modules
+
+# Licensed Font Awesome Pro files a developer may have added (ignored by git, and never packed or published)
+libraries/TrakHound.Blazor.Hosting/wwwroot/css/font-awesome
+
+# Not needed to build the Instance
+docs
+tests
+examples
+templates
+extensions
+docker/compose

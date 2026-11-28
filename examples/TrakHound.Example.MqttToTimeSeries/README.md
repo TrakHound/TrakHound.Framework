@@ -9,7 +9,7 @@ It shows how a Worker:
 - writes Points in batches through `Client.Services.TimeSeries`, keeps them while the Time Series Service can't be reached, and writes them once it can,
 - logs a problem once instead of on every Message or retry.
 
-The plant stack in [docker/plant](../docker/plant) runs it with simulated machines, Mosquitto and TimescaleDB.
+The plant stack in [docker/compose/plant](../../docker/compose/plant) runs it with simulated machines, Mosquitto and TimescaleDB.
 
 ## From Topic to Point
 
@@ -49,7 +49,7 @@ A payload can be a number (`64.2`), `true` or `false`, or a JSON object with the
 | `flushInterval` | `1000` | Milliseconds between Writes to the Time Series Service |
 | `maxBuffer` | `10000` | How many Points to keep while the Time Series Service can't be reached. The oldest are dropped after that |
 
-The Worker reaches the Message and Time Series Services through its Router (`routerId` in its Configuration, else `default`), so the Router needs a Route for `Messages` and one for `TimeSeries`. The plant stack's [Router](../docker/plant/config/router/default.yaml) has both.
+The Worker reaches the Message and Time Series Services through its Router (`routerId` in its Configuration, else `default`), so the Router needs a Route for `Messages` and one for `TimeSeries`. The plant stack's [Router](../../docker/compose/plant/config/router/default.yaml) has both.
 
 ## Debug it
 

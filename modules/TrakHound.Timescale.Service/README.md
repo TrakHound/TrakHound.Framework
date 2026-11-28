@@ -25,7 +25,7 @@ TimescaleDB Time Series Services for the TrakHound Framework.
 | `chunkDays` | No | `7` | How many days of Points each Chunk holds. Applies to new Measurements |
 | `compressAfterDays` | No | `30` | Compresses Chunks older than this many days (`0` turns compression off). Applies to new Measurements |
 
-To try it with a server, [examples/docker/postgres](../../examples/docker/postgres) runs an Instance and a TimescaleDB server with Docker Compose, with this Service already configured.
+To try it with a server, [docker/compose/postgres](../../docker/compose/postgres) runs an Instance and a TimescaleDB server with Docker Compose, with this Service already configured.
 
 ## Setup
 - The first request creates the Schema and the `timescaledb` extension if they don't exist, which needs those permissions. If an administrator has already created the extension and Schema, the login only needs to create Tables in the Schema.

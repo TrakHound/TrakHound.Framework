@@ -42,7 +42,7 @@ docker compose logs instance
 2. Install these from Packages > **Browse**:
    - `TrakHound.Mqtt.Service`
    - `TrakHound.Timescale.Service`
-   - `TrakHound.Example.MqttToTimeSeries` (the Worker, from [examples/TrakHound.Example.MqttToTimeSeries](../../TrakHound.Example.MqttToTimeSeries))
+   - `TrakHound.Example.MqttToTimeSeries` (the Worker, from [examples/TrakHound.Example.MqttToTimeSeries](../../../examples/TrakHound.Example.MqttToTimeSeries))
 
    Until then, Config lists their configurations as *Package missing*. They start without a restart, and the Worker starts writing within a few seconds.
 3. Open Explorer > Services > **TimeSeries** > **TimescaleDB** > **machine**. It has a Series for each machine (`line` and `machine` Tags), with the `temperature`, `spindle_speed` and `running` Fields. Pick a Series and Fields to chart them.
@@ -59,7 +59,7 @@ The Worker logs when it subscribes and when it can't write (Explorer > the Worke
 
 ## Use real machines
 
-Remove the `simulator` service, and have the machines (or a gateway, ex. Node-RED or an OPC UA to MQTT bridge) publish to the Broker with the same Topics: `plant/<line>/<machine>/<field>`, with a number, `true`/`false` or `{"value": ...}`. For other Topics or payloads, change the Worker's `topicPattern` and `valuePath` in Config > **Workers** (see the [Worker's README](../../TrakHound.Example.MqttToTimeSeries/README.md)).
+Remove the `simulator` service, and have the machines (or a gateway, ex. Node-RED or an OPC UA to MQTT bridge) publish to the Broker with the same Topics: `plant/<line>/<machine>/<field>`, with a number, `true`/`false` or `{"value": ...}`. For other Topics or payloads, change the Worker's `topicPattern` and `valuePath` in Config > **Workers** (see the [Worker's README](../../../examples/TrakHound.Example.MqttToTimeSeries/README.md)).
 
 For a Broker that other machines can reach, require a password: see the [MQTT example](../mqtt/README.md#use-another-broker). For a real domain name and certificate, set `SITE_ADDRESS`: see the [HTTPS example](../https/README.md#use-a-domain-name).
 

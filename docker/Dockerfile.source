@@ -1,0 +1,73 @@
+# TrakHound Instance Docker Image, built from source
+#
+# Builds the Instance from this repository and runs it the same way as the released image (Dockerfile), with the same
+# entrypoint and health check, so the image can be built without the release Builder. Run from the repository root:
+#
+#   docker build -f docker/Dockerfile.source -t trakhound-instance .
+#   docker run -d -p 127.0.0.1:8472:8472 trakhound-instance
+#
+# Unlike the released image, it has no Default Packages (install them from Packages) and no Dev Packages (so
+# TRAKHOUND_DEV_PACKAGES has nothing to serve). The build context is filtered by Dockerfile.source.dockerignore
+#
+# Keep the final stage the same as Dockerfile's, apart from where the files are copied from
+
+ARG BASE_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
+ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+
+# The SDK runs on the build machine's platform and publishes for the target's (ex. linux-arm64 with --platform linux/arm64)
+FROM --platform=$BUILDPLATFORM ${SDK_IMAGE} AS build
+ARG TARGETARCH
+ARG FRAMEWORK=net10.0
+WORKDIR /src
+COPY . .
+RUN dotnet publish instances/TrakHound.Instance/TrakHound.Instance.csproj -c Release -f $FRAMEWORK -a $TARGETARCH --no-self-contained -p:WarningLevel=0 -o /out \
+    && rm -f /out/config/instance.config.yaml /out/config/remotes.config.yaml /out/config/.user \
+    && mkdir -p /context/default-packages /context/default-configuration /context/dev-packages
+
+FROM ${BASE_IMAGE}
+
+ARG VERSION=source
+ARG IMAGE=trakhound-instance:source
+LABEL org.opencontainers.image.title="TrakHound Instance" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.vendor="TrakHound Inc." \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/TrakHound/TrakHound.Framework"
+
+ENV TRAKHOUND_DOCKER_IMAGE=${IMAGE}
+
+# The Instance doesn't apply its own HTTP Address and Port in a container (DOTNET_RUNNING_IN_CONTAINER), so set the
+# ASP.NET Core Port to the Instance's default Port (the Base Image sets 8080)
+ENV ASPNETCORE_HTTP_PORTS=8472 \
+    TRAKHOUND_CONFIGURATION_PATH=/var/lib/trakhound/instance/config \
+    TRAKHOUND_PACKAGE_PATH=/var/lib/trakhound/instance/packages \
+    TRAKHOUND_VOLUME_PATH=/var/lib/trakhound/instance/volumes \
+    TRAKHOUND_DATA_PATH=/var/lib/trakhound/instance
+
+USER root
+
+# The program files stay owned by root, so the Instance's user ('app', created by the Base Image) can't change them
+COPY --from=build /out/ /opt/trakhound/instance/
+COPY --from=build /context/default-packages/ /opt/trakhound/default-packages/
+COPY --from=build /context/default-configuration/ /opt/trakhound/default-configuration/
+COPY --from=build /context/dev-packages/ /opt/trakhound/dev-packages/
+COPY docker/docker-entrypoint.sh docker/docker-healthcheck.sh /opt/trakhound/
+
+# The directories are created here so that volumes mounted on them are owned by the Instance's user
+RUN mkdir -p /var/lib/trakhound/instance/config /var/lib/trakhound/instance/packages /var/lib/trakhound/instance/volumes \
+    && chown -R app:app /var/lib/trakhound \
+    && chmod -R a+rX,go-w /opt/trakhound \
+    && chmod 755 /opt/trakhound/docker-entrypoint.sh /opt/trakhound/docker-healthcheck.sh
+
+USER app
+WORKDIR /opt/trakhound/instance
+
+VOLUME /var/lib/trakhound/instance
+EXPOSE 8472
+
+# Startup can take a while the first time (packages are loaded and deployments installed)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 CMD ["/opt/trakhound/docker-healthcheck.sh"]
+
+# The Instance can take up to 60 seconds to stop, so use a longer stop timeout (ex. 'docker stop -t 90' or 'stop_grace_period: 90s')
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/opt/trakhound/docker-entrypoint.sh"]
